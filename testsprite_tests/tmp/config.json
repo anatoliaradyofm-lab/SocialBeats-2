@@ -1,0 +1,19 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:8081",
+  "loginUser": "testsprite@test.com",
+  "loginPassword": "TestSprite123!",
+  "executionArgs": {
+    "projectName": "PROJE",
+    "projectPath": "C:\\Users\\user\\Desktop\\PROJE",
+    "testIds": [],
+    "additionalInstruction": "",
+    "serverMode": "development",
+    "envs": {
+      "API_KEY": "sk-user-kh76OOIA85o_TSep3prFFuuzeJnjOYwXpXaEFc-5Im0ZeWkw33lleNasW59mM91Mh0FQStF6PfPrnZwpOWtPEDLOk_xC9NDai0ccnT4F-Qo6UyvddPGTtzdaAQyEbtChyKw"
+    }
+  },
+  "serverPort": 51001
+}

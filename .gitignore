@@ -1,0 +1,47 @@
+# Monorepo .gitignore
+
+# Dependencies
+node_modules/
+.expo/
+dist/
+web-build/
+build/
+.next/
+out/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+
+# Security & Environment
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+google-services.json
+
+# IDE & System
+.vscode/
+.idea/
+.cursor/
+.DS_Store
+Thumbs.db
+
+# Logs & Reports
+*.log
+*HataRaporu.txt
+Manifest_Hata_Detayi.txt
+test-results/
+test_reports/
+run_error.txt
+build_error.txt
+cache.txt
+
+# Media
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif

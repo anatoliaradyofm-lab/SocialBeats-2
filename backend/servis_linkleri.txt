@@ -1,0 +1,5 @@
+   SERVICE         REGION        URL                                                      LAST DEPLOYED BY           LAST DEPLOYED AT
++  clickhouse-db   europe-west3  https://clickhouse-db-45365938370.europe-west3.run.app   anatoliaradyofm@gmail.com  2026-03-01T01:47:32.473305Z
+X  livekit-server  europe-west3  https://livekit-server-45365938370.europe-west3.run.app  anatoliaradyofm@gmail.com  2026-03-01T01:52:10.976427Z
++  meilisearch     europe-west3  https://meilisearch-45365938370.europe-west3.run.app     anatoliaradyofm@gmail.com  2026-03-01T01:46:02.533799Z
++  minio-storage   europe-west3  https://minio-storage-45365938370.europe-west3.run.app   anatoliaradyofm@gmail.com  2026-03-01T01:46:33.608212Z

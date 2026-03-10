@@ -1,0 +1,345 @@
+version: "2"
+type: backend
+tech_stack:
+  - Python 3.11+
+  - FastAPI 0.103
+  - MongoDB (Motor async driver)
+  - Socket.IO (python-socketio)
+  - JWT (PyJWT) + bcrypt
+  - Pydantic v2
+  - APScheduler
+  - Spotipy (Spotify API)
+  - YouTube Data API
+  - Detoxify (content moderation)
+endpoints:
+  - method: POST
+    path: /api/auth/register
+    file: server.py
+    auth_required: false
+    description: Register new user with email, password, username
+  - method: POST
+    path: /api/auth/login
+    file: server.py
+    auth_required: false
+    description: Login with email and password returns JWT token
+  - method: GET
+    path: /api/auth/me
+    file: server.py
+    auth_required: true
+    description: Get current authenticated user profile
+  - method: POST
+    path: /api/auth/logout
+    file: server.py
+    auth_required: true
+    description: Logout and invalidate token
+  - method: POST
+    path: /api/auth/verify-2fa
+    file: server.py
+    auth_required: false
+    description: Verify two-factor authentication code
+  - method: POST
+    path: /api/auth/google/mobile
+    file: server.py
+    auth_required: false
+    description: Google OAuth for mobile clients
+  - method: GET
+    path: /api/geo/me
+    file: server.py
+    auth_required: false
+    description: Get user geolocation and region info
+  - method: GET
+    path: /api/services/status
+    file: server.py
+    auth_required: false
+    description: Get external services status
+  - method: POST
+    path: /api/social/friend-request/{user_id}
+    file: server.py
+    auth_required: true
+    description: Send friend request
+  - method: GET
+    path: /api/social/friend-requests
+    file: server.py
+    auth_required: true
+    description: List received friend requests
+  - method: POST
+    path: /api/social/friend-request/{request_id}/accept
+    file: server.py
+    auth_required: true
+    description: Accept friend request
+  - method: POST
+    path: /api/social/friend-request/{request_id}/reject
+    file: server.py
+    auth_required: true
+    description: Reject friend request
+  - method: GET
+    path: /api/users/{user_id}/followers
+    file: server.py
+    auth_required: false
+    description: Get user followers list
+  - method: GET
+    path: /api/users/{user_id}/following
+    file: server.py
+    auth_required: false
+    description: Get user following list
+  - method: POST
+    path: /api/subscription/upgrade
+    file: server.py
+    auth_required: true
+    description: Upgrade subscription plan
+  - method: GET
+    path: /api/subscription/status
+    file: server.py
+    auth_required: true
+    description: Get subscription status
+  - method: GET
+    path: /api/user/settings
+    file: server.py
+    auth_required: true
+    description: Get user settings
+  - method: PUT
+    path: /api/user/settings
+    file: server.py
+    auth_required: true
+    description: Update user settings
+  - method: PUT
+    path: /api/user/profile
+    file: server.py
+    auth_required: true
+    description: Update user profile
+  - method: GET
+    path: /api/user/{username}
+    file: server.py
+    auth_required: false
+    description: Get user by username
+  - method: GET
+    path: /api/social/notifications
+    file: server.py
+    auth_required: true
+    description: Get notifications list
+  - method: GET
+    path: /api/social/notifications/unread-count
+    file: server.py
+    auth_required: true
+    description: Get unread notification count
+  - method: POST
+    path: /api/social/mute/{user_id}
+    file: routes/social_features.py
+    auth_required: true
+    description: Mute a user
+  - method: DELETE
+    path: /api/social/mute/{user_id}
+    file: routes/social_features.py
+    auth_required: true
+    description: Unmute a user
+  - method: GET
+    path: /api/social/muted
+    file: routes/social_features.py
+    auth_required: true
+    description: Get muted users list
+  - method: POST
+    path: /api/social/restrict/{user_id}
+    file: routes/social_features.py
+    auth_required: true
+    description: Restrict a user
+  - method: DELETE
+    path: /api/social/restrict/{user_id}
+    file: routes/social_features.py
+    auth_required: true
+    description: Unrestrict a user
+  - method: POST
+    path: /api/social/close-friends/{user_id}
+    file: routes/social_features.py
+    auth_required: true
+    description: Add user to close friends
+  - method: GET
+    path: /api/social/close-friends
+    file: routes/social_features.py
+    auth_required: true
+    description: Get close friends list
+  - method: GET
+    path: /api/social/qr-code
+    file: routes/social_features.py
+    auth_required: true
+    description: Generate profile QR code
+  - method: GET
+    path: /api/social/interaction-status/{user_id}
+    file: routes/social_features.py
+    auth_required: true
+    description: Get interaction status with user
+  - method: GET
+    path: /api/social/posts/archived
+    file: routes/posts.py
+    auth_required: true
+    description: Get archived posts
+  - method: GET
+    path: /api/social/posts/saved
+    file: routes/posts.py
+    auth_required: true
+    description: Get saved posts
+  - method: GET
+    path: /api/legal/privacy-policy
+    file: routes/legal.py
+    auth_required: false
+    description: Get privacy policy
+  - method: GET
+    path: /api/legal/terms
+    file: routes/legal.py
+    auth_required: false
+    description: Get terms of service
+  - method: POST
+    path: /api/legal/feedback
+    file: routes/legal.py
+    auth_required: true
+    description: Submit user feedback
+features:
+  - name: Authentication
+    description: User registration login JWT tokens Google OAuth 2FA biometric support
+    files:
+      - server.py
+      - routes/auth.py
+      - routes/auth_new.py
+      - routes/firebase_auth.py
+    api_calls:
+      - method: POST
+        endpoint: /api/auth/register
+      - method: POST
+        endpoint: /api/auth/login
+      - method: GET
+        endpoint: /api/auth/me
+      - method: POST
+        endpoint: /api/auth/logout
+      - method: POST
+        endpoint: /api/auth/verify-2fa
+      - method: POST
+        endpoint: /api/auth/google/mobile
+  - name: User Management
+    description: Profile editing settings device management
+    files:
+      - server.py
+      - routes/user_routes.py
+    api_calls:
+      - method: GET
+        endpoint: /api/user/settings
+      - method: PUT
+        endpoint: /api/user/settings
+      - method: PUT
+        endpoint: /api/user/profile
+      - method: GET
+        endpoint: /api/user/{username}
+  - name: Social Network
+    description: Follow unfollow friend requests mute block restrict close friends
+    files:
+      - server.py
+      - routes/social_features.py
+      - routes/social_routes.py
+      - routes/friends.py
+    api_calls:
+      - method: POST
+        endpoint: /api/social/friend-request/{user_id}
+      - method: GET
+        endpoint: /api/social/friend-requests
+      - method: POST
+        endpoint: /api/social/mute/{user_id}
+      - method: POST
+        endpoint: /api/social/restrict/{user_id}
+      - method: POST
+        endpoint: /api/social/close-friends/{user_id}
+  - name: Posts and Feed
+    description: Create edit delete posts likes comments personalized feed
+    files:
+      - routes/posts.py
+      - routes/comments.py
+      - routes/feed.py
+    api_calls:
+      - method: POST
+        endpoint: /api/posts
+      - method: GET
+        endpoint: /api/feed
+      - method: POST
+        endpoint: /api/posts/{id}/like
+  - name: Music
+    description: Music search playlists streaming lyrics equalizer recommendations
+    files:
+      - routes/music.py
+      - routes/music_routes.py
+      - routes/playlists.py
+      - services/youtube_music.py
+      - services/spotify_cached.py
+    api_calls:
+      - method: GET
+        endpoint: /api/music/search
+      - method: GET
+        endpoint: /api/playlists
+      - method: POST
+        endpoint: /api/playlists
+  - name: Stories
+    description: Create view ephemeral stories story archive highlights
+    files:
+      - routes/stories.py
+      - routes/highlights.py
+    api_calls:
+      - method: GET
+        endpoint: /api/stories
+      - method: POST
+        endpoint: /api/stories
+  - name: Messaging
+    description: Direct messages group chats music sharing encryption
+    files:
+      - routes/messages.py
+      - services/encryption_service.py
+    api_calls:
+      - method: GET
+        endpoint: /api/conversations
+      - method: POST
+        endpoint: /api/messages
+  - name: Notifications
+    description: Push notifications in-app notifications
+    files:
+      - routes/notifications.py
+      - server.py
+    api_calls:
+      - method: GET
+        endpoint: /api/social/notifications
+      - method: GET
+        endpoint: /api/social/notifications/unread-count
+  - name: Search and Discovery
+    description: Unified search user discovery recommendations
+    files:
+      - routes/search_unified.py
+      - routes/discover_routes.py
+    api_calls:
+      - method: GET
+        endpoint: /api/search
+      - method: GET
+        endpoint: /api/discover
+  - name: Security
+    description: Rate limiting content moderation WebAuthn 2FA
+    files:
+      - routes/security_routes.py
+      - services/security_middleware.py
+      - services/content_moderation.py
+      - services/rate_limiter.py
+    api_calls: []
+  - name: Communities and Gamification
+    description: User communities achievements badges leaderboards
+    files:
+      - routes/communities.py
+      - routes/gamification.py
+    api_calls: []
+  - name: Live and Realtime
+    description: Live streaming listening rooms audio video calls via Socket.IO
+    files:
+      - routes/live_video.py
+      - server.py
+    api_calls: []
+known_limitations:
+  - issue: Backend requires MongoDB connection via MONGO_URL env var
+    location: server.py
+    impact: API will not start without valid MongoDB connection
+  - issue: YouTube and Spotify API keys may be empty in test environment
+    location: server.py
+    impact: Music search endpoints may return limited results
+  - issue: Email service in mock mode no real SMTP configured
+    location: services/email_service.py
+    impact: Password reset emails are logged but not sent

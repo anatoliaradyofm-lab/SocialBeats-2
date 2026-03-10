@@ -1,0 +1,156 @@
+{
+  "identity": {
+    "name": "Anatolia Music",
+    "archetype": "Electric & Neon + Jewel Luxury",
+    "vibe": "Immersive, Rhythmic, Night-Mode, Unified",
+    "description": "A unified social music dashboard that merges Spotify, Apple Music, and YouTube into a single, sleek interface."
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Outfit, sans-serif",
+      "body": "Inter, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "imports": [
+      "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;700;900&family=JetBrains+Mono:wght@400&display=swap"
+    ],
+    "rules": {
+      "headings": "font-heading tracking-tight font-bold",
+      "subheadings": "font-heading tracking-normal font-medium text-muted-foreground",
+      "body": "font-sans leading-relaxed",
+      "labels": "font-mono text-xs uppercase tracking-widest text-muted-foreground"
+    }
+  },
+  "colors": {
+    "palette": {
+      "background": "hsl(240 10% 3.9%)",
+      "foreground": "hsl(0 0% 98%)",
+      "card": "hsl(240 10% 3.9%)",
+      "card_foreground": "hsl(0 0% 98%)",
+      "popover": "hsl(240 10% 3.9%)",
+      "popover_foreground": "hsl(0 0% 98%)",
+      "primary": "hsl(263.4 70% 50.4%)",
+      "primary_foreground": "hsl(210 40% 98%)",
+      "secondary": "hsl(240 3.7% 15.9%)",
+      "secondary_foreground": "hsl(0 0% 98%)",
+      "muted": "hsl(240 3.7% 15.9%)",
+      "muted_foreground": "hsl(240 5% 64.9%)",
+      "accent": "hsl(240 3.7% 15.9%)",
+      "accent_foreground": "hsl(0 0% 98%)",
+      "destructive": "hsl(0 62.8% 30.6%)",
+      "destructive_foreground": "hsl(0 0% 98%)",
+      "border": "hsl(240 3.7% 15.9%)",
+      "input": "hsl(240 3.7% 15.9%)",
+      "ring": "hsl(263.4 70% 50.4%)"
+    },
+    "usage": {
+      "primary": "Main brand actions, active states, progress bars",
+      "secondary": "Secondary buttons, card backgrounds",
+      "accent": "Hover states, subtle highlights",
+      "background": "Deep obsidian base",
+      "text_muted": "Secondary information, track durations, artist names"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": {
+      "player_bar": "bg-black/60 backdrop-blur-xl border-t border-white/10",
+      "sidebar": "bg-black/40 backdrop-blur-lg border-r border-white/5",
+      "modal": "bg-zinc-950/80 backdrop-blur-2xl border border-white/10 shadow-2xl"
+    },
+    "gradients": {
+      "hero_glow": "bg-gradient-to-tr from-violet-900/20 via-transparent to-transparent",
+      "active_item": "bg-gradient-to-r from-violet-500/10 to-transparent border-l-2 border-violet-500"
+    },
+    "textures": {
+      "noise": "opacity-20 pointer-events-none fixed inset-0 z-50 mix-blend-overlay"
+    },
+    "borders": {
+      "subtle": "border border-white/5",
+      "highlight": "border border-violet-500/50"
+    }
+  },
+  "layout": {
+    "grid_system": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-12 gap-6 p-6",
+      "bento_hero": "col-span-12 md:col-span-8 row-span-2",
+      "bento_sidebar": "col-span-12 md:col-span-4 row-span-2",
+      "bento_item": "col-span-12 md:col-span-4"
+    },
+    "spacing": {
+      "container_padding": "p-6 md:p-8 lg:p-12",
+      "section_gap": "gap-8",
+      "item_gap": "gap-4"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "rounded-full font-medium transition-all hover:scale-105 active:scale-95 shadow-[0_0_20px_-5px_rgba(139,92,246,0.5)]",
+      "secondary": "rounded-full border border-white/10 hover:bg-white/5 hover:border-white/20 transition-colors",
+      "ghost": "rounded-full hover:bg-white/5 text-muted-foreground hover:text-foreground"
+    },
+    "cards": {
+      "base": "bg-card/50 border border-white/5 rounded-xl overflow-hidden hover:border-white/10 transition-colors",
+      "interactive": "cursor-pointer hover:bg-white/5 hover:scale-[1.02] transition-all duration-300"
+    },
+    "inputs": {
+      "base": "bg-secondary/50 border-transparent focus:border-primary/50 focus:ring-2 focus:ring-primary/20 rounded-lg transition-all"
+    }
+  },
+  "assets": {
+    "images": {
+      "auth_background": {
+        "url": "https://images.unsplash.com/photo-1765224747184-05d35f23859a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwxfHxjb25jZXJ0JTIwY3Jvd2QlMjBkYXJrJTIwYXRtb3NwaGVyZXxlbnwwfHx8fDE3NzA2NTMwNTh8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Concert crowd dark atmosphere",
+        "usage": "Full screen background for login/register pages with overlay"
+      },
+      "hero_abstract": {
+        "url": "https://images.unsplash.com/photo-1770320606303-068d1ceb3c1d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMG5lb24lMjBtdXNpYyUyMHdhdmUlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3MDY1MzA1M3ww&ixlib=rb-4.1.0&q=85",
+        "alt": "Abstract neon music notes",
+        "usage": "Dashboard hero section background or playlist cover"
+      },
+      "album_covers": [
+        "https://images.unsplash.com/photo-1767477665600-98f3a7ee6c00?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMG5lb24lMjBtdXNpYyUyMHdhdmUlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3MDY1MzA1M3ww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1768936919089-857e18c38cf5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMG5lb24lMjBtdXNpYyUyMHdhdmUlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3MDY1MzA1M3ww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1769123014694-de11a58232a3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHw0fHxhYnN0cmFjdCUyMG5lb24lMjBtdXNpYyUyMHdhdmUlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3MDY1MzA1M3ww&ixlib=rb-4.1.0&q=85"
+      ]
+    },
+    "icons": {
+      "library": "lucide-react",
+      "preferred_set": "Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Heart, ListMusic, Search, Home, User, Settings, LogOut, Plus, MoreVertical"
+    }
+  },
+  "instructions_to_main_agent": {
+    "setup": [
+      "Update /app/frontend/src/index.css with the provided HSL color variables for the 'dark' class.",
+      "Add the Google Fonts import to /app/frontend/src/index.css.",
+      "Configure tailwind.config.js to extend the font family with 'Outfit' (heading) and 'Inter' (body).",
+      "Ensure 'lucide-react' is installed."
+    ],
+    "implementation_rules": [
+      "ALWAYS use the 'dark' class on the root element or body to enforce dark mode.",
+      "Use 'bg-background' for the main page background.",
+      "Implement the 'Unified Player' as a fixed bottom bar with glassmorphism effects.",
+      "Use 'sonner' for all toast notifications.",
+      "Ensure all interactive elements have 'data-testid' attributes.",
+      "Do NOT use gradients for text. Keep text high-contrast (white/zinc-400).",
+      "Use the provided image URLs for mock data in the dashboard and library."
+    ]
+  },
+  "universal_guidelines": {
+    "design_philosophy": "Fusion over Imitation. Emotion First. Content is King.",
+    "anti_patterns": [
+      "Purple/Teal for CTA (Use Violet/Cyan instead)",
+      "Inter everywhere (Use Outfit for headings)",
+      "Center-Everything Disease (Use asymmetry)",
+      "Gradient Overload (Use subtle glows/noise instead)"
+    ],
+    "accessibility": {
+      "contrast": "Ensure 4.5:1 for normal text, 3:1 for large text.",
+      "interactive": "Focus states must be visible and distinct."
+    },
+    "motion": {
+      "micro_interactions": "Hover states, active states, and focus rings are mandatory.",
+      "transitions": "Use 'transition-all duration-200 ease-in-out' for smooth feel."
+    }
+  }
+}

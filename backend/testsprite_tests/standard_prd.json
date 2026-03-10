@@ -1,0 +1,159 @@
+{
+  "product_name": "SocialBeats",
+  "version": "3.0.0",
+  "type": "backend",
+  "base_url": "https://social-music-fix.preview.emergentagent.com/api",
+  "framework": "FastAPI",
+  "language": "Python",
+  "database": "MongoDB",
+  "auth_method": "JWT Bearer Token",
+  "test_credentials": {
+    "email": "testuser2@test.com",
+    "password": "password123"
+  },
+  "features": [
+    {
+      "name": "Authentication",
+      "description": "User registration, login, JWT tokens, Google OAuth, 2FA, biometric support",
+      "endpoints": [
+        {"method": "POST", "path": "/api/auth/register", "auth_required": false, "description": "Register new user with email, password, username"},
+        {"method": "POST", "path": "/api/auth/login", "auth_required": false, "description": "Login with email and password, returns JWT token"},
+        {"method": "GET", "path": "/api/auth/me", "auth_required": true, "description": "Get current authenticated user profile"},
+        {"method": "POST", "path": "/api/auth/logout", "auth_required": true, "description": "Logout and invalidate token"},
+        {"method": "POST", "path": "/api/auth/verify-2fa", "auth_required": false, "description": "Verify two-factor authentication code"},
+        {"method": "POST", "path": "/api/auth/google/mobile", "auth_required": false, "description": "Google OAuth for mobile clients"},
+        {"method": "POST", "path": "/api/auth/verify-token", "auth_required": false, "description": "Verify existing token validity"}
+      ]
+    },
+    {
+      "name": "User Management",
+      "description": "Profile editing, settings, device management",
+      "endpoints": [
+        {"method": "GET", "path": "/api/user/settings", "auth_required": true, "description": "Get user settings"},
+        {"method": "PUT", "path": "/api/user/settings", "auth_required": true, "description": "Update user settings"},
+        {"method": "PUT", "path": "/api/user/profile", "auth_required": true, "description": "Update user profile"},
+        {"method": "GET", "path": "/api/user/{username}", "auth_required": false, "description": "Get user by username"},
+        {"method": "GET", "path": "/api/user/{username}/activity", "auth_required": false, "description": "Get user activity"},
+        {"method": "GET", "path": "/api/user/devices", "auth_required": true, "description": "List user devices"},
+        {"method": "DELETE", "path": "/api/user/devices/{device_id}", "auth_required": true, "description": "Remove a device"}
+      ]
+    },
+    {
+      "name": "Social Network",
+      "description": "Follow/unfollow, friend requests, mute/block/restrict, close friends",
+      "endpoints": [
+        {"method": "POST", "path": "/api/social/friend-request/{user_id}", "auth_required": true, "description": "Send friend request"},
+        {"method": "GET", "path": "/api/social/friend-requests", "auth_required": true, "description": "List received friend requests"},
+        {"method": "GET", "path": "/api/social/friend-requests/sent", "auth_required": true, "description": "List sent friend requests"},
+        {"method": "POST", "path": "/api/social/friend-request/{request_id}/accept", "auth_required": true, "description": "Accept friend request"},
+        {"method": "POST", "path": "/api/social/friend-request/{request_id}/reject", "auth_required": true, "description": "Reject friend request"},
+        {"method": "DELETE", "path": "/api/social/unfriend/{user_id}", "auth_required": true, "description": "Remove friend"},
+        {"method": "GET", "path": "/api/users/{user_id}/followers", "auth_required": false, "description": "Get user followers list"},
+        {"method": "GET", "path": "/api/users/{user_id}/following", "auth_required": false, "description": "Get user following list"},
+        {"method": "POST", "path": "/api/social/mute/{user_id}", "auth_required": true, "description": "Mute a user"},
+        {"method": "DELETE", "path": "/api/social/mute/{user_id}", "auth_required": true, "description": "Unmute a user"},
+        {"method": "GET", "path": "/api/social/muted", "auth_required": true, "description": "Get muted users list"},
+        {"method": "POST", "path": "/api/social/restrict/{user_id}", "auth_required": true, "description": "Restrict a user"},
+        {"method": "DELETE", "path": "/api/social/restrict/{user_id}", "auth_required": true, "description": "Unrestrict a user"},
+        {"method": "GET", "path": "/api/social/restricted", "auth_required": true, "description": "Get restricted users list"},
+        {"method": "POST", "path": "/api/social/close-friends/{user_id}", "auth_required": true, "description": "Add user to close friends"},
+        {"method": "DELETE", "path": "/api/social/close-friends/{user_id}", "auth_required": true, "description": "Remove from close friends"},
+        {"method": "GET", "path": "/api/social/close-friends", "auth_required": true, "description": "Get close friends list"},
+        {"method": "GET", "path": "/api/social/qr-code", "auth_required": true, "description": "Generate profile QR code"},
+        {"method": "GET", "path": "/api/social/interaction-status/{user_id}", "auth_required": true, "description": "Get interaction status with user"}
+      ]
+    },
+    {
+      "name": "Notifications",
+      "description": "Push notifications and in-app notification center",
+      "endpoints": [
+        {"method": "GET", "path": "/api/social/notifications", "auth_required": true, "description": "Get notifications list"},
+        {"method": "GET", "path": "/api/social/notifications/unread-count", "auth_required": true, "description": "Get unread notification count"}
+      ]
+    },
+    {
+      "name": "Posts and Feed",
+      "description": "Create/edit/delete posts, likes, comments, personalized feed",
+      "endpoints": [
+        {"method": "POST", "path": "/api/posts", "auth_required": true, "description": "Create a new post"},
+        {"method": "GET", "path": "/api/posts", "auth_required": false, "description": "List posts"},
+        {"method": "GET", "path": "/api/posts/{id}", "auth_required": false, "description": "Get post detail"},
+        {"method": "PUT", "path": "/api/posts/{id}", "auth_required": true, "description": "Update post"},
+        {"method": "DELETE", "path": "/api/posts/{id}", "auth_required": true, "description": "Delete post"},
+        {"method": "POST", "path": "/api/posts/{id}/like", "auth_required": true, "description": "Like or unlike a post"},
+        {"method": "GET", "path": "/api/feed", "auth_required": true, "description": "Get personalized feed"},
+        {"method": "GET", "path": "/api/social/posts/archived", "auth_required": true, "description": "Get archived posts"},
+        {"method": "GET", "path": "/api/social/posts/saved", "auth_required": true, "description": "Get saved posts"}
+      ]
+    },
+    {
+      "name": "Music",
+      "description": "Music search, playlists, streaming, lyrics, recommendations",
+      "endpoints": [
+        {"method": "GET", "path": "/api/music/search", "auth_required": false, "description": "Search songs across YouTube, Spotify, Deezer"},
+        {"method": "GET", "path": "/api/music/trending", "auth_required": false, "description": "Get trending music"},
+        {"method": "GET", "path": "/api/music/recommendations", "auth_required": true, "description": "Get personalized music recommendations"},
+        {"method": "GET", "path": "/api/playlists", "auth_required": true, "description": "List user playlists"},
+        {"method": "POST", "path": "/api/playlists", "auth_required": true, "description": "Create a new playlist"},
+        {"method": "GET", "path": "/api/playlists/{id}", "auth_required": true, "description": "Get playlist detail with songs"},
+        {"method": "PUT", "path": "/api/playlists/{id}", "auth_required": true, "description": "Update playlist"},
+        {"method": "DELETE", "path": "/api/playlists/{id}", "auth_required": true, "description": "Delete playlist"},
+        {"method": "POST", "path": "/api/playlists/{id}/songs", "auth_required": true, "description": "Add songs to playlist"}
+      ]
+    },
+    {
+      "name": "Stories",
+      "description": "Create/view ephemeral stories, story archive, highlights",
+      "endpoints": [
+        {"method": "GET", "path": "/api/stories", "auth_required": true, "description": "Get stories feed"},
+        {"method": "POST", "path": "/api/stories", "auth_required": true, "description": "Create a new story"},
+        {"method": "DELETE", "path": "/api/stories/{id}", "auth_required": true, "description": "Delete a story"},
+        {"method": "POST", "path": "/api/stories/{id}/view", "auth_required": true, "description": "Mark story as viewed"}
+      ]
+    },
+    {
+      "name": "Messaging",
+      "description": "Direct messages, group chats, music sharing in chat",
+      "endpoints": [
+        {"method": "GET", "path": "/api/conversations", "auth_required": true, "description": "List conversations"},
+        {"method": "POST", "path": "/api/conversations", "auth_required": true, "description": "Create new conversation"},
+        {"method": "GET", "path": "/api/conversations/{id}/messages", "auth_required": true, "description": "Get messages in conversation"},
+        {"method": "POST", "path": "/api/messages", "auth_required": true, "description": "Send a message"}
+      ]
+    },
+    {
+      "name": "Search and Discovery",
+      "description": "Unified search across users, songs, playlists, posts",
+      "endpoints": [
+        {"method": "GET", "path": "/api/search", "auth_required": false, "description": "Unified search"},
+        {"method": "GET", "path": "/api/discover", "auth_required": true, "description": "Discovery suggestions"}
+      ]
+    },
+    {
+      "name": "Subscription",
+      "description": "Premium subscription management",
+      "endpoints": [
+        {"method": "POST", "path": "/api/subscription/upgrade", "auth_required": true, "description": "Upgrade subscription plan"},
+        {"method": "GET", "path": "/api/subscription/status", "auth_required": true, "description": "Get subscription status"}
+      ]
+    },
+    {
+      "name": "Geolocation and Services",
+      "description": "Geolocation detection and service health checks",
+      "endpoints": [
+        {"method": "GET", "path": "/api/geo/me", "auth_required": false, "description": "Get user geolocation and region info"},
+        {"method": "GET", "path": "/api/services/status", "auth_required": false, "description": "Get external services status"}
+      ]
+    },
+    {
+      "name": "Legal",
+      "description": "Privacy policy, terms, compliance, data rights",
+      "endpoints": [
+        {"method": "GET", "path": "/api/legal/privacy-policy", "auth_required": false, "description": "Get privacy policy"},
+        {"method": "GET", "path": "/api/legal/terms", "auth_required": false, "description": "Get terms of service"},
+        {"method": "POST", "path": "/api/legal/feedback", "auth_required": true, "description": "Submit user feedback"},
+        {"method": "GET", "path": "/api/legal/compliance", "auth_required": false, "description": "Get compliance info"}
+      ]
+    }
+  ]
+}

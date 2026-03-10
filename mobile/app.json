@@ -1,0 +1,93 @@
+{
+  "expo": {
+    "name": "SocialBeats",
+    "slug": "socialbeats-mobile-app",
+    "version": "1.0.2",
+    "newArchEnabled": false,
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0B"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.socialbeats.app",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio",
+          "remote-notification"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0A0B"
+      },
+      "package": "com.socialbeats.socialbeats",
+      "versionCode": 15,
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-secure-store"
+      ],
+      "expo-font",
+      "expo-av",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#8B5CF6",
+          "defaultChannel": "default"
+        }
+      ],
+      "expo-asset",
+      "@react-native-voice/voice",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24,
+            "kotlinVersion": "1.9.24",
+            "toolsReplaceAttributes": [
+              "android:appComponentFactory",
+              "android:allowBackup",
+              "android:supportsRtl"
+            ]
+          }
+        }
+      ],
+      "expo-camera",
+      "./withManifestMerger.js",
+      "./withNamespace.js",
+      "./withFixTrackPlayer.js"
+    ],
+    "scheme": "socialbeats",
+    "owner": "anatoliafm",
+    "extra": {
+      "eas": {
+        "projectId": "b90f4437-ca67-4ea6-9b4c-48de9178c9de"
+      }
+    }
+  }
+}

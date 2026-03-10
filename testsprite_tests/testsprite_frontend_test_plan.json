@@ -1,0 +1,1337 @@
+[
+  {
+    "id": "TC001",
+    "title": "Başarılı giriş ile /Main ekranına yönlendirme",
+    "description": "Kullanıcı doğru e-posta ve şifre ile giriş yaptığında /Main ekranına yönlendirilmelidir.",
+    "category": "Kullanıcı girişi",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Giriş\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into \"E-posta\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into \"Şifre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Giriş Yap\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Main\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Ana sekme\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Yanlış şifre ile giriş denemesinde hata mesajı gösterimi",
+    "description": "Kullanıcı yanlış şifre ile giriş denerse geçersiz bilgi hata mesajı görünmelidir.",
+    "category": "Kullanıcı girişi",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"E-posta\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"fake.user@example.com\" into \"E-posta\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"WrongPassword123!\" into \"Şifre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Giriş Yap\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Geçersiz\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Login\""
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Hatalı e-posta formatı ile giriş denemesinde doğrulama/hata gösterimi",
+    "description": "Geçersiz e-posta formatı girildiğinde kullanıcıya hata gösterilmeli ve giriş tamamlanmamalıdır.",
+    "category": "Kullanıcı girişi",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"not-an-email\" into \"E-posta\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"SomePassword123!\" into \"Şifre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Giriş Yap\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"E-posta\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Geçersiz\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Boş e-posta ile giriş denemesinde hata gösterimi",
+    "description": "E-posta boş bırakıldığında kullanıcı uyarılmalı ve giriş yapılmamalıdır.",
+    "category": "Kullanıcı girişi",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into \"Şifre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Giriş Yap\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"E-posta\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Zorunlu\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Yeni kullanıcı kaydı (geçerli bilgiler) ve kayıt sonrası yönlendirme/uyarı",
+    "description": "Geçerli e-posta, kullanıcı adı ve kurallara uygun şifre ile kayıt olunabildiğini ve kayıt sonrası /Main yönlendirmesi veya doğrulama uyarısı görüldüğünü doğrular.",
+    "category": "Kayıt (Register)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Register"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Kayıt\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"newuser_qa_001@example.com\" into \"E-posta\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"newuserqa001\" into \"Kullanıcı adı\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"ValidPassw0rd!\" into \"Şifre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Kayıt\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Main\""
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Yeni kullanıcı kaydı sonrası doğrulama istemi (varsa) görüntülenir",
+    "description": "Kayıt sonrası otomatik giriş yoksa, kullanıcıya doğrulama istemi/prompt gösterildiğini doğrular.",
+    "category": "Kayıt (Register)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Register"
+      },
+      {
+        "type": "action",
+        "description": "Type \"newuser_qa_002@example.com\" into \"E-posta\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"newuserqa002\" into \"Kullanıcı adı\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"ValidPassw0rd!\" into \"Şifre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Kayıt\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Doğrulama\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Daha önce kullanılmış e-posta ile kayıt olma (inline hata)",
+    "description": "Daha önce kullanılmış e-posta ile kayıt denendiğinde \"email already in use\" inline hatasının göründüğünü doğrular.",
+    "category": "Kayıt (Register)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Register"
+      },
+      {
+        "type": "action",
+        "description": "Type \"existing_user@example.com\" into \"E-posta\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"someusername\" into \"Kullanıcı adı\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"ValidPassw0rd!\" into \"Şifre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Kayıt\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"email already in use\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Boş form ile kayıt denemesi (zorunlu alan uyarıları)",
+    "description": "Zorunlu alanlar boşken kayıt butonuna basıldığında görünür doğrulama mesajları çıktığını doğrular.",
+    "category": "Kayıt (Register)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Register"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"E-posta\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Kayıt\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"E-posta\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Kullanıcı adı\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Şifre\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Geçersiz e-posta formatı ile kayıt (hata mesajı)",
+    "description": "Geçersiz e-posta formatı girildiğinde kayıt işleminin engellendiğini ve görünür hata mesajı gösterildiğini doğrular.",
+    "category": "Kayıt (Register)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Register"
+      },
+      {
+        "type": "action",
+        "description": "Type \"not-an-email\" into \"E-posta\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"emailformatqa\" into \"Kullanıcı adı\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"ValidPassw0rd!\" into \"Şifre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Kayıt\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Geçersiz e-posta\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Şifre kurallarına uymayan şifre ile kayıt (kural hatası)",
+    "description": "Şifre kurallarına uymayan bir şifre girildiğinde kayıt işleminin engellendiğini ve görünür kural/validasyon hatası çıktığını doğrular.",
+    "category": "Kayıt (Register)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Register"
+      },
+      {
+        "type": "action",
+        "description": "Type \"newuser_qa_003@example.com\" into \"E-posta\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"weakpassqa\" into \"Kullanıcı adı\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"123\" into \"Şifre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Kayıt\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Şifre\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Kayıt ekranından giriş ekranına geçiş",
+    "description": "Kayıt ekranında mevcut hesapla girişe yönlendiren bağlantının giriş ekranına götürdüğünü doğrular.",
+    "category": "Kayıt (Register)",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Register"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Giriş\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Giriş\" link"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Login"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Şifre\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Kayıt işlemi sırasında genel hata (ör. kullanıcı adı kullanımda) mesajı görünür",
+    "description": "Kayıt başarısız olduğunda kullanıcıya görünür, anlaşılır bir hata mesajı gösterildiğini doğrular (ör. kullanıcı adı kullanımda).",
+    "category": "Kayıt (Register)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Register"
+      },
+      {
+        "type": "action",
+        "description": "Type \"newuser_qa_004@example.com\" into \"E-posta\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"takenusername\" into \"Kullanıcı adı\" field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"ValidPassw0rd!\" into \"Şifre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Kayıt\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"kullanımda\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Profil sekmesine gidince profil bilgileri ve istatistiklerin görüntülenmesi",
+    "description": "Giriş yapan kullanıcının ana sekmeden Profil sekmesine geçerek profil ekranında bilgilerini ve istatistiklerini görmesini doğrular.",
+    "category": "Profil görüntüleme",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Giriş\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Giriş Yap\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Main\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Profil\" in the main tab bar"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Profil\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Profil ekranında temel profil alanlarının görünmesi",
+    "description": "Profil ekranında kullanıcıya ait temel bilgilerin görünür olduğunu doğrular.",
+    "category": "Profil görüntüleme",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Giriş Yap\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Profil\" in the main tab bar"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Kullanıcı adı\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Biyografi\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Profil fotoğrafı\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Profil ekranında istatistik alanlarının görünmesi (gönderi/playlist vb.)",
+    "description": "Profil ekranında kullanıcı istatistiklerinin görünür olduğunu doğrular.",
+    "category": "Profil görüntüleme",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Giriş Yap\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Profil\" in the main tab bar"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Gönderiler\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Çalma listeleri\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Takipçi\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Profil ekranında içerik bölümlerine kaydırınca öğelerin görünmesi",
+    "description": "Profil ekranında aşağı kaydırma ile ek profil içeriği/bölümlerinin görünür olduğunu doğrular.",
+    "category": "Profil görüntüleme",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Giriş Yap\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Profil\" in the main tab bar"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the bottom of the profile screen"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Kullanıcının gönderi listesi\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Kullanıcının çalma listesi bölümü\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "Profil ekranında yenileme/yeniden yükleme sonrası bilgilerin görünür kalması",
+    "description": "Profil ekranı tekrar ziyaret edildiğinde profil bilgileri ve istatistiklerin hâlâ görünür olduğunu doğrular.",
+    "category": "Profil görüntüleme",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Giriş Yap\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Feed\" in the main tab bar"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Profil\" in the main tab bar"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Profil\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Tema ayarı: Karanlık tema seçip kaydetme ve onay mesajını görme",
+    "description": "Kullanıcı Ayarlar ekranından Tema alt menüsünü açıp karanlık temayı seçerek kaydettiğinde onay bildirimini görür.",
+    "category": "Ayarlar",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Giriş\" (Login) button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Main\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Ayarlar\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Ayarlar\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Tema\" option"
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "Tema ayarı: Karanlık tema seçimi sonrası kaydet ve toast doğrulaması",
+    "description": "Kullanıcı Tema alt menüsünde karanlık temayı seçip kaydettiğinde başarı toast mesajı görünür.",
+    "category": "Ayarlar",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Giriş\" (Login) button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Main\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Ayarlar\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Tema\" option"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Karanlık\" (Dark) from the theme options"
+      }
+    ]
+  },
+  {
+    "id": "TC020",
+    "title": "Tema ayarı: Kaydet butonu ile değişikliği kalıcılaştırma",
+    "description": "Kullanıcı tema değişikliğini Kaydet ile uygular ve ekranda kaydın başarılı olduğunu görür.",
+    "category": "Ayarlar",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Giriş\" (Login) button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Main\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Ayarlar\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Tema\" option"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Kaydet\" (Save) button"
+      }
+    ]
+  },
+  {
+    "id": "TC021",
+    "title": "Tema ayarı: Kaydet sonrası onay toast mesajını görme",
+    "description": "Kullanıcı Kaydet'e bastıktan sonra ayarların güncellendiğine dair onay toast mesajı görünür.",
+    "category": "Ayarlar",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Giriş\" (Login) button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Main\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Ayarlar\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Tema\" option"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Kaydedildi\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC022",
+    "title": "Ayarlar yükleme: Ayarlar ekranında spinner görünmesi",
+    "description": "Kullanıcı Ayarlar ekranını açtığında ayarlar yüklenirken bir yükleme göstergesi görünür.",
+    "category": "Ayarlar",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Giriş\" (Login) button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Main\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Ayarlar\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Yükleniyor\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Ayarlar\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC023",
+    "title": "Ayarlar yükleme: Yükleme tamamlanınca ayarların görüntülenmesi",
+    "description": "Ayarlar ekranında yükleme bittiğinde ayar seçenekleri görünür.",
+    "category": "Ayarlar",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Giriş\" (Login) button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Main\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Ayarlar\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Tema\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Dil\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC024",
+    "title": "Feed sekmesine gidince gönderilerin listelenmesi",
+    "description": "Kullanıcı giriş yaptıktan sonra Feed sekmesine geçince gönderilerin yüklendiğini doğrular.",
+    "category": "Feed (Sosyal feed)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Main\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Feed\" tab"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Feed\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Feed post list\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC025",
+    "title": "Feed akışında aşağı kaydırma ile içeriklerin görünür kalması",
+    "description": "Feed ekranında kaydırma yapıldığında akışın görüntülenmeye devam ettiğini doğrular.",
+    "category": "Feed (Sosyal feed)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Feed\" tab"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Feed post list\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the bottom of the feed list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"A post item\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC026",
+    "title": "Bir gönderiyi beğenince beğeni sayısının artması",
+    "description": "Feed üzerindeki bir gönderiye beğeni verildiğinde beğeni sayısının arttığını doğrular.",
+    "category": "Feed (Sosyal feed)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Feed\" tab"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Like button on a post\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Like\" button on the first visible post"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Liked state indicator on the post\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC027",
+    "title": "Beğeni sonrası sayacın görünür şekilde güncellenmesi",
+    "description": "Beğeni tıklamasından sonra beğeni sayısının görünür şekilde değiştiğini doğrular.",
+    "category": "Feed (Sosyal feed)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Feed\" tab"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Like count on the first visible post\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Like\" button on the first visible post"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"+\" is visible in the \"Like count\" area (count increased compared to previous view)"
+      }
+    ]
+  },
+  {
+    "id": "TC028",
+    "title": "Feed yüklenirken boş/loader durumunun gösterilmesi",
+    "description": "Feed açıldığında içerik gelene kadar kullanıcıya bir yükleniyor durumu gösterildiğini doğrular.",
+    "category": "Feed (Sosyal feed)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Feed\" tab"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Loading indicator on Feed\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Feed post list\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC029",
+    "title": "Arama sekmesine gidip geçerli bir sorgu ile sonuç listesini görüntüleme",
+    "description": "Kullanıcı giriş yaptıktan sonra Search sekmesinde bir arama sorgusu girip sonuç listesini görür.",
+    "category": "Arama (Search)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Main\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Search\" tab"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/Search\""
+      }
+    ]
+  },
+  {
+    "id": "TC030",
+    "title": "Search ekranında arama yapınca sonuçların listelendiğini doğrulama",
+    "description": "Kullanıcı Search ekranında bir arama yapar ve sonuç listesinin görünür olduğunu doğrular.",
+    "category": "Arama (Search)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Search\" tab"
+      },
+      {
+        "type": "action",
+        "description": "Type \"taylor\" into the search field"
+      },
+      {
+        "type": "action",
+        "description": "Press Enter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Search results list\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC031",
+    "title": "Arama sonucu öğesine tıklayınca öğe detayının açıldığını doğrulama",
+    "description": "Kullanıcı bir arama sonucu seçer ve ilgili öğenin açıldığını doğrular.",
+    "category": "Arama (Search)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Search\" tab"
+      },
+      {
+        "type": "action",
+        "description": "Type \"beat\" into the search field"
+      },
+      {
+        "type": "action",
+        "description": "Press Enter"
+      },
+      {
+        "type": "action",
+        "description": "Click on the first item in the results list"
+      }
+    ]
+  },
+  {
+    "id": "TC032",
+    "title": "Boş arama sorgusunda inline doğrulama veya boş durum mesajı gösterimi",
+    "description": "Kullanıcı boş sorgu ile arama yapmaya çalıştığında doğrulama mesajı veya boş durum görür.",
+    "category": "Arama (Search)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Search\" tab"
+      },
+      {
+        "type": "action",
+        "description": "Click on the search field"
+      },
+      {
+        "type": "action",
+        "description": "Press Enter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Please enter a search term\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC033",
+    "title": "Sorgu sadece boşluklardan oluştuğunda aramanın reddedilmesi",
+    "description": "Kullanıcı yalnızca boşluk içeren sorgu girer ve uygulamanın aramayı kabul etmediğini doğrular.",
+    "category": "Arama (Search)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Search\" tab"
+      },
+      {
+        "type": "action",
+        "description": "Type \"   \" into the search field"
+      },
+      {
+        "type": "action",
+        "description": "Press Enter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Please enter a search term\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC034",
+    "title": "Anlamsız/çok nadir bir sorguda no-results durumunun gösterimi",
+    "description": "Kullanıcı sonuç vermesi beklenmeyen bir sorgu ile arama yaptığında no-results durumunu görür.",
+    "category": "Arama (Search)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Search\" tab"
+      },
+      {
+        "type": "action",
+        "description": "Type \"zzqqlmno12345\" into the search field"
+      },
+      {
+        "type": "action",
+        "description": "Press Enter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"No results\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC035",
+    "title": "Search ekranında arama alanının görünür ve etkileşilebilir olması",
+    "description": "Kullanıcı Search ekranında arama alanını görür ve içine yazı yazabildiğini doğrular.",
+    "category": "Arama (Search)",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /Login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Search\" tab"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Search field\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"rock\" into the search field"
+      }
+    ]
+  }
+]

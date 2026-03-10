@@ -1,0 +1,82 @@
+version: "2"
+type: frontend
+tech_stack:
+  - JavaScript
+  - Expo
+  - React Native
+  - React Navigation
+  - NativeWind / Tailwind
+  - i18next
+routes:
+  - path: /Login
+    file: frontend/src/screens/LoginScreen.js
+    auth_required: false
+    description: Giriş ekranı, e-posta ve şifre ile giriş
+  - path: /Register
+    file: frontend/src/screens/RegisterScreen.js
+    auth_required: false
+    description: Kayıt ekranı
+  - path: /Main
+    file: frontend/src/navigation/MainTabNavigator.js
+    auth_required: true
+    description: Ana sekme navigasyonu (Home, Search, Profile vb.)
+  - path: /Profile
+    file: frontend/src/screens/ProfileScreen.js
+    auth_required: true
+    description: Kullanıcı profil ekranı
+  - path: /Settings
+    file: frontend/src/screens/SettingsScreen.js
+    auth_required: true
+    description: Ayarlar
+  - path: /Feed
+    file: frontend/src/screens/FeedScreen.js
+    auth_required: true
+    description: Sosyal feed
+  - path: /Search
+    file: frontend/src/screens/SearchScreen.js
+    auth_required: true
+    description: Arama
+features:
+  - name: Kullanıcı girişi
+    description: E-posta ve şifre ile giriş yapma
+    files:
+      - frontend/src/screens/LoginScreen.js
+      - frontend/src/contexts/AuthContext.js
+      - frontend/src/services/api.js
+    entry_route: /Login
+    user_interactions:
+      - E-posta alanına e-posta yaz
+      - Şifre alanına şifre yaz
+      - Giriş Yap butonuna tıkla
+      - Geçersiz bilgide hata mesajı görüntülenir
+    api_calls:
+      - method: POST
+        endpoint: /api/auth/login
+    auth_required: false
+  - name: Profil görüntüleme
+    description: Giriş yapmış kullanıcının profilini görüntüleme
+    files:
+      - frontend/src/screens/ProfileScreen.js
+    entry_route: /Profile
+    user_interactions:
+      - Ana sekmeden Profil sekmesine geç
+      - Profil bilgileri ve istatistikler görüntülenir
+    api_calls:
+      - method: GET
+        endpoint: /api/profile/me
+    auth_required: true
+  - name: Ayarlar
+    description: Uygulama ayarlarını görüntüleme ve düzenleme
+    files:
+      - frontend/src/screens/SettingsScreen.js
+    entry_route: /Settings
+    user_interactions:
+      - Ayarlar ekranına git, alt menüleri aç
+    api_calls:
+      - method: GET
+        endpoint: /api/settings/me
+    auth_required: true
+known_limitations:
+  - issue: Uygulama Expo/React Native; web için expo start --web kullanılır, URL yolları ekran adlarıyla eşleşmez
+    location: frontend
+    impact: TestSprite tarayıcı testi için web build gerekir

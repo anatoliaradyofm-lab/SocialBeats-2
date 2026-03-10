@@ -1,0 +1,11 @@
+{
+  "name": "socialbeats-proje",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "testsprite": "npx @testsprite/testsprite-mcp generateCodeAndExecute"
+  },
+  "devDependencies": {
+    "@testsprite/testsprite-mcp": "^0.0.28"
+  }
+}

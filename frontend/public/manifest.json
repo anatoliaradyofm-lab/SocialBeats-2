@@ -1,0 +1,20 @@
+{
+    "manifest_version": 3,
+    "name": "SocialBeats",
+    "version": "1.0.0",
+    "description": "SocialBeats Web Extension",
+    "action": {
+        "default_popup": "index.html",
+        "default_title": "Open SocialBeats"
+    },
+    "permissions": [
+        "storage",
+        "unlimitedStorage"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    }
+}
