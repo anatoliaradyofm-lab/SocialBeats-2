@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SocialBeats — Web Preview</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=DM+Sans:ital,opsz,wght@0,9..40,200..900;1,9..40,200..900&family=DM+Mono:ital,wght@0,300;0,400;0,500&display=swap" rel="stylesheet"/>
+  <!-- Ionicons web components (replaces @expo/vector-icons on web) -->
+  <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+  <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root {
+      height: 100%;
+      background: #08060F; /* QENARA warm-dark */
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+      font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+      font-optical-sizing: auto;
+    }
+    /* Force Inter on EVERYTHING */
+    * {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+      -webkit-font-smoothing: antialiased !important;
+      -moz-osx-font-smoothing: grayscale !important;
+      text-rendering: geometricPrecision !important;
+    }
+    /* React Native Web resets */
+    div { display: flex; flex-direction: column; }
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-thumb { background: rgba(192,132,252,0.35); border-radius: 3px; }
+    /* Input reset + mobile keyboard fix */
+    input, textarea {
+      outline: none; border: none; background: transparent;
+      touch-action: manipulation !important;
+      -webkit-user-select: text !important;
+      user-select: text !important;
+      pointer-events: auto !important;
+      -webkit-tap-highlight-color: transparent;
+      font-size: 16px; /* prevents iOS auto-zoom */
+    }
+    /* Horizontal scroll — mouse drag support */
+    [data-scroll-horizontal], .rn-overflowX-scroll {
+      overflow-x: auto !important;
+      cursor: grab;
+    }
+    [data-scroll-horizontal]:active, .rn-overflowX-scroll:active {
+      cursor: grabbing;
+    }
+    /* Hide horizontal scrollbar inside phone frame */
+    .rn-overflowX-scroll::-webkit-scrollbar { display: none; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>

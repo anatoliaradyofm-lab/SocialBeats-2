@@ -1,302 +1,482 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Modal, FlatList, Pressable } from 'react-native';
+/**
+ * ProfileScreen — QENARA Design System 2026
+ * Own profile · Music-first · No photo/video posts · Graphical listening stats
+ */
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
+  Dimensions, RefreshControl, Modal, Animated, Pressable, ActivityIndicator,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useTranslation } from 'react-i18next';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
-import RewardedAd from '../components/ads/RewardedAd';
-import ProfilePosts from '../components/profile/ProfilePosts';
-import ProfileStoriesHighlights from '../components/profile/ProfileStoriesHighlights';
-import VerifiedBadge from '../components/VerifiedBadge';
-import RichText from '../components/RichText';
-import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
+import api from '../services/api';
+
+const { width: SW } = Dimensions.get('window');
+const COVER_H = 80;
+
+const DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+
+/* ── Weekly bar chart ── */
+function WeeklyBars({ data }) {
+  const max = Math.max(...data, 1);
+  return (
+    <View style={wb.wrap}>
+      {data.map((v, i) => {
+        const h = Math.max(4, (v / max) * 56);
+        const isToday = i === (new Date().getDay() + 6) % 7;
+        return (
+          <View key={i} style={wb.col}>
+            <View style={wb.barTrack}>
+              <View style={[wb.bar, { height: h, backgroundColor: isToday ? '#C084FC' : 'rgba(192,132,252,0.32)' }]} />
+            </View>
+            <Text style={[wb.day, isToday && { color: '#C084FC' }]}>{DAYS[i]}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+const wb = StyleSheet.create({
+  wrap:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: 8 },
+  col:      { alignItems: 'center', gap: 6, flex: 1 },
+  barTrack: { height: 56, justifyContent: 'flex-end' },
+  bar:      { width: 10, borderRadius: 5 },
+  day:      { fontSize: 10, color: 'rgba(248,248,248,0.30)', fontWeight: '500' },
+});
+
+/* ── Animated genre bar ── */
+function GenreBar({ label, pct, color }) {
+  const w = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(w, { toValue: pct, duration: 900, delay: 200, useNativeDriver: false }).start();
+  }, [pct]);
+  return (
+    <View style={gb.row}>
+      <Text style={gb.label}>{label}</Text>
+      <View style={gb.track}>
+        <Animated.View style={[gb.fill, {
+          backgroundColor: color,
+          width: w.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
+        }]} />
+      </View>
+      <Text style={gb.pct}>{pct}%</Text>
+    </View>
+  );
+}
+const gb = StyleSheet.create({
+  row:   { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 9 },
+  label: { width: 72, fontSize: 12, color: 'rgba(248,248,248,0.55)', fontWeight: '500' },
+  track: { flex: 1, height: 6, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 3, overflow: 'hidden' },
+  fill:  { height: '100%', borderRadius: 3 },
+  pct:   { width: 30, fontSize: 11, color: 'rgba(248,248,248,0.35)', textAlign: 'right' },
+});
+
+/* ── Mock highlights ── */
+const MOCK_HIGHLIGHTS = [
+  { id: 'h1', label: 'Live',   cover: 'https://picsum.photos/seed/h1/80/80' },
+  { id: 'h2', label: 'Music',  cover: 'https://picsum.photos/seed/h2/80/80' },
+  { id: 'h3', label: 'Events', cover: 'https://picsum.photos/seed/h3/80/80' },
+  { id: 'h4', label: 'Tour',   cover: 'https://picsum.photos/seed/h4/80/80' },
+];
 
 export default function ProfileScreen({ navigation }) {
-  const { colors } = useTheme();
-  const styles = createStyles(colors);
-  const insets = useSafeAreaInsets();
-  const { user, token, isGuest, exitGuest } = useAuth();
-  const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState('posts');
-  const [menuVisible, setMenuVisible] = useState(false);
+  const { colors }       = useTheme();
+  const { user, logout } = useAuth();
+  const { t }            = useTranslation();
+  const insets           = useSafeAreaInsets();
 
-  const username = user?.username || 'unknown';
-  const displayName = user?.display_name || username;
-  const avatar = user?.avatar_url || `https://i.pravatar.cc/200?u=${username}`;
+  const [refreshing,   setRefreshing]   = useState(false);
+  const [menuVisible,  setMenuVisible]  = useState(false);
+  const [listenStats,  setListenStats]  = useState(null);
+  const [nowPlaying,   setNowPlaying]   = useState(null);
+  const scrollY = useRef(new Animated.Value(0)).current;
 
-  if (isGuest) {
-    return (
-      <View style={[styles.container, styles.guestContainer, { paddingTop: insets.top }]}>
-        <Text style={styles.guestTitle}>{t('login.title')}</Text>
-        <Text style={styles.guestSubtitle}>{t('register.subtitle')}</Text>
-        <TouchableOpacity style={styles.guestLoginBtn} onPress={() => exitGuest()}>
-          <Text style={styles.guestLoginText}>{t('login.submit')}</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const loadStats = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const [stats, np] = await Promise.all([
+        api.get(`/users/${user.id}/listening-stats`).catch(() => null),
+        api.get(`/users/${user.id}/now-playing`).catch(() => null),
+      ]);
+      if (stats) setListenStats(stats);
+      if (np?.now_playing) setNowPlaying(np.now_playing);
+    } catch {}
+  }, [user?.id]);
 
-  const menuItems = [
-    { key: 'settings', icon: 'settings-outline', label: t('settings.title') || 'Settings', screen: 'Settings' },
-    { key: 'conversations', icon: 'chatbubbles-outline', label: t('conversations.title'), screen: 'Conversations' },
-    { key: 'liked', icon: 'heart-outline', label: t('saved.title', 'Liked'), screen: 'Liked' },
-    { key: 'saved', icon: 'bookmark-outline', label: t('saved.title', 'Saved'), screen: 'Saved' },
-    { key: 'playlists', icon: 'list-outline', label: t('tabs.playlists'), screen: 'Main', params: { screen: 'Playlists' } },
-    { key: 'collaborative', icon: 'people-outline', label: t('collaborative.title'), screen: 'CollaborativePlaylists' },
-    { key: 'history', icon: 'time-outline', label: t('listeningHistory.title'), screen: 'ListeningHistory' },
-    { key: 'achievements', icon: 'trophy-outline', label: t('achievements.title'), screen: 'Achievements' },
-    { key: 'events', icon: 'calendar-outline', label: t('events.title'), screen: 'Events' },
-    { key: 'live', icon: 'radio-outline', label: t('liveStream.title'), screen: 'LiveStream' },
-    { key: 'listeningRoom', icon: 'headset-outline', label: t('listeningRoom.title') || 'Listening Rooms', screen: 'ListeningRoom' },
-    { key: 'arMusic', icon: 'color-wand-outline', label: t('arMusic.title') || 'AR Music', screen: 'ARMusic' },
-    { key: 'qr', icon: 'qr-code-outline', label: t('profile.profileQR'), screen: 'ProfileQR' },
-    { key: 'stats', icon: 'bar-chart-outline', label: t('profile.visitors'), screen: 'ProfileStats' },
-    { key: 'suggestions', icon: 'person-add-outline', label: t('suggestions.title'), screen: 'UserSuggestions' },
-    { key: 'contacts', icon: 'call-outline', label: t('findContacts.title'), screen: 'FindContacts' },
-    { key: 'closeFriends', icon: 'star-outline', label: t('closeFriends.title'), screen: 'CloseFriends' },
-    { key: 'followSuggestions', icon: 'people-circle-outline', label: t('suggestions.followSuggestions') || 'Follow Suggestions', screen: 'FollowSuggestions' },
-    { key: 'musicDiscover', icon: 'disc-outline', label: t('musicDiscover.title') || 'Music Discover', screen: 'MusicDiscover' },
-    { key: 'contactsFriends', icon: 'phone-portrait-outline', label: t('findContacts.fromContacts') || 'Friends from Contacts', screen: 'ContactsFriends' },
-    { key: 'sessions', icon: 'shield-checkmark-outline', label: t('settings.activeSessions') || 'Active Sessions', screen: 'Sessions' },
-    { key: 'communities', icon: 'globe-outline', label: t('communities.title') || 'Communities', screen: 'Communities' },
-    { key: 'karaoke', icon: 'mic-outline', label: t('karaoke.title') || 'Karaoke', screen: 'Karaoke' },
-    { key: 'referral', icon: 'gift-outline', label: t('referral.title') || 'Invite Friends', screen: 'Referral' },
-    { key: 'backup', icon: 'cloud-upload-outline', label: t('backup.title') || 'Backup & Restore', screen: 'Backup' },
+  useEffect(() => { loadStats(); }, [loadStats]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadStats();
+    setRefreshing(false);
+  }, [loadStats]);
+
+  /* Demo fallbacks */
+  const genres = listenStats?.top_genres || [
+    { label: 'Electronic', pct: 72, color: '#C084FC' },
+    { label: 'Hip-Hop',    pct: 55, color: '#FB923C' },
+    { label: 'Indie',      pct: 38, color: '#34D399' },
+    { label: 'R&B',        pct: 28, color: '#F472B6' },
+    { label: 'Classical',  pct: 14, color: '#60A5FA' },
   ];
+  const topArtists = listenStats?.top_artists || [
+    { name: 'The Weeknd',   img: 'https://picsum.photos/seed/a1/80/80', plays: 142 },
+    { name: 'Billie Eilish',img: 'https://picsum.photos/seed/a2/80/80', plays: 98  },
+    { name: 'Tame Impala',  img: 'https://picsum.photos/seed/a3/80/80', plays: 87  },
+  ];
+  const weeklyHours = listenStats?.weekly_minutes_per_day
+    ? listenStats.weekly_minutes_per_day.map(m => m / 60)
+    : [1.2, 2.5, 0.8, 3.1, 2.0, 4.2, 1.8];
+  const totalHours = listenStats?.total_hours_this_week
+    ?? Math.round(weeklyHours.reduce((a, b) => a + b, 0));
+
+  const avatar = user?.avatar_url || user?.avatar || `https://i.pravatar.cc/200?u=${user?.id}`;
+
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [COVER_H - 80, COVER_H],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* IG Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.headerLeft} activeOpacity={0.7}>
-          <Ionicons name="lock-closed-outline" size={14} color={colors.text} />
-          <Text style={styles.headerUsername}>{username}</Text>
-          <Ionicons name="chevron-down" size={16} color={colors.text} />
+    <View style={s.root}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* ── Sticky header ── */}
+      <Animated.View style={[s.stickyHdr, { paddingTop: insets.top, opacity: headerOpacity }]}>
+        <Text style={s.stickyName} numberOfLines={1}>{user?.display_name || user?.name || user?.username}</Text>
+        <TouchableOpacity onPress={() => setMenuVisible(true)} style={s.stickyMore}>
+          <Ionicons name="ellipsis-horizontal" size={20} color="#F8F8F8" />
         </TouchableOpacity>
-        <View style={styles.headerRight}>
-          <TouchableOpacity onPress={() => navigation.navigate('CreatePost')} style={styles.headerIcon}>
-            <Ionicons name="add-box-outline" size={28} color={colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={styles.headerIcon}>
-            <Ionicons name="settings-outline" size={28} color={colors.text} />
-          </TouchableOpacity>
-        </View>
+      </Animated.View>
+
+      {/* ── Float top bar ── */}
+      <View style={[s.floatBar, { top: insets.top + 8 }]}>
+        <View style={{ width: 34 }} />
+        <TouchableOpacity onPress={() => setMenuVisible(true)} style={s.floatBtn}>
+          <Ionicons name="ellipsis-horizontal" size={20} color="#F8F8F8" />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]}
+      <Animated.ScrollView
         showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#C084FC" />}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
       >
-        {/* Profile Info Row */}
-        <View style={styles.infoRow}>
-          <View style={styles.avatarContainer}>
-            <Image source={{ uri: avatar }} style={styles.avatar} />
-            <View style={styles.addStoryBadge}>
-              <Ionicons name="add" size={16} color="#fff" />
+        {/* hero gradient spacer */}
+        <View style={s.heroBg} />
+
+        {/* ── Identity ── */}
+        <View style={s.identityBlock}>
+          {/* Avatar ring */}
+          <View style={s.avatarRing}>
+            <LinearGradient
+              colors={['#9333EA', '#FB923C']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={s.avatarGrad}
+            >
+              <Image source={{ uri: avatar }} style={s.avatar} />
+            </LinearGradient>
+            {nowPlaying && (
+              <View style={s.nowDot}>
+                <Ionicons name="musical-note" size={7} color="#fff" />
+              </View>
+            )}
+          </View>
+
+          {/* Name */}
+          <Text style={s.displayName}>{user?.display_name || user?.name || 'Your Name'}</Text>
+          <Text style={s.handle}>@{user?.username || 'username'}</Text>
+          {user?.bio ? <Text style={s.bio}>{user.bio}</Text> : null}
+
+          {/* Stats */}
+          <View style={s.statsCard}>
+            <TouchableOpacity style={s.statItem}
+              onPress={() => navigation.navigate('FollowersList', { userId: user?.id, displayName: 'Takipçiler' })}>
+              <Text style={s.statNum}>{(user?.followers_count ?? 0).toLocaleString()}</Text>
+              <Text style={s.statLabel}>Takipçi</Text>
+            </TouchableOpacity>
+            <View style={s.statLine} />
+            <TouchableOpacity style={s.statItem}
+              onPress={() => navigation.navigate('FollowingList', { userId: user?.id, displayName: 'Takip Edilenler' })}>
+              <Text style={s.statNum}>{(user?.following_count ?? 0).toLocaleString()}</Text>
+              <Text style={s.statLabel}>Takip</Text>
+            </TouchableOpacity>
+            <View style={s.statLine} />
+            <View style={s.statItem}>
+              <Text style={s.statNum}>{listenStats?.total_tracks_played ?? totalHours}</Text>
+              <Text style={s.statLabel}>Dinleme</Text>
             </View>
           </View>
 
-          <View style={styles.statsContainer}>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>{user?.posts_count ?? 0}</Text>
-              <Text style={styles.statLabel}>{t('common.posts')}</Text>
-            </View>
-            <TouchableOpacity style={styles.statBox} onPress={() => user?.id && navigation.navigate('FollowersList', { userId: user.id })}>
-              <Text style={styles.statValue}>{user?.followers_count ?? 0}</Text>
-              <Text style={styles.statLabel}>{t('profile.follower')}</Text>
+          {/* Action buttons */}
+          <View style={s.ctaRow}>
+            <TouchableOpacity style={s.editBtn} onPress={() => navigation.navigate('ProfileEdit')}>
+              <Ionicons name="create-outline" size={15} color="#F8F8F8" />
+              <Text style={s.editTx}>Profili Düzenle</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.statBox} onPress={() => user?.id && navigation.navigate('FollowingList', { userId: user.id })}>
-              <Text style={styles.statValue}>{user?.following_count ?? 0}</Text>
-              <Text style={styles.statLabel}>{t('profile.followText', 'Following')}</Text>
+            <TouchableOpacity style={s.insightBtn} onPress={() => navigation.navigate('ProfileStats')}>
+              <Ionicons name="bar-chart-outline" size={18} color="#C084FC" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.insightBtn} onPress={() => navigation.navigate('ProfileQR')}>
+              <Ionicons name="qr-code-outline" size={18} color="#C084FC" />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Bio Section */}
-        <View style={styles.bioSection}>
-          <View style={styles.displayNameRow}>
-            <Text style={styles.displayName}>{displayName}</Text>
-            {user?.is_verified && <VerifiedBadge size={16} />}
-          </View>
-          {user?.bio ? <RichText style={styles.bioText}>{user.bio}</RichText> : null}
-          {user?.website ? (
-            <TouchableOpacity onPress={() => Linking.openURL(user.website.startsWith('http') ? user.website : 'https://' + user.website)}>
-              <Text style={styles.websiteLink}>
-                <Ionicons name="link-outline" size={14} /> {user.website.replace(/^https?:\/\//, '')}
-              </Text>
+        {/* ── Story Highlights ── */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.highlightsContent} style={{ marginBottom: 8 }}>
+          <TouchableOpacity style={s.highlightWrap}>
+            <View style={[s.highlightAdd, { borderColor: colors.border }]}>
+              <Ionicons name="add" size={24} color={colors.textMuted} />
+            </View>
+            <Text style={s.highlightLabel}>Ekle</Text>
+          </TouchableOpacity>
+          {MOCK_HIGHLIGHTS.map(h => (
+            <TouchableOpacity key={h.id} style={s.highlightWrap}>
+              <View style={s.highlightRing}>
+                <Image source={{ uri: h.cover }} style={s.highlightCover} />
+              </View>
+              <Text style={s.highlightLabel}>{h.label}</Text>
             </TouchableOpacity>
-          ) : null}
-        </View>
+          ))}
+        </ScrollView>
 
-        {/* Action Buttons */}
-        <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('ProfileEdit')}>
-            <Text style={styles.actionBtnText}>{t('profile.editProfile', 'Profili Düzenle')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('ProfileStats')}>
-            <Text style={styles.actionBtnText}>{t('analytics.title', 'İstatistikler')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('ProfileQR')}>
-            <Text style={styles.actionBtnText}>{t('profile.shareProfile', 'Profili Paylaş')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionIconBtn} onPress={() => navigation.navigate('UserSuggestions')}>
-            <Ionicons name="person-add-outline" size={18} color={colors.text} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Highlights */}
-        <View style={styles.highlightsContainer}>
-          <ProfileStoriesHighlights
-            userId={user?.id}
-            username={user?.username}
-            token={token}
-            isOwnProfile={true}
-            onNavigate={async (type, hl) => {
-              if (type === 'archive') navigation.navigate('StoryArchive');
-              else if (type === 'highlight' && hl?.id && token) {
-                try {
-                  const stories = await api.get(`/highlights/${hl.id}/stories`, token);
-                  if (Array.isArray(stories) && stories.length > 0) {
-                    const feed = [{ user_id: user.id, username: user.username, user_avatar: user.avatar_url, stories }];
-                    navigation.navigate('StoryViewer', { feed, startUserIndex: 0 });
-                  }
-                } catch { }
-              }
-            }}
-          />
-        </View>
-
-        {/* Ads (if any) */}
-        <View style={{ marginVertical: 10 }}><RewardedAd /></View>
-
-        {/* Tabs */}
-        <View style={styles.tabsContainer}>
-          <TouchableOpacity style={[styles.tabItem, activeTab === 'posts' && styles.tabItemActive]} onPress={() => setActiveTab('posts')}>
-            <Ionicons name="grid-outline" size={26} color={activeTab === 'posts' ? colors.text : '#666'} />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.tabItem, activeTab === 'reels' && styles.tabItemActive]} onPress={() => setActiveTab('reels')}>
-            <Ionicons name="play-circle-outline" size={30} color={activeTab === 'reels' ? colors.text : '#666'} />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.tabItem, activeTab === 'tagged' && styles.tabItemActive]} onPress={() => setActiveTab('tagged')}>
-            <Ionicons name="person-circle-outline" size={28} color={activeTab === 'tagged' ? colors.text : '#666'} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Tab Content */}
-        <View style={styles.tabContent}>
-          {activeTab === 'posts' && <ProfilePosts />}
-          {activeTab === 'reels' && (
-            <View style={styles.emptyTab}>
-              <Ionicons name="videocam-outline" size={60} color="#444" />
-              <Text style={styles.emptyTabText}>{t('dashboard.noContent', 'No Content Yet')}</Text>
+        {/* ── Now Playing ── */}
+        {nowPlaying ? (
+          <View style={s.section}>
+            <View style={s.nowCard}>
+              <LinearGradient
+                colors={['rgba(192,132,252,0.15)', 'rgba(251,146,60,0.06)']}
+                style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+              <Image
+                source={{ uri: nowPlaying.cover_url || `https://picsum.photos/seed/${nowPlaying.title}/80/80` }}
+                style={s.nowCover}
+              />
+              <View style={s.nowMid}>
+                <Text style={s.nowTag}>ŞU AN DİNLİYOR</Text>
+                <Text style={s.nowTitle} numberOfLines={1}>{nowPlaying.title}</Text>
+                <Text style={s.nowArtist} numberOfLines={1}>{nowPlaying.artist || ''}</Text>
+              </View>
+              <View style={s.nowWaves}>
+                {[10, 18, 12, 22, 14, 20, 10].map((h, i) => (
+                  <View key={i} style={[s.wave, { height: h, opacity: i % 2 === 0 ? 1 : 0.5 }]} />
+                ))}
+              </View>
             </View>
-          )}
-          {activeTab === 'tagged' && (
-            <View style={styles.emptyTab}>
-              <Ionicons name="person-outline" size={60} color="#444" />
-              <Text style={styles.emptyTabText}>{t('dashboard.noContent', 'No Content Yet')}</Text>
-            </View>
-          )}
-        </View>
-      </ScrollView>
+          </View>
+        ) : null}
 
-      {/* Hamburger Menu Modal */}
-      <Modal visible={menuVisible} animationType="slide" transparent={true} onRequestClose={() => setMenuVisible(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setMenuVisible(false)}>
-          <Pressable style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHandle} />
-              <TouchableOpacity style={styles.modalClose} onPress={() => setMenuVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.text} />
+        {/* ── Listening Stats ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Dinleme İstatistikleri</Text>
+
+          {/* Weekly */}
+          <View style={s.statsBox}>
+            <View style={s.statsBoxHeader}>
+              <View>
+                <Text style={s.statsBoxLabel}>Bu Hafta</Text>
+                <Text style={s.statsBoxValue}>
+                  {totalHours} <Text style={s.statsBoxUnit}>saat</Text>
+                </Text>
+              </View>
+              <View style={s.statsChip}>
+                <Ionicons name="trending-up" size={12} color="#34D399" />
+                <Text style={s.statsChipTx}>+12%</Text>
+              </View>
+            </View>
+            <WeeklyBars data={weeklyHours} />
+          </View>
+
+          {/* Top genres */}
+          <View style={s.statsBox}>
+            <Text style={[s.statsBoxLabel, { marginBottom: 14 }]}>En Çok Dinlenen Türler</Text>
+            {genres.map((g, i) => (
+              <GenreBar key={i} label={g.label || g.genre} pct={g.pct || g.percentage || 0} color={g.color || '#C084FC'} />
+            ))}
+          </View>
+
+          {/* Top artists */}
+          <View style={s.statsBox}>
+            <Text style={[s.statsBoxLabel, { marginBottom: 14 }]}>En Çok Dinlenen Sanatçılar</Text>
+            {topArtists.map((a, i) => (
+              <View key={i} style={s.artistRow}>
+                <Text style={s.artistRank}>{i + 1}</Text>
+                <Image
+                  source={{ uri: a.img || a.image_url || `https://picsum.photos/seed/${a.name}/80/80` }}
+                  style={s.artistAvatar}
+                />
+                <Text style={s.artistName} numberOfLines={1}>{a.name || a.artist_name}</Text>
+                <View style={s.artistPlays}>
+                  <Ionicons name="headset-outline" size={12} color="rgba(248,248,248,0.3)" />
+                  <Text style={s.artistPlaysTx}>{a.plays || a.play_count || 0}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
+      </Animated.ScrollView>
+
+      {/* ── Menu Modal ── */}
+      <Modal visible={menuVisible} transparent animationType="slide" onRequestClose={() => setMenuVisible(false)}>
+        <Pressable style={s.overlay} onPress={() => setMenuVisible(false)}>
+          <View style={s.sheet} onStartShouldSetResponder={() => true}>
+            <View style={s.sheetHandle} />
+            {[
+              { icon: 'settings-outline',   color: '#C084FC', label: 'Ayarlar',          nav: 'Settings' },
+              { icon: 'create-outline',      color: '#FB923C', label: 'Profili Düzenle',  nav: 'ProfileEdit' },
+              { icon: 'bar-chart-outline',   color: '#34D399', label: 'İstatistikler',    nav: 'ProfileStats' },
+              { icon: 'qr-code-outline',     color: '#60A5FA', label: 'QR Kod',           nav: 'ProfileQR' },
+              { icon: 'time-outline',        color: '#FBBF24', label: 'Ekran Süresi',     nav: 'ScreenTime' },
+              { icon: 'archive-outline',     color: '#F472B6', label: 'Hikaye Arşivi',    nav: 'StoryArchive' },
+            ].map(item => (
+              <TouchableOpacity
+                key={item.nav}
+                style={s.menuRow}
+                onPress={() => { setMenuVisible(false); navigation.navigate(item.nav); }}
+              >
+                <View style={[s.menuIcon, { backgroundColor: item.color + '22' }]}>
+                  <Ionicons name={item.icon} size={18} color={item.color} />
+                </View>
+                <Text style={s.menuTx}>{item.label}</Text>
+                <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
               </TouchableOpacity>
-            </View>
-            <FlatList
-              data={menuItems}
-              keyExtractor={item => item.key}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => {
-                    setMenuVisible(false);
-                    navigation.navigate(item.screen, item.params);
-                  }}
-                >
-                  <Ionicons name={item.icon} size={24} color={colors.text} style={styles.menuIcon} />
-                  <Text style={styles.menuLabel}>{item.label}</Text>
-                </TouchableOpacity>
-              )}
-            />
-          </Pressable>
+            ))}
+            <TouchableOpacity style={s.menuRow} onPress={() => { setMenuVisible(false); logout?.(); }}>
+              <View style={[s.menuIcon, { backgroundColor: '#F8717122' }]}>
+                <Ionicons name="log-out-outline" size={18} color="#F87171" />
+              </View>
+              <Text style={[s.menuTx, { color: '#F87171' }]}>Çıkış Yap</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.cancelBtn} onPress={() => setMenuVisible(false)}>
+              <Text style={s.cancelTx}>İptal</Text>
+            </TouchableOpacity>
+          </View>
         </Pressable>
       </Modal>
     </View>
   );
 }
 
-const createStyles = (colors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  // Header
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 50 },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  headerUsername: { fontSize: 20, fontWeight: '700', color: colors.text },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  headerIcon: { padding: 4 },
+const s = StyleSheet.create({
+  root:   { flex: 1, backgroundColor: '#08060F' },
 
-  content: { paddingTop: 8 },
+  /* Sticky header */
+  stickyHdr:  { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20,
+                flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12,
+                backgroundColor: 'rgba(8,6,15,0.97)', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  stickyName: { flex: 1, color: '#F8F8F8', fontSize: 16, fontWeight: '700', letterSpacing: -0.3 },
+  stickyMore: { padding: 4 },
 
-  // Profile Info
-  infoRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 16 },
-  avatarContainer: { position: 'relative', marginRight: 24 },
-  avatar: { width: 86, height: 86, borderRadius: 43 },
-  addStoryBadge: {
-    position: 'absolute', right: 0, bottom: 0, width: 24, height: 24, borderRadius: 12,
-    backgroundColor: '#0095F6', justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: colors.background
-  },
-  statsContainer: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
-  statBox: { alignItems: 'center' },
-  statValue: { fontSize: 18, fontWeight: '700', color: colors.text },
-  statLabel: { fontSize: 13, color: colors.text, marginTop: 2 },
+  floatBar: { position: 'absolute', left: 0, right: 0, zIndex: 15,
+              flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16 },
+  floatBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.5)',
+              alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
 
-  // Bio
-  bioSection: { paddingHorizontal: 16, marginBottom: 16 },
-  displayNameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
-  displayName: { fontSize: 14, fontWeight: '700', color: colors.text },
-  bioText: { fontSize: 14, color: colors.text, lineHeight: 20 },
-  websiteLink: { fontSize: 14, color: '#E0F7FA', marginTop: 4, fontWeight: '500' },
+  /* Hero gradient */
+  heroBg: { height: COVER_H, width: '100%' },
 
-  // Actions Row
-  actionsRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 16 },
-  actionBtn: { flex: 1, backgroundColor: colors.inputBg || '#262626', paddingVertical: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  actionBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  actionIconBtn: { backgroundColor: colors.inputBg || '#262626', padding: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center', width: 40 },
+  /* Identity */
+  identityBlock: { paddingHorizontal: 20, marginTop: -46, paddingBottom: 8 },
+  avatarRing:    { width: 92, height: 92, borderRadius: 46, marginBottom: 14, position: 'relative' },
+  avatarGrad:    { width: 92, height: 92, borderRadius: 46, padding: 3, alignItems: 'center', justifyContent: 'center' },
+  avatar:        { width: 84, height: 84, borderRadius: 42, borderWidth: 2, borderColor: '#08060F' },
+  nowDot:        { position: 'absolute', bottom: 1, right: 1, width: 20, height: 20, borderRadius: 10,
+                   backgroundColor: '#C084FC', borderWidth: 2, borderColor: '#08060F',
+                   alignItems: 'center', justifyContent: 'center' },
 
-  highlightsContainer: { paddingBottom: 10 },
+  displayName: { fontSize: 23, fontWeight: '800', color: '#F8F8F8', letterSpacing: -0.5, marginBottom: 3 },
+  handle:      { fontSize: 14, color: 'rgba(248,248,248,0.38)', marginBottom: 10 },
+  bio:         { fontSize: 14, color: 'rgba(248,248,248,0.60)', lineHeight: 21, marginBottom: 12 },
 
-  // Tabs
-  tabsContainer: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#262626', height: 50 },
-  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: 'transparent' },
-  tabItemActive: { borderBottomColor: colors.text },
+  statsCard:  { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)',
+                borderRadius: 18, padding: 16, marginBottom: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
+  statItem:   { flex: 1, alignItems: 'center' },
+  statNum:    { fontSize: 19, fontWeight: '800', color: '#F8F8F8', letterSpacing: -0.5 },
+  statLabel:  { fontSize: 11, color: 'rgba(248,248,248,0.38)', marginTop: 2, fontWeight: '500' },
+  statLine:   { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.08)' },
 
-  tabContent: { minHeight: 300 },
-  emptyTab: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
-  emptyTabText: { color: '#888', marginTop: 16, fontSize: 16 },
+  ctaRow:     { flexDirection: 'row', gap: 10, marginBottom: 8 },
+  editBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+                backgroundColor: 'rgba(255,255,255,0.07)', paddingVertical: 12, borderRadius: 24,
+                borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
+  editTx:     { color: '#F8F8F8', fontSize: 14, fontWeight: '600' },
+  insightBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(192,132,252,0.10)',
+                alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(192,132,252,0.25)' },
 
-  // Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: colors.background || '#121212', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
-  modalHeader: { alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#333', position: 'relative' },
-  modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#555', marginBottom: 8 },
-  modalClose: { position: 'absolute', right: 16, top: 16 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#222' },
-  menuIcon: { marginRight: 16 },
-  menuLabel: { fontSize: 16, color: colors.text },
+  /* Highlights */
+  highlightsContent: { paddingHorizontal: 20, gap: 16 },
+  highlightWrap:     { alignItems: 'center', gap: 6 },
+  highlightAdd:      { width: 64, height: 64, borderRadius: 32, borderWidth: 1.5,
+                       borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  highlightRing:     { width: 68, height: 68, borderRadius: 34, borderWidth: 2.5,
+                       borderColor: '#C084FC', alignItems: 'center', justifyContent: 'center', padding: 3 },
+  highlightCover:    { width: 60, height: 60, borderRadius: 30 },
+  highlightLabel:    { fontSize: 11, fontWeight: '600', color: 'rgba(248,248,248,0.5)' },
 
-  // Guest
-  guestContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  guestTitle: { fontSize: 20, fontWeight: '700', color: colors.text, textAlign: 'center', marginBottom: 8 },
-  guestSubtitle: { fontSize: 15, color: '#9CA3AF', textAlign: 'center', marginBottom: 24 },
-  guestLoginBtn: { backgroundColor: '#8B5CF6', paddingVertical: 14, paddingHorizontal: 32, borderRadius: 12 },
-  guestLoginText: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  /* Sections */
+  section:      { paddingHorizontal: 20, paddingTop: 8 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#F8F8F8', letterSpacing: -0.2, marginBottom: 14 },
+
+  /* Now Playing */
+  nowCard:   { flexDirection: 'row', alignItems: 'center', gap: 14, borderRadius: 18, padding: 14,
+               overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(192,132,252,0.22)', marginBottom: 8 },
+  nowCover:  { width: 50, height: 50, borderRadius: 12 },
+  nowMid:    { flex: 1 },
+  nowTag:    { fontSize: 9, fontWeight: '700', color: '#C084FC', letterSpacing: 1.2, marginBottom: 4 },
+  nowTitle:  { fontSize: 14, fontWeight: '700', color: '#F8F8F8', marginBottom: 2 },
+  nowArtist: { fontSize: 12, color: 'rgba(248,248,248,0.45)' },
+  nowWaves:  { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  wave:      { width: 3, borderRadius: 2, backgroundColor: '#C084FC' },
+
+  /* Stats boxes */
+  statsBox:       { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 18, padding: 18,
+                    marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
+  statsBoxHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
+  statsBoxLabel:  { fontSize: 12, color: 'rgba(248,248,248,0.40)', fontWeight: '600', letterSpacing: 0.4,
+                    textTransform: 'uppercase', marginBottom: 4 },
+  statsBoxValue:  { fontSize: 26, fontWeight: '800', color: '#F8F8F8', letterSpacing: -0.8 },
+  statsBoxUnit:   { fontSize: 14, fontWeight: '400', color: 'rgba(248,248,248,0.45)' },
+  statsChip:      { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(52,211,153,0.12)',
+                    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  statsChipTx:    { fontSize: 12, color: '#34D399', fontWeight: '600' },
+
+  /* Artists */
+  artistRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10,
+                   borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  artistRank:    { width: 18, fontSize: 13, fontWeight: '700', color: 'rgba(248,248,248,0.25)', textAlign: 'center' },
+  artistAvatar:  { width: 40, height: 40, borderRadius: 20 },
+  artistName:    { flex: 1, fontSize: 14, fontWeight: '600', color: '#F8F8F8' },
+  artistPlays:   { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  artistPlaysTx: { fontSize: 12, color: 'rgba(248,248,248,0.30)' },
+
+  /* Modal */
+  overlay:     { flex: 1, backgroundColor: 'rgba(8,6,15,0.78)', justifyContent: 'flex-end' },
+  sheet:       { backgroundColor: '#120E20', borderTopLeftRadius: 26, borderTopRightRadius: 26,
+                 padding: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)',
+                 alignSelf: 'center', marginBottom: 20 },
+  menuRow:     { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14,
+                 borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  menuIcon:    { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  menuTx:      { flex: 1, fontSize: 15, color: '#F8F8F8', fontWeight: '500' },
+  cancelBtn:   { marginTop: 14, paddingVertical: 14, alignItems: 'center', borderRadius: 14,
+                 backgroundColor: 'rgba(255,255,255,0.05)' },
+  cancelTx:    { color: 'rgba(248,248,248,0.45)', fontSize: 15, fontWeight: '500' },
 });

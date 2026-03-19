@@ -6,9 +6,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Alert, Modal, ScrollView, Dimensions, RefreshControl} from 'react-native';
+  Alert, Modal, ScrollView, Dimensions, RefreshControl, Keyboard} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import { useAuth } from '../contexts/AuthContext';
@@ -96,6 +97,14 @@ export default function ChatScreen({ route, navigation }) {
   const [vanishDuration, setVanishDuration] = useState(conversation?.vanish_duration || 86400);
   const flatListRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+
+  // Keyboard: scroll to end when keyboard opens
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => {
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 120);
+    });
+    return () => show?.remove();
+  }, []);
 
   // E2E: Fetch other user's public key and ensure ours is uploaded (DM only)
   useEffect(() => {
@@ -569,9 +578,15 @@ export default function ChatScreen({ route, navigation }) {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
+      behavior="padding"
+      keyboardVerticalOffset={insets.top}
     >
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -804,14 +819,17 @@ export default function ChatScreen({ route, navigation }) {
           ref={flatListRef}
           data={showSearch && searchQuery ? searchResults : messages}
           renderItem={renderMessage}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          removeClippedSubviews={true}
+          initialNumToRender={20}
+          maxToRenderPerBatch={20}
+          windowSize={10}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={[styles.list, { paddingBottom: 16 }]}
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.list, { paddingBottom: 16, justifyContent: 'flex-end', flexGrow: 1 }]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
           ListEmptyComponent={<Text style={styles.empty}>{t('chat.noMessages')}</Text>}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -1121,94 +1139,94 @@ export default function ChatScreen({ route, navigation }) {
 
 const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1F2937', gap: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 12 },
   backBtn: { padding: 4 },
   headerAvatar: { width: 40, height: 40, borderRadius: 20 },
   headerInfo: { flex: 1, minWidth: 0 },
-  headerName: { fontSize: 16, fontWeight: '600', color: colors.text },
+  headerName: { fontSize: 16, fontWeight: '700', color: colors.text },
   typingText: { fontSize: 12, color: colors.accent, marginTop: 2 },
-  onlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981', marginRight: 4 },
-  onlineText: { fontSize: 12, color: '#10B981', marginTop: 2 },
-  lastSeenText: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
-  headerMoreBtn: { padding: 6 },
-  headerIconBtn: { padding: 6 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#1F2937', gap: 8 },
+  onlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success, marginRight: 4 },
+  onlineText: { fontSize: 12, color: colors.success, marginTop: 2 },
+  lastSeenText: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  headerMoreBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  headerIconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginLeft: 8 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: colors.surface, gap: 8 },
   searchInput: { flex: 1, color: colors.text, fontSize: 15 },
   searchCount: { color: colors.accent, fontSize: 13, fontWeight: '600' },
-  chatOptionsPanel: { backgroundColor: '#1F2937', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, paddingBottom: 32 },
+  chatOptionsPanel: { backgroundColor: colors.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, paddingBottom: 32 },
   chatOptionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 12 },
   chatOptionText: { fontSize: 16, color: colors.text },
-  chatOptionDanger: { borderTopWidth: 1, borderTopColor: '#374151', marginTop: 8 },
+  chatOptionDanger: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8 },
   mutePickerTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 12 },
   chatOptionTextDanger: { fontSize: 16, color: colors.error },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  list: { padding: 16, flexGrow: 1 },
-  empty: { color: '#6B7280', textAlign: 'center', paddingVertical: 40 },
+  list: { padding: 16, flexGrow: 1, justifyContent: 'flex-end' },
+  empty: { color: colors.textMuted, textAlign: 'center', paddingVertical: 40 },
   msgRow: { marginBottom: 8 },
   msgRowMe: { alignItems: 'flex-end' },
   msgRowOther: { alignItems: 'flex-start' },
-  bubble: { maxWidth: '80%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18 },
-  bubbleMe: { backgroundColor: '#8B5CF6', borderBottomRightRadius: 4 },
-  bubbleMeVanish: { backgroundColor: '#6D28D9' },
-  bubbleOther: { backgroundColor: '#1F2937', borderBottomLeftRadius: 4 },
-  bubbleOtherVanish: { backgroundColor: '#2E1065' },
+  bubble: { maxWidth: '80%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 24 },
+  bubbleMe: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
+  bubbleMeVanish: { backgroundColor: colors.accent },
+  bubbleOther: { backgroundColor: 'rgba(255,255,255,0.06)', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  bubbleOtherVanish: { backgroundColor: 'rgba(167, 139, 250, 0.12)', borderColor: colors.accent },
   vanishBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8, backgroundColor: colors.primary },
-  vanishBannerText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-  quoted: { borderLeftWidth: 3, borderLeftColor: 'rgba(139,92,246,0.5)', paddingLeft: 8, marginBottom: 6 },
-  quotedText: { fontSize: 12, color: 'rgba(255,255,255,0.7)' },
+  vanishBannerText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  quoted: { borderLeftWidth: 3, borderLeftColor: colors.primary, paddingLeft: 8, marginBottom: 6 },
+  quotedText: { fontSize: 12, color: colors.textSecondary },
   pinnedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-  pinnedText: { fontSize: 11, color: '#F59E0B' },
+  pinnedText: { fontSize: 11, color: colors.warning },
   mediaMsg: { width: 200, height: 200, borderRadius: 12, marginVertical: 4 },
   gifMsg: { width: 180, height: 120, borderRadius: 12 },
   voiceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   voiceText: { fontSize: 14, color: colors.accent },
   voiceTextMe: { color: colors.text },
   msgText: { fontSize: 15 },
-  msgTextMe: { color: colors.text },
+  msgTextMe: { color: '#fff' },
   msgTextOther: { color: colors.text },
   shareCard: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingRight: 8 },
   shareCardText: { flex: 1, fontSize: 14, color: colors.accent },
   shareCardTextMe: { color: colors.text },
   edited: { fontSize: 11, opacity: 0.7 },
   msgFooter: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, alignSelf: 'flex-end' },
-  msgTime: { fontSize: 11, color: 'rgba(255,255,255,0.6)' },
+  msgTime: { fontSize: 11, color: colors.textMuted },
   reactionsRow: { flexDirection: 'row', marginTop: 4, gap: 4 },
   reactionEmoji: { fontSize: 14 },
   recordingBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.primary, gap: 12 },
   recordingDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#fff' },
-  recordingText: { color: colors.text, fontSize: 14, flex: 1 },
+  recordingText: { color: '#fff', fontSize: 14, flex: 1 },
   recordingStopBtn: { backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 },
   recordingStopText: { color: colors.primary, fontWeight: '600' },
-  replyBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#1F2937', gap: 8 },
-  replyLabel: { color: '#9CA3AF', fontSize: 13, flex: 1 },
-  inputRow: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingTop: 8, gap: 8, backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: '#1F2937' },
+  replyBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: colors.surface, gap: 8 },
+  replyLabel: { color: colors.textMuted, fontSize: 13, flex: 1 },
+  inputRow: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingTop: 8, gap: 8, backgroundColor: 'rgba(8,6,15,0.98)', borderTopWidth: 1, borderTopColor: 'rgba(192,132,252,0.12)' },
   attachBtn: { padding: 8 },
-  attachMenu: { position: 'absolute', bottom: 60, left: 12, right: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 12, backgroundColor: '#1F2937', padding: 16, borderRadius: 12 },
+  attachMenu: { position: 'absolute', bottom: 60, left: 12, right: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 12, backgroundColor: colors.card, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.border },
   attachItem: { alignItems: 'center', width: 60 },
-  attachLabel: { color: '#9CA3AF', fontSize: 11, marginTop: 4 },
+  attachLabel: { color: colors.textMuted, fontSize: 11, marginTop: 4 },
   attachEmoji: { fontSize: 28 },
-  input: { flex: 1, backgroundColor: '#1F2937', borderRadius: 22, paddingHorizontal: 18, paddingVertical: 12, fontSize: 16, color: colors.text, maxHeight: 120 },
-  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#8B5CF6', alignItems: 'center', justifyContent: 'center' },
+  input: { flex: 1, backgroundColor: colors.surface, borderRadius: 22, paddingHorizontal: 18, paddingVertical: 12, fontSize: 16, color: colors.text, maxHeight: 120, borderWidth: 1, borderColor: colors.border },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { opacity: 0.5 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  stickerPanel: { backgroundColor: '#1F2937', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 },
+  modalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
+  stickerPanel: { backgroundColor: colors.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 },
   stickerTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 12 },
   stickerRow: { marginBottom: 8 },
   stickerBtn: { padding: 12, marginRight: 8 },
   stickerEmoji: { fontSize: 32 },
-  gifSearchInput: { backgroundColor: '#374151', borderRadius: 10, padding: 12, color: colors.text, marginBottom: 12 },
+  gifSearchInput: { backgroundColor: colors.surface, borderRadius: 10, padding: 12, color: colors.text, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
   gifGridItem: { flex: 1, aspectRatio: 1, padding: 4 },
   gifThumb: { width: '100%', height: '100%', borderRadius: 8 },
-  modalCloseBtn: { backgroundColor: '#8B5CF6', borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 12 },
-  modalCloseText: { color: colors.text, fontWeight: '600' },
-  reactionPanel: { position: 'absolute', bottom: 120, alignSelf: 'center', flexDirection: 'row', backgroundColor: '#1F2937', padding: 8, borderRadius: 24, gap: 4 },
+  modalCloseBtn: { backgroundColor: colors.primary, borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 12 },
+  modalCloseText: { color: '#fff', fontWeight: '600' },
+  reactionPanel: { position: 'absolute', bottom: 120, alignSelf: 'center', flexDirection: 'row', backgroundColor: colors.card, padding: 8, borderRadius: 24, gap: 4, borderWidth: 1, borderColor: colors.border },
   reactionBtn: { padding: 10 },
   reactionBtnText: { fontSize: 24 },
-  editModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 24 },
-  editModal: { backgroundColor: '#1F2937', borderRadius: 16, padding: 20 },
+  editModalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: 24 },
+  editModal: { backgroundColor: colors.card, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: colors.border },
   editTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 16 },
-  editInput: { backgroundColor: '#374151', borderRadius: 12, padding: 16, fontSize: 16, color: colors.text, minHeight: 80, textAlignVertical: 'top', marginBottom: 16 },
+  editInput: { backgroundColor: colors.surface, borderRadius: 12, padding: 16, fontSize: 16, color: colors.text, minHeight: 80, textAlignVertical: 'top', marginBottom: 16, borderWidth: 1, borderColor: colors.border },
   editActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 16 },
-  editCancel: { color: '#9CA3AF', fontSize: 16 },
+  editCancel: { color: colors.textMuted, fontSize: 16 },
   editSave: { color: colors.accent, fontSize: 16, fontWeight: '600' },
 });

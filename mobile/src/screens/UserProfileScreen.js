@@ -1,7 +1,13 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * UserProfileScreen — AURORA Design 2026
+ * Music-first social profile · No photo/video posts · Follow system only
+ */
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, ActivityIndicator, Alert, Modal, Linking,
+  View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
+  ActivityIndicator, Alert, Modal, Linking, Dimensions, Animated,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,16 +19,19 @@ import VerifiedBadge from '../components/VerifiedBadge';
 import RichText from '../components/RichText';
 import { useTheme } from '../contexts/ThemeContext';
 
-const getReportReasons = (t) => [
-  { value: 'spam', label: t('report.spam') },
-  { value: 'harassment', label: t('report.harassment') },
-  { value: 'hate_speech', label: t('report.hateSpeech') },
-  { value: 'violence', label: t('report.violence') },
-  { value: 'nudity', label: t('report.nudity') },
-  { value: 'false_info', label: t('report.falseInfo') },
+const { width: SW } = Dimensions.get('window');
+const COVER_H = 80;
+
+const REPORT_REASONS = (t) => [
+  { value: 'spam',          label: t('report.spam') },
+  { value: 'harassment',    label: t('report.harassment') },
+  { value: 'hate_speech',   label: t('report.hateSpeech') },
+  { value: 'violence',      label: t('report.violence') },
+  { value: 'nudity',        label: t('report.nudity') },
+  { value: 'false_info',    label: t('report.falseInfo') },
   { value: 'impersonation', label: t('report.impersonation') },
-  { value: 'copyright', label: t('report.copyright') },
-  { value: 'other', label: t('report.other') },
+  { value: 'copyright',     label: t('report.copyright') },
+  { value: 'other',         label: t('report.other') },
 ];
 
 const mediaUri = (uri) => {
@@ -32,176 +41,294 @@ const mediaUri = (uri) => {
   return uri.startsWith('/') ? `${base}${uri}` : `${base}/api/${uri}`;
 };
 
+/* ── Graphical genre bar ── */
+function GenreBar({ label, pct, color }) {
+  const w = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(w, { toValue: pct, duration: 900, delay: 200, useNativeDriver: false }).start();
+  }, [pct]);
+  return (
+    <View style={gb.row}>
+      <Text style={gb.label}>{label}</Text>
+      <View style={gb.track}>
+        <Animated.View style={[gb.fill, { backgroundColor: color, width: w.interpolate({ inputRange:[0,100], outputRange:['0%','100%'] }) }]} />
+      </View>
+      <Text style={gb.pct}>{pct}%</Text>
+    </View>
+  );
+}
+const gb = StyleSheet.create({
+  row:   { flexDirection:'row', alignItems:'center', gap:10, marginBottom:9 },
+  label: { width:72, fontSize:12, color:'rgba(248,248,248,0.55)', fontWeight:'500' },
+  track: { flex:1, height:6, backgroundColor:'rgba(255,255,255,0.07)', borderRadius:3, overflow:'hidden' },
+  fill:  { height:'100%', borderRadius:3 },
+  pct:   { width:30, fontSize:11, color:'rgba(248,248,248,0.35)', textAlign:'right' },
+});
+
+/* ── Weekly bars ── */
+const DAYS = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
+function WeeklyBars({ data }) {
+  const max = Math.max(...data, 1);
+  return (
+    <View style={wb.wrap}>
+      {data.map((v, i) => {
+        const h = Math.max(4, (v / max) * 56);
+        const isToday = i === new Date().getDay() - 1;
+        return (
+          <View key={i} style={wb.col}>
+            <View style={wb.barTrack}>
+              <View style={[wb.bar, { height: h, backgroundColor: isToday ? '#C084FC' : 'rgba(192,132,252,0.35)' }]} />
+            </View>
+            <Text style={[wb.day, isToday && { color:'#C084FC' }]}>{DAYS[i]}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+const wb = StyleSheet.create({
+  wrap:     { flexDirection:'row', justifyContent:'space-between', alignItems:'flex-end', paddingTop:8 },
+  col:      { alignItems:'center', gap:6, flex:1 },
+  barTrack: { height:56, justifyContent:'flex-end' },
+  bar:      { width:10, borderRadius:5 },
+  day:      { fontSize:10, color:'rgba(248,248,248,0.3)', fontWeight:'500' },
+});
+
 export default function UserProfileScreen({ navigation, route }) {
-  const { colors } = useTheme();
-  const styles = createStyles(colors);
-  const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
+  const { colors }                = useTheme();
+  const { t }                     = useTranslation();
+  const insets                    = useSafeAreaInsets();
   const { token, user: authUser } = useAuth();
-  const { username } = route.params || {};
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('posts');
-  const [posts, setPosts] = useState([]);
-  const [postsLoading, setPostsLoading] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
-  const [showReport, setShowReport] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const { username }              = route.params || {};
+
+  const [user,       setUser]       = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [isMuted,    setIsMuted]    = useState(false);
   const [nowPlaying, setNowPlaying] = useState(null);
   const [tasteMatch, setTasteMatch] = useState(null);
+  const [listenStats,setListenStats]= useState(null);
+  const [showMenu,   setShowMenu]   = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   const isOwnProfile = authUser?.username === username;
 
   useEffect(() => {
-    if (username) {
-      api.get(`/user/${username}`, token)
-        .then(setUser)
-        .catch(() => setUser(null))
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    if (!username) { setLoading(false); return; }
+    api.get(`/user/${username}`, token)
+      .then(setUser).catch(() => setUser(null))
+      .finally(() => setLoading(false));
   }, [username]);
 
   useEffect(() => {
     if (!user?.id || !token || isOwnProfile) return;
     api.get(`/social/is-muted/${user.id}`, token)
-      .then((r) => setIsMuted(r?.is_muted || false))
-      .catch(() => setIsMuted(false));
+      .then(r => setIsMuted(r?.is_muted || false)).catch(() => {});
   }, [user?.id, token, isOwnProfile]);
 
   useEffect(() => {
     if (!user?.id) return;
     api.get(`/users/${user.id}/now-playing`, token)
-      .then((r) => setNowPlaying(r?.now_playing || null))
-      .catch(() => setNowPlaying(null));
-  }, [user?.id, token]);
-
-  useEffect(() => {
-    if (!user?.id || !token || isOwnProfile) return;
-    api.get(`/users/${user.id}/taste-match`, token)
-      .then((r) => setTasteMatch(r))
-      .catch(() => setTasteMatch(null));
+      .then(r => setNowPlaying(r?.now_playing || null)).catch(() => {});
+    api.get(`/users/${user.id}/listening-stats`, token)
+      .then(setListenStats).catch(() => {});
+    if (!isOwnProfile && token)
+      api.get(`/users/${user.id}/taste-match`, token)
+        .then(setTasteMatch).catch(() => {});
   }, [user?.id, token, isOwnProfile]);
-
-  useEffect(() => {
-    if (!user || !token) return;
-    setPostsLoading(true);
-    const loadPosts = async () => {
-      try {
-        let data = [];
-        if (activeTab === 'posts') {
-          data = await api.get(`/social/posts/user/${user.id}?page=1&limit=50`, token);
-        } else if (activeTab === 'saved' && isOwnProfile) {
-          data = await api.get(`/social/posts/saved?page=1&limit=50`, token);
-        } else if (activeTab === 'tagged' && isOwnProfile) {
-          data = await api.get(`/social/posts/tagged/${username}?page=1&limit=50`, token);
-        }
-        setPosts(Array.isArray(data) ? data : []);
-      } catch {
-        setPosts([]);
-      } finally {
-        setPostsLoading(false);
-      }
-    };
-    loadPosts();
-  }, [user?.id, username, activeTab, token, isOwnProfile]);
 
   if (loading || !user) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>{t('userProfile.goBack')}</Text>
+      <View style={[s.root, { paddingTop: insets.top }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backRow}>
+          <Ionicons name="chevron-back" size={22} color="#C084FC" />
         </TouchableOpacity>
-        <View style={styles.center}><Text style={styles.empty}>{loading ? t('common.loading') : t('profile.userNotFound')}</Text></View>
+        <View style={s.center}>
+          {loading
+            ? <ActivityIndicator size="large" color="#C084FC" />
+            : <Text style={s.emptyTx}>{t('profile.userNotFound')}</Text>}
+        </View>
       </View>
     );
   }
 
-  const avatar = user.avatar_url || `https://i.pravatar.cc/200?u=${user.username}`;
+  const avatar     = user.avatar_url || `https://i.pravatar.cc/200?u=${user.username}`;
+  const isFollowing = user.is_following || false;
 
-  const renderPost = ({ item }) => {
-    const media = item.media_urls?.[0] || item.media_url;
-    return (
-      <TouchableOpacity
-        style={[styles.postThumb, { aspectRatio: 1 }]}
-        onPress={() => navigation.navigate('PostDetail', { postId: item.id })}
-      >
-        {media ? (
-          <Image source={{ uri: mediaUri(media) }} style={styles.postThumbImg} resizeMode="cover" />
-        ) : (
-          <View style={[styles.postThumbImg, styles.postThumbPlaceholder]}>
-            <Text style={styles.postThumbText} numberOfLines={3}>{(item.caption || item.content || '').slice(0, 50)}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  };
+  /* Demo stats fallback */
+  const genres  = listenStats?.top_genres  || [
+    { label:'Electronic', pct:72, color:'#C084FC' },
+    { label:'Hip-Hop',    pct:55, color:'#FB923C' },
+    { label:'Indie',      pct:38, color:'#34D399' },
+    { label:'R&B',        pct:28, color:'#F472B6' },
+    { label:'Classical',  pct:14, color:'#60A5FA' },
+  ];
+  const topArtists = listenStats?.top_artists || [
+    { name:'The Weeknd',  img:'https://picsum.photos/seed/a1/80/80', plays:142 },
+    { name:'Billie Eilish',img:'https://picsum.photos/seed/a2/80/80',plays:98  },
+    { name:'Tame Impala', img:'https://picsum.photos/seed/a3/80/80', plays:87  },
+  ];
+  const weeklyHours = listenStats?.weekly_minutes_per_day
+    ? listenStats.weekly_minutes_per_day.map(m => m / 60)
+    : [1.2, 2.5, 0.8, 3.1, 2.0, 4.2, 1.8];
+  const totalHours = listenStats?.total_hours_this_week
+    ?? Math.round(weeklyHours.reduce((a, b) => a + b, 0));
+
+  const tasteColor = tasteMatch?.match_percentage >= 60 ? '#34D399'
+    : tasteMatch?.match_percentage >= 30 ? '#FBBF24' : '#F87171';
+
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [COVER_H - 80, COVER_H],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-        <Text style={styles.backText}>{t('userProfile.goBack')}</Text>
-      </TouchableOpacity>
-      <ScrollView contentContainerStyle={styles.headerSection}>
-        <Image source={{ uri: avatar }} style={styles.avatar} />
-        <View style={styles.displayNameRow}>
-          <Text style={styles.displayName}>{user.display_name || user.username}</Text>
-          {user.is_verified && <VerifiedBadge size={20} />}
-        </View>
-        <Text style={styles.username}>@{user.username}</Text>
-        {nowPlaying ? (
-          <View style={styles.nowPlayingBadge}>
-            <Text style={styles.nowPlayingText}>
-              {'\uD83C\uDFB5'} Now Playing: {nowPlaying.title}{nowPlaying.artist ? ` - ${nowPlaying.artist}` : ''}
-            </Text>
-          </View>
-        ) : null}
-        {!isOwnProfile && tasteMatch && tasteMatch.match_percentage != null ? (
-          <View style={styles.tasteMatchCard}>
-            <View style={styles.tasteMatchHeader}>
-              <Text style={styles.tasteMatchTitle}>{'\uD83C\uDFB6'} Music Taste Match</Text>
-            </View>
-            <View style={styles.tasteMatchBody}>
-              <View style={styles.tasteCircleOuter}>
-                <View style={[styles.tasteCircleInner, {
-                  borderColor: tasteMatch.match_percentage >= 60 ? '#10B981' : tasteMatch.match_percentage >= 30 ? '#F59E0B' : '#EF4444',
-                }]}>
-                  <Text style={[styles.tastePercent, {
-                    color: tasteMatch.match_percentage >= 60 ? '#10B981' : tasteMatch.match_percentage >= 30 ? '#F59E0B' : '#EF4444',
-                  }]}>{tasteMatch.match_percentage}%</Text>
-                </View>
+    <View style={s.root}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* ── Sticky header (on scroll) ── */}
+      <Animated.View style={[s.stickyHdr, { paddingTop: insets.top, opacity: headerOpacity }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.stickyBack}>
+          <Ionicons name="chevron-back" size={22} color="#F8F8F8" />
+        </TouchableOpacity>
+        <Text style={s.stickyName} numberOfLines={1}>{user.display_name || user.username}</Text>
+        {!isOwnProfile && (
+          <TouchableOpacity onPress={() => setShowMenu(true)} style={s.stickyMore}>
+            <Ionicons name="ellipsis-horizontal" size={20} color="#F8F8F8" />
+          </TouchableOpacity>
+        )}
+      </Animated.View>
+
+      {/* ── Floating buttons (before scroll) ── */}
+      <View style={[s.floatBar, { top: insets.top + 8 }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.floatBtn}>
+          <Ionicons name="chevron-back" size={20} color="#F8F8F8" />
+        </TouchableOpacity>
+        {!isOwnProfile && (
+          <TouchableOpacity onPress={() => setShowMenu(true)} style={s.floatBtn}>
+            <Ionicons name="ellipsis-horizontal" size={20} color="#F8F8F8" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <Animated.ScrollView
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+      >
+        {/* hero gradient spacer */}
+        <View style={s.heroBg} />
+
+        {/* ── Identity block ── */}
+        <View style={s.identityBlock}>
+          {/* Avatar */}
+          <View style={s.avatarRing}>
+            <Image source={{ uri: avatar }} style={s.avatar} />
+            {nowPlaying && (
+              <View style={s.nowDot}>
+                <Ionicons name="musical-note" size={7} color="#fff" />
               </View>
-              {tasteMatch.common_artists?.length > 0 ? (
-                <View style={styles.tasteArtists}>
-                  <Text style={styles.tasteArtistsLabel}>Common Artists</Text>
-                  <Text style={styles.tasteArtistsList} numberOfLines={2}>
-                    {tasteMatch.common_artists.join(', ')}
-                  </Text>
+            )}
+          </View>
+
+          {/* Name + handle */}
+          <View style={s.nameGroup}>
+            <Text style={s.displayName}>{user.display_name || user.username}</Text>
+            {user.is_verified && <VerifiedBadge size={16} />}
+          </View>
+          <Text style={s.handle}>@{user.username}</Text>
+
+          {/* Bio */}
+          {user.bio ? <RichText style={s.bio}>{user.bio}</RichText> : null}
+
+          {/* Location / website */}
+          {(user.location || user.website) ? (
+            <View style={s.metaRow}>
+              {user.location ? (
+                <View style={s.metaChip}>
+                  <Ionicons name="location-outline" size={12} color="rgba(248,248,248,0.4)" />
+                  <Text style={s.metaTx}>{user.location}</Text>
                 </View>
               ) : null}
+              {user.website ? (
+                <TouchableOpacity style={s.metaChip} onPress={() =>
+                  Linking.openURL(user.website.startsWith('http') ? user.website : 'https://' + user.website)}>
+                  <Ionicons name="link-outline" size={12} color="#C084FC" />
+                  <Text style={[s.metaTx, { color:'#C084FC' }]}>{user.website.replace(/^https?:\/\//, '')}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
+
+          {/* Stats */}
+          <View style={s.statsCard}>
+            <TouchableOpacity style={s.statItem}
+              onPress={() => user?.id && navigation.navigate('FollowersList', { userId: user.id, displayName: 'Takipçiler' })}>
+              <Text style={s.statNum}>{(user.followers_count ?? 0).toLocaleString()}</Text>
+              <Text style={s.statLabel}>Takipçi</Text>
+            </TouchableOpacity>
+            <View style={s.statLine} />
+            <TouchableOpacity style={s.statItem}
+              onPress={() => user?.id && navigation.navigate('FollowingList', { userId: user.id, displayName: 'Takip Edilenler' })}>
+              <Text style={s.statNum}>{(user.following_count ?? 0).toLocaleString()}</Text>
+              <Text style={s.statLabel}>Takip</Text>
+            </TouchableOpacity>
+            <View style={s.statLine} />
+            <View style={s.statItem}>
+              <Text style={s.statNum}>{listenStats?.total_tracks_played ?? '—'}</Text>
+              <Text style={s.statLabel}>Dinleme</Text>
             </View>
           </View>
-        ) : null}
-        {user.bio ? <RichText style={styles.bio}>{user.bio}</RichText> : null}
-        {(user.location || user.website) ? (
-          <View style={styles.metaRow}>
-            {user.location ? <Text style={styles.metaText}>{user.location}</Text> : null}
-            {user.location && user.website ? <Text style={styles.metaDot}> · </Text> : null}
-            {user.website ? (
-              <Text
-                style={styles.metaLink}
-                onPress={() => user.website && (user.website.startsWith('http') ? Linking.openURL(user.website) : Linking.openURL('https://' + user.website))}
+
+          {/* CTA buttons */}
+          {!isOwnProfile && authUser && (
+            <View style={s.ctaRow}>
+              <TouchableOpacity
+                style={[s.followBtn, isFollowing && s.followBtnActive]}
+                onPress={async () => {
+                  try {
+                    if (isFollowing) {
+                      await api.delete(`/social/follow/${user.id}`, token);
+                      setUser(u => ({ ...u, is_following: false, followers_count: (u.followers_count || 1) - 1 }));
+                    } else {
+                      await api.post(`/social/follow/${user.id}`, {}, token);
+                      setUser(u => ({ ...u, is_following: true, followers_count: (u.followers_count || 0) + 1 }));
+                    }
+                  } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
+                }}
               >
-                {user.website.replace(/^https?:\/\//, '')}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
+                <Ionicons name={isFollowing ? 'checkmark' : 'person-add-outline'} size={15} color={isFollowing ? '#C084FC' : '#fff'} />
+                <Text style={[s.followTx, isFollowing && s.followTxActive]}>
+                  {isFollowing ? 'Takip Ediliyor' : 'Takip Et'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={s.msgBtn} onPress={async () => {
+                try {
+                  const conv = await api.post('/messages/conversations', { participant_ids: [user.id], is_group: false }, token);
+                  navigation.navigate('Chat', { conversationId: conv.id, otherUser: user });
+                } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('profile.chatFailed')); }
+              }}>
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color="#C084FC" />
+                <Text style={s.msgTx}>Mesaj</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* ── Story highlights ── */}
         <ProfileStoriesHighlights
-          userId={user?.id}
-          username={user?.username}
-          token={token}
+          userId={user?.id} username={user?.username} token={token}
           isOwnProfile={isOwnProfile}
           onNavigate={async (type, hl) => {
             if (type === 'archive') navigation.navigate('StoryArchive');
@@ -216,243 +343,171 @@ export default function UserProfileScreen({ navigation, route }) {
             }
           }}
         />
-        <View style={styles.stats}>
-          <TouchableOpacity onPress={() => user?.id && navigation.navigate('FollowersList', { userId: user.id, displayName: isOwnProfile ? t('profile.myFollowers') : t('profile.follower') })}>
-            <Text style={styles.stat}>{user.followers_count ?? 0} {t('profile.follower')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => user?.id && navigation.navigate('FollowingList', { userId: user.id, displayName: isOwnProfile ? t('profile.myFollowing') : t('profile.followText') })}>
-            <Text style={styles.stat}>{user.following_count ?? 0} {t('profile.followText')}</Text>
-          </TouchableOpacity>
-        </View>
-        {!isOwnProfile && authUser && (
-          <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.messageBtn, styles.actionBtn]}
-            onPress={async () => {
-              try {
-                const conv = await api.post('/messages/conversations', { participant_ids: [user.id], is_group: false }, token);
-                navigation.navigate('Chat', { conversationId: conv.id, otherUser: user });
-              } catch (e) {
-                Alert.alert(t('common.error'), e?.data?.detail || t('profile.chatFailed'));
-              }
-            }}
-          >
-            <Ionicons name="chatbubble-outline" size={20} color="#fff" />
-            <Text style={styles.messageBtnText}>{t('profile.message')}</Text>
-          </TouchableOpacity>
-          {((user.friend_request_status || 'none') === 'none' || (user.friend_request_status || 'none') === 'following' || (user.friend_request_status || 'none') === 'friends' || (user.friend_request_status || 'none') === 'sent') && (
-            <TouchableOpacity
-              style={[styles.friendBtn, ((user.friend_request_status || '') === 'friends' || (user.friend_request_status || '') === 'sent') && styles.friendBtnActive]}
-              onPress={(user.friend_request_status || '') !== 'sent' ? async () => {
-                try {
-                  const status = user.friend_request_status || 'none';
-                  if (status === 'friends') {
-                    await api.delete(`/social/unfriend/${user.id}`, token);
-                    setUser((u) => ({ ...u, friend_request_status: 'none', is_following: false }));
-                  } else if (status === 'none') {
-                    await api.post(`/social/friend-request/${user.id}`, {}, token);
-                    setUser((u) => ({ ...u, friend_request_status: 'sent' }));
-                  }
-                } catch (e) {
-                  Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed'));
-                }
-              } : undefined}
-              disabled={(user.friend_request_status || '') === 'sent'}
-            >
-              <Text style={styles.friendBtnText}>
-                {(user.friend_request_status || '') === 'friends' ? t('profile.friends') : (user.friend_request_status || '') === 'sent' ? t('profile.friendRequestSent') : t('profile.addFriend')}
-              </Text>
-            </TouchableOpacity>
-          )}
-          {(user.friend_request_status || '') === 'received' && (
-            <>
-              <TouchableOpacity style={styles.acceptBtn} onPress={async () => {
-                try {
-                  await api.post(`/social/friend-request/${user.id}/accept`, {}, token);
-                  setUser((u) => ({ ...u, friend_request_status: 'friends', is_following: true }));
-                } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
-              }}>
-                <Text style={styles.acceptBtnText}>{t('profile.acceptRequest')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.rejectBtn} onPress={async () => {
-                try {
-                  await api.post(`/social/friend-request/${user.id}/decline`, {}, token);
-                  setUser((u) => ({ ...u, friend_request_status: 'none' }));
-                } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
-              }}>
-                <Text style={styles.rejectBtnText}>{t('profile.declineRequest')}</Text>
-              </TouchableOpacity>
-            </>
-          )}
-          <TouchableOpacity style={styles.moreBtn} onPress={() => setShowMenu(true)}>
-            <Ionicons name="ellipsis-horizontal" size={24} color="#fff" />
-          </TouchableOpacity>
-          </View>
-        )}
-        <Modal visible={showMenu} transparent animationType="fade">
-          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
-            <View style={styles.menuSheet} onStartShouldSetResponder={() => true}>
-              <TouchableOpacity style={styles.menuItem} onPress={async () => {
-                setShowMenu(false);
-                try {
-                  await api.post(`/social/block/${user.id}`, {}, token);
-                  Alert.alert(t('profile.blocked'), t('profile.userBlocked'));
-                  navigation.goBack();
-                } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
-              }}>
-                <Ionicons name="ban-outline" size={22} color="#EF4444" />
-                <Text style={[styles.menuItemText, { color: colors.error }]}>{t('common.block')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.menuItem} onPress={async () => {
-                setShowMenu(false);
-                try {
-                  await api.post(`/social/restrict/${user.id}`, {}, token);
-                  Alert.alert(t('profile.restricted'), t('profile.userRestricted'));
-                } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
-              }}>
-                <Ionicons name="eye-off-outline" size={22} color="#fff" />
-                <Text style={styles.menuItemText}>{t('profile.restricted')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.menuItem} onPress={async () => {
-                setShowMenu(false);
-                try {
-                  if (isMuted) {
-                    await api.delete(`/social/mute/${user.id}`, token);
-                    setIsMuted(false);
-                    Alert.alert(t('common.success'), t('profile.unmuteSuccess'));
-                  } else {
-                    await api.post(`/social/mute/${user.id}?mute_stories=true&mute_posts=true&mute_notifications=true`, {}, token);
-                    setIsMuted(true);
-                    Alert.alert(t('common.success'), t('profile.muteSuccess'));
-                  }
-                } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
-              }}>
-                <Ionicons name={isMuted ? 'volume-high-outline' : 'notifications-off-outline'} size={22} color="#fff" />
-                <Text style={styles.menuItemText}>{isMuted ? t('common.unmute') : t('common.mute')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowReport(true); }}>
-                <Ionicons name="flag-outline" size={22} color="#fff" />
-                <Text style={styles.menuItemText}>{t('profile.reportUser')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.menuItem} onPress={() => setShowMenu(false)}>
-                <Text style={styles.menuCancel}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-        <View style={styles.tabs}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'posts' && styles.tabActive]}
-            onPress={() => setActiveTab('posts')}
-          >
-            <Ionicons name="grid-outline" size={20} color={activeTab === 'posts' ? '#8B5CF6' : '#9CA3AF'} />
-            <Text style={[styles.tabText, activeTab === 'posts' && styles.tabTextActive]}>{t('profile.postsTab')}</Text>
-          </TouchableOpacity>
-          {isOwnProfile && (
-            <>
-              <TouchableOpacity
-                style={[styles.tab, activeTab === 'saved' && styles.tabActive]}
-                onPress={() => setActiveTab('saved')}
-              >
-                <Ionicons name="bookmark-outline" size={20} color={activeTab === 'saved' ? '#8B5CF6' : '#9CA3AF'} />
-                <Text style={[styles.tabText, activeTab === 'saved' && styles.tabTextActive]}>{t('profile.savedTab')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.tab, activeTab === 'tagged' && styles.tabActive]}
-                onPress={() => setActiveTab('tagged')}
-              >
-                <Ionicons name="person-outline" size={20} color={activeTab === 'tagged' ? '#8B5CF6' : '#9CA3AF'} />
-                <Text style={[styles.tabText, activeTab === 'tagged' && styles.tabTextActive]}>{t('profile.taggedTab')}</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </ScrollView>
-      {postsLoading ? (
-        <View style={styles.postsLoading}><ActivityIndicator size="large" color="#8B5CF6" /></View>
-      ) : (
-        <FlatList
-          data={posts}
-          numColumns={3}
-          keyExtractor={(item) => item.id}
-          renderItem={renderPost}
-          columnWrapperStyle={styles.postRow}
-          contentContainerStyle={[styles.postsGrid, { paddingBottom: insets.bottom + 24 }]}
-          ListEmptyComponent={<Text style={styles.noPosts}>{t('profile.noPosts')}</Text>}
-        />
-      )}
 
+        {/* ── Now Playing ── */}
+        {nowPlaying ? (
+          <View style={s.section}>
+            <View style={s.nowCard}>
+              <LinearGradient
+                colors={['rgba(192,132,252,0.15)', 'rgba(251,146,60,0.06)']}
+                style={StyleSheet.absoluteFill} start={{ x:0, y:0 }} end={{ x:1, y:1 }} />
+              <View style={s.nowLeft}>
+                <Image
+                  source={{ uri: nowPlaying.cover_url || `https://picsum.photos/seed/${nowPlaying.title}/80/80` }}
+                  style={s.nowCover}
+                />
+              </View>
+              <View style={s.nowMid}>
+                <Text style={s.nowTag}>ŞU AN DİNLİYOR</Text>
+                <Text style={s.nowTitle} numberOfLines={1}>{nowPlaying.title}</Text>
+                <Text style={s.nowArtist} numberOfLines={1}>{nowPlaying.artist || ''}</Text>
+              </View>
+              <View style={s.nowWaves}>
+                {[10, 18, 12, 22, 14, 20, 10].map((h, i) => (
+                  <View key={i} style={[s.wave, { height: h, opacity: i % 2 === 0 ? 1 : 0.5 }]} />
+                ))}
+              </View>
+            </View>
+          </View>
+        ) : null}
+
+        {/* ── Taste Match (other users) ── */}
+        {!isOwnProfile && tasteMatch?.match_percentage != null ? (
+          <View style={s.section}>
+            <View style={s.tasteCard}>
+              <LinearGradient
+                colors={['rgba(192,132,252,0.12)', 'rgba(251,146,60,0.06)']}
+                style={StyleSheet.absoluteFill} />
+              {/* Circular gauge */}
+              <View style={[s.tasteGauge, { borderColor: tasteColor }]}>
+                <Text style={[s.tastePct, { color: tasteColor }]}>{tasteMatch.match_percentage}%</Text>
+                <Text style={s.tasteSub}>uyum</Text>
+              </View>
+              <View style={s.tasteRight}>
+                <Text style={s.tasteTitle}>🎶 Müzik Zevki Uyumu</Text>
+                {tasteMatch.common_genres?.length > 0 && (
+                  <View style={s.tagRow}>
+                    {tasteMatch.common_genres.slice(0, 3).map((g, i) => (
+                      <View key={i} style={s.tag}><Text style={s.tagTx}>{g}</Text></View>
+                    ))}
+                  </View>
+                )}
+                {tasteMatch.common_artists?.length > 0 && (
+                  <Text style={s.tasteArtistsTx} numberOfLines={1}>
+                    {tasteMatch.common_artists.slice(0, 3).join(' · ')}
+                  </Text>
+                )}
+              </View>
+            </View>
+          </View>
+        ) : null}
+
+        {/* ── Listening Stats ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Dinleme İstatistikleri</Text>
+
+          {/* Weekly hours card */}
+          <View style={s.statsBox}>
+            <View style={s.statsBoxHeader}>
+              <View>
+                <Text style={s.statsBoxLabel}>Bu Hafta</Text>
+                <Text style={s.statsBoxValue}>{totalHours} <Text style={s.statsBoxUnit}>saat</Text></Text>
+              </View>
+              <View style={s.statsChip}>
+                <Ionicons name="trending-up" size={12} color="#34D399" />
+                <Text style={s.statsChipTx}>+12%</Text>
+              </View>
+            </View>
+            <WeeklyBars data={weeklyHours} />
+          </View>
+
+          {/* Top genres */}
+          <View style={s.statsBox}>
+            <Text style={s.statsBoxLabel} style={[s.statsBoxLabel, { marginBottom: 14 }]}>En Çok Dinlenen Türler</Text>
+            {genres.map((g, i) => (
+              <GenreBar key={i} label={g.label || g.genre} pct={g.pct || g.percentage || 0} color={g.color || '#C084FC'} />
+            ))}
+          </View>
+
+          {/* Top artists */}
+          <View style={s.statsBox}>
+            <Text style={[s.statsBoxLabel, { marginBottom: 14 }]}>En Çok Dinlenen Sanatçılar</Text>
+            {topArtists.map((a, i) => (
+              <View key={i} style={s.artistRow}>
+                <Text style={s.artistRank}>{i + 1}</Text>
+                <Image
+                  source={{ uri: a.img || a.image_url || `https://picsum.photos/seed/${a.name}/80/80` }}
+                  style={s.artistAvatar}
+                />
+                <Text style={s.artistName} numberOfLines={1}>{a.name || a.artist_name}</Text>
+                <View style={s.artistPlays}>
+                  <Ionicons name="headset-outline" size={12} color="rgba(248,248,248,0.3)" />
+                  <Text style={s.artistPlaysTx}>{a.plays || a.play_count || 0}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
+      </Animated.ScrollView>
+
+      {/* ── More menu ── */}
       <Modal visible={showMenu} transparent animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
-          <View style={styles.menuSheet} onStartShouldSetResponder={() => true}>
-            <TouchableOpacity style={styles.menuItem} onPress={async () => {
-              setShowMenu(false);
-              try {
-                await api.post(`/social/block/${user.id}`, {}, token);
-                Alert.alert(t('common.success'), t('profile.userBlocked'));
-                navigation.goBack();
-              } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
-            }}>
-              <Ionicons name="ban-outline" size={22} color="#EF4444" />
-              <Text style={styles.menuItemTextDanger}>{t('common.block')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={async () => {
-              setShowMenu(false);
-              try {
-                await api.post(`/social/restrict/${user.id}`, {}, token);
-                Alert.alert(t('common.success'), t('profile.userRestricted'));
-              } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
-            }}>
-              <Ionicons name="eye-off-outline" size={22} color="#fff" />
-              <Text style={styles.menuItemText}>{t('profile.restricted')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={async () => {
-              setShowMenu(false);
-              try {
-                if (isMuted) {
-                  await api.delete(`/social/mute/${user.id}`, token);
-                  setIsMuted(false);
-                  Alert.alert(t('common.success'), t('profile.unmuteSuccess'));
-                } else {
-                  await api.post(`/social/mute/${user.id}?mute_stories=true&mute_posts=true&mute_notifications=true`, {}, token);
-                  setIsMuted(true);
-                  Alert.alert(t('common.success'), t('profile.muteSuccess'));
-                }
-              } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
-            }}>
-              <Ionicons name={isMuted ? 'volume-high-outline' : 'notifications-off-outline'} size={22} color="#fff" />
-              <Text style={styles.menuItemText}>{isMuted ? t('common.unmute') : t('common.mute')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowReport(true); }}>
-              <Ionicons name="flag-outline" size={22} color="#fff" />
-              <Text style={styles.menuItemText}>{t('profile.reportUser')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuCancel} onPress={() => setShowMenu(false)}>
-              <Text style={styles.menuCancelText}>{t('common.cancel')}</Text>
+        <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
+          <View style={s.sheet} onStartShouldSetResponder={() => true}>
+            {[
+              { icon:'ban-outline',    color:'#F87171', label: t('common.block'),    danger: true,
+                fn: async () => { await api.post(`/social/block/${user.id}`, {}, token); Alert.alert(t('profile.blocked'), t('profile.userBlocked')); navigation.goBack(); } },
+              { icon:'eye-off-outline',color:'#FBBF24', label: t('profile.restricted'),
+                fn: async () => { await api.post(`/social/restrict/${user.id}`, {}, token); Alert.alert(t('profile.restricted'), t('profile.userRestricted')); } },
+              { icon: isMuted ? 'volume-high-outline' : 'notifications-off-outline',
+                color:'#60A5FA', label: isMuted ? t('common.unmute') : t('common.mute'),
+                fn: async () => {
+                  if (isMuted) { await api.delete(`/social/mute/${user.id}`, token); setIsMuted(false); }
+                  else { await api.post(`/social/mute/${user.id}?mute_stories=true&mute_posts=true&mute_notifications=true`, {}, token); setIsMuted(true); }
+                } },
+              { icon:'flag-outline',   color:'#FB923C', label: t('profile.reportUser'),
+                fn: () => { setShowMenu(false); setShowReport(true); } },
+            ].map((item, idx) => (
+              <TouchableOpacity key={idx} style={s.menuRow} onPress={async () => {
+                setShowMenu(false);
+                try { await item.fn(); }
+                catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
+              }}>
+                <View style={[s.menuIcon, { backgroundColor: item.color + '22' }]}>
+                  <Ionicons name={item.icon} size={18} color={item.color} />
+                </View>
+                <Text style={[s.menuTx, item.danger && { color:'#F87171' }]}>{item.label}</Text>
+                <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={s.cancelBtn} onPress={() => setShowMenu(false)}>
+              <Text style={s.cancelTx}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
 
+      {/* ── Report modal ── */}
       <Modal visible={showReport} transparent animationType="slide">
-        <TouchableOpacity style={styles.reportModalOverlay} activeOpacity={1} onPress={() => setShowReport(false)}>
-          <View style={[styles.reportModal, { paddingBottom: insets.bottom + 24 }]} onStartShouldSetResponder={() => true}>
-            <Text style={styles.reportTitle}>{t('profile.reportTitle', { username: user?.username })}</Text>
-            <Text style={styles.reportSubtitle}>{t('profile.reportWhy')}</Text>
-            {getReportReasons(t).map((r) => (
-              <TouchableOpacity key={r.value} style={styles.reportOption} onPress={async () => {
+        <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={() => setShowReport(false)}>
+          <View style={[s.sheet, { paddingBottom: insets.bottom + 24 }]} onStartShouldSetResponder={() => true}>
+            <Text style={s.reportTitle}>{t('profile.reportTitle', { username: user?.username })}</Text>
+            <Text style={s.reportSub}>{t('profile.reportWhy')}</Text>
+            {REPORT_REASONS(t).map(r => (
+              <TouchableOpacity key={r.value} style={s.reportRow} onPress={async () => {
                 try {
                   await api.post('/reports', { reported_id: user.id, report_type: 'user', reason: r.value }, token);
                   setShowReport(false);
                   Alert.alert(t('profile.reportThanks'), t('profile.reportReceived'));
                 } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('profile.reportFailed')); }
               }}>
-                <Text style={styles.reportOptionText}>{r.label}</Text>
-                <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                <Text style={s.reportRowTx}>{r.label}</Text>
+                <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
               </TouchableOpacity>
             ))}
-            <TouchableOpacity style={styles.reportCancel} onPress={() => setShowReport(false)}>
-              <Text style={styles.reportCancelText}>{t('common.cancel')}</Text>
+            <TouchableOpacity style={s.cancelBtn} onPress={() => setShowReport(false)}>
+              <Text style={s.cancelTx}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -461,98 +516,132 @@ export default function UserProfileScreen({ navigation, route }) {
   );
 }
 
-const createStyles = (colors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  backBtn: { paddingHorizontal: 20, paddingVertical: 16 },
-  backText: { color: colors.accent, fontSize: 16 },
-  headerSection: { alignItems: 'center', padding: 20 },
-  center: { flex: 1, justifyContent: 'center' },
-  empty: { color: '#9CA3AF' },
-  avatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 12 },
-  displayNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  displayName: { fontSize: 22, fontWeight: '700', color: colors.text },
-  username: { fontSize: 16, color: '#9CA3AF', marginBottom: 12 },
-  nowPlayingBadge: {
-    backgroundColor: '#1F2937',
-    borderWidth: 1,
-    borderColor: '#8B5CF6',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    marginBottom: 12,
-  },
-  nowPlayingText: { fontSize: 13, color: colors.accent, fontWeight: '600' },
-  tasteMatchCard: {
-    backgroundColor: '#1F2937',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    width: '100%',
-    borderWidth: 1,
-    borderColor: '#374151',
-  },
-  tasteMatchHeader: { marginBottom: 12 },
-  tasteMatchTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-  tasteMatchBody: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  tasteCircleOuter: { alignItems: 'center', justifyContent: 'center' },
-  tasteCircleInner: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#111827',
-  },
-  tastePercent: { fontSize: 18, fontWeight: '800' },
-  tasteArtists: { flex: 1 },
-  tasteArtistsLabel: { fontSize: 12, color: '#9CA3AF', marginBottom: 4 },
-  tasteArtistsList: { fontSize: 13, color: '#D1D5DB', lineHeight: 18 },
-  bio: { fontSize: 14, color: '#9CA3AF', textAlign: 'center', marginBottom: 8 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 },
-  metaText: { fontSize: 13, color: '#9CA3AF' },
-  metaDot: { fontSize: 13, color: '#6B7280' },
-  metaLink: { fontSize: 13, color: colors.accent, textDecorationLine: 'underline' },
-  stats: { flexDirection: 'row', gap: 24, marginBottom: 16 },
-  stat: { fontSize: 14, color: colors.text },
-  messageBtnText: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  tabs: { flexDirection: 'row', gap: 16 },
-  tab: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12 },
-  tabActive: {},
-  tabText: { fontSize: 14, color: '#9CA3AF' },
-  tabTextActive: { color: colors.accent, fontWeight: '600' },
-  postsGrid: { padding: 2 },
-  postRow: { gap: 2 },
-  postThumb: { flex: 1, padding: 2 },
-  postThumbImg: { width: '100%', height: '100%', borderRadius: 4 },
-  postThumbPlaceholder: { backgroundColor: '#1F2937', justifyContent: 'center', padding: 8 },
-  postThumbText: { color: '#9CA3AF', fontSize: 10 },
-  postsLoading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  noPosts: { color: '#6B7280', textAlign: 'center', padding: 40 },
-  actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 },
-  actionBtn: { flex: 1, minWidth: 90 },
-  messageBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#8B5CF6', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12 },
-  friendBtn: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, backgroundColor: '#1F2937', borderWidth: 1, borderColor: '#374151' },
-  friendBtnActive: { backgroundColor: '#374151', borderColor: '#4B5563' },
-  friendBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  acceptBtn: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, backgroundColor: '#10B981' },
-  acceptBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  rejectBtn: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, backgroundColor: '#374151' },
-  rejectBtnText: { color: '#9CA3AF', fontSize: 14, fontWeight: '600' },
-  moreBtn: { padding: 12, backgroundColor: '#1F2937', borderRadius: 12 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  menuSheet: { backgroundColor: '#1F2937', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#374151' },
-  menuItemText: { fontSize: 16, color: colors.text, fontWeight: '500' },
-  menuItemTextDanger: { fontSize: 16, color: colors.error, fontWeight: '500' },
-  menuCancel: { marginTop: 16, padding: 14, alignItems: 'center', borderRadius: 10, backgroundColor: '#374151' },
-  menuCancelText: { color: colors.text, fontSize: 16 },
-  reportModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  reportModal: { backgroundColor: '#1F2937', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, maxHeight: '80%' },
-  reportTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 4 },
-  reportSubtitle: { fontSize: 14, color: '#9CA3AF', marginBottom: 20 },
-  reportOption: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 10, backgroundColor: '#374151', marginBottom: 8 },
-  reportOptionText: { fontSize: 16, color: colors.text },
-  reportCancel: { marginTop: 16, padding: 14, alignItems: 'center', borderRadius: 10, backgroundColor: '#374151' },
-  reportCancelText: { color: colors.text, fontSize: 16 },
+const s = StyleSheet.create({
+  root:         { flex:1, backgroundColor:'#08060F' },
+  center:       { flex:1, alignItems:'center', justifyContent:'center' },
+  emptyTx:      { color:'rgba(248,248,248,0.35)', fontSize:14 },
+  backRow:      { paddingHorizontal:16, paddingVertical:14 },
+
+  /* Sticky header */
+  stickyHdr:    { position:'absolute', top:0, left:0, right:0, zIndex:20,
+                  flexDirection:'row', alignItems:'center', paddingHorizontal:16, paddingBottom:12,
+                  backgroundColor:'rgba(8,6,15,0.97)', borderBottomWidth:1, borderBottomColor:'rgba(255,255,255,0.06)' },
+  stickyBack:   { padding:4, marginRight:8 },
+  stickyName:   { flex:1, color:'#F8F8F8', fontSize:16, fontWeight:'700', letterSpacing:-0.3 },
+  stickyMore:   { padding:4 },
+
+  floatBar:     { position:'absolute', left:0, right:0, zIndex:15, flexDirection:'row', justifyContent:'space-between', paddingHorizontal:16 },
+  floatBtn:     { width:34, height:34, borderRadius:17, backgroundColor:'rgba(0,0,0,0.5)',
+                  alignItems:'center', justifyContent:'center', borderWidth:1, borderColor:'rgba(255,255,255,0.14)' },
+
+  /* Hero gradient */
+  heroBg: { height: COVER_H, width: '100%' },
+
+  /* Identity */
+  identityBlock:{ paddingHorizontal:20, marginTop:-46, paddingBottom:8 },
+  avatarRing:   { width:90, height:90, borderRadius:45, borderWidth:3, borderColor:'#C084FC',
+                  marginBottom:14, position:'relative',
+                  shadowColor:'#C084FC', shadowOpacity:0.55, shadowRadius:14, shadowOffset:{width:0,height:0} },
+  avatar:       { width:'100%', height:'100%', borderRadius:45 },
+  nowDot:       { position:'absolute', bottom:1, right:1, width:20, height:20, borderRadius:10,
+                  backgroundColor:'#C084FC', borderWidth:2, borderColor:'#08060F',
+                  alignItems:'center', justifyContent:'center' },
+
+  nameGroup:    { flexDirection:'row', alignItems:'center', gap:6, marginBottom:3 },
+  displayName:  { fontSize:23, fontWeight:'800', color:'#F8F8F8', letterSpacing:-0.5 },
+  handle:       { fontSize:14, color:'rgba(248,248,248,0.38)', marginBottom:10 },
+  bio:          { fontSize:14, color:'rgba(248,248,248,0.62)', lineHeight:21, marginBottom:12 },
+
+  metaRow:      { flexDirection:'row', flexWrap:'wrap', gap:10, marginBottom:16 },
+  metaChip:     { flexDirection:'row', alignItems:'center', gap:4, backgroundColor:'rgba(255,255,255,0.06)',
+                  paddingHorizontal:10, paddingVertical:5, borderRadius:20 },
+  metaTx:       { fontSize:12, color:'rgba(248,248,248,0.45)' },
+
+  statsCard:    { flexDirection:'row', alignItems:'center', backgroundColor:'rgba(255,255,255,0.04)',
+                  borderRadius:18, padding:16, marginBottom:18, borderWidth:1, borderColor:'rgba(255,255,255,0.07)' },
+  statItem:     { flex:1, alignItems:'center' },
+  statNum:      { fontSize:19, fontWeight:'800', color:'#F8F8F8', letterSpacing:-0.5 },
+  statLabel:    { fontSize:11, color:'rgba(248,248,248,0.38)', marginTop:2, fontWeight:'500' },
+  statLine:     { width:1, height:30, backgroundColor:'rgba(255,255,255,0.08)' },
+
+  ctaRow:       { flexDirection:'row', gap:10 },
+  followBtn:    { flex:1, flexDirection:'row', alignItems:'center', justifyContent:'center', gap:7,
+                  backgroundColor:'#C084FC', paddingVertical:13, borderRadius:24 },
+  followBtnActive:{ backgroundColor:'rgba(192,132,252,0.12)', borderWidth:1.5, borderColor:'rgba(192,132,252,0.4)' },
+  followTx:     { color:'#fff', fontSize:14, fontWeight:'700' },
+  followTxActive:{ color:'#C084FC' },
+  msgBtn:       { flexDirection:'row', alignItems:'center', gap:7, paddingVertical:13, paddingHorizontal:20,
+                  borderRadius:24, backgroundColor:'rgba(192,132,252,0.1)', borderWidth:1.5, borderColor:'rgba(192,132,252,0.3)' },
+  msgTx:        { color:'#C084FC', fontSize:14, fontWeight:'600' },
+
+  /* Sections */
+  section:      { paddingHorizontal:20, paddingTop:8 },
+  sectionTitle: { fontSize:16, fontWeight:'700', color:'#F8F8F8', letterSpacing:-0.2, marginBottom:14 },
+
+  /* Now playing */
+  nowCard:      { flexDirection:'row', alignItems:'center', gap:14, borderRadius:18, padding:14,
+                  overflow:'hidden', borderWidth:1, borderColor:'rgba(192,132,252,0.22)', marginBottom:8 },
+  nowLeft:      {},
+  nowCover:     { width:50, height:50, borderRadius:12 },
+  nowMid:       { flex:1 },
+  nowTag:       { fontSize:9, fontWeight:'700', color:'#C084FC', letterSpacing:1.2, marginBottom:4 },
+  nowTitle:     { fontSize:14, fontWeight:'700', color:'#F8F8F8', marginBottom:2 },
+  nowArtist:    { fontSize:12, color:'rgba(248,248,248,0.45)' },
+  nowWaves:     { flexDirection:'row', alignItems:'center', gap:2 },
+  wave:         { width:3, borderRadius:2, backgroundColor:'#C084FC' },
+
+  /* Taste match */
+  tasteCard:    { flexDirection:'row', alignItems:'center', gap:16, borderRadius:18, padding:18,
+                  overflow:'hidden', borderWidth:1, borderColor:'rgba(255,255,255,0.07)', marginBottom:8 },
+  tasteGauge:   { width:64, height:64, borderRadius:32, borderWidth:3,
+                  alignItems:'center', justifyContent:'center', backgroundColor:'rgba(255,255,255,0.04)' },
+  tastePct:     { fontSize:16, fontWeight:'800', letterSpacing:-0.5 },
+  tasteSub:     { fontSize:9, color:'rgba(248,248,248,0.35)', fontWeight:'500' },
+  tasteRight:   { flex:1 },
+  tasteTitle:   { fontSize:14, fontWeight:'700', color:'#F8F8F8', marginBottom:8 },
+  tagRow:       { flexDirection:'row', flexWrap:'wrap', gap:6, marginBottom:6 },
+  tag:          { backgroundColor:'rgba(192,132,252,0.14)', paddingHorizontal:10, paddingVertical:4,
+                  borderRadius:20, borderWidth:1, borderColor:'rgba(192,132,252,0.2)' },
+  tagTx:        { fontSize:11, color:'#C084FC', fontWeight:'500' },
+  tasteArtistsTx:{ fontSize:12, color:'rgba(248,248,248,0.4)' },
+
+  /* Stats boxes */
+  statsBox:     { backgroundColor:'rgba(255,255,255,0.04)', borderRadius:18, padding:18,
+                  marginBottom:12, borderWidth:1, borderColor:'rgba(255,255,255,0.06)' },
+  statsBoxHeader:{ flexDirection:'row', alignItems:'flex-start', justifyContent:'space-between', marginBottom:4 },
+  statsBoxLabel: { fontSize:12, color:'rgba(248,248,248,0.4)', fontWeight:'600', letterSpacing:0.4,
+                   textTransform:'uppercase', marginBottom:4 },
+  statsBoxValue: { fontSize:26, fontWeight:'800', color:'#F8F8F8', letterSpacing:-0.8 },
+  statsBoxUnit:  { fontSize:14, fontWeight:'400', color:'rgba(248,248,248,0.45)' },
+  statsChip:    { flexDirection:'row', alignItems:'center', gap:4, backgroundColor:'rgba(52,211,153,0.12)',
+                  paddingHorizontal:10, paddingVertical:5, borderRadius:20 },
+  statsChipTx:  { fontSize:12, color:'#34D399', fontWeight:'600' },
+
+  /* Artists */
+  artistRow:    { flexDirection:'row', alignItems:'center', gap:12, paddingVertical:10,
+                  borderBottomWidth:1, borderBottomColor:'rgba(255,255,255,0.05)' },
+  artistRank:   { width:18, fontSize:13, fontWeight:'700', color:'rgba(248,248,248,0.25)', textAlign:'center' },
+  artistAvatar: { width:40, height:40, borderRadius:20 },
+  artistName:   { flex:1, fontSize:14, fontWeight:'600', color:'#F8F8F8' },
+  artistPlays:  { flexDirection:'row', alignItems:'center', gap:4 },
+  artistPlaysTx:{ fontSize:12, color:'rgba(248,248,248,0.3)' },
+
+  /* Modals */
+  overlay:      { flex:1, backgroundColor:'rgba(8,6,15,0.78)', justifyContent:'flex-end' },
+  sheet:        { backgroundColor:'#120E20', borderTopLeftRadius:26, borderTopRightRadius:26,
+                  padding:24, borderWidth:1, borderColor:'rgba(255,255,255,0.07)' },
+  menuRow:      { flexDirection:'row', alignItems:'center', gap:14, paddingVertical:14,
+                  borderBottomWidth:1, borderBottomColor:'rgba(255,255,255,0.05)' },
+  menuIcon:     { width:36, height:36, borderRadius:18, alignItems:'center', justifyContent:'center' },
+  menuTx:       { flex:1, fontSize:15, color:'#F8F8F8', fontWeight:'500' },
+  cancelBtn:    { marginTop:14, paddingVertical:14, alignItems:'center', borderRadius:14,
+                  backgroundColor:'rgba(255,255,255,0.05)' },
+  cancelTx:     { color:'rgba(248,248,248,0.45)', fontSize:15, fontWeight:'500' },
+  reportTitle:  { fontSize:18, fontWeight:'800', color:'#F8F8F8', marginBottom:4, letterSpacing:-0.3 },
+  reportSub:    { fontSize:13, color:'rgba(248,248,248,0.4)', marginBottom:18 },
+  reportRow:    { flexDirection:'row', justifyContent:'space-between', alignItems:'center',
+                  paddingVertical:14, paddingHorizontal:16, borderRadius:12,
+                  backgroundColor:'rgba(255,255,255,0.04)', marginBottom:6,
+                  borderWidth:1, borderColor:'rgba(255,255,255,0.06)' },
+  reportRowTx:  { fontSize:14, color:'#F8F8F8' },
 });

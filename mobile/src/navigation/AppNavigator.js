@@ -14,6 +14,7 @@ import MainTabNavigator from './MainTabNavigator';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import PlaylistDetailScreen from '../screens/PlaylistDetailScreen';
 import AddSongsToPlaylistScreen from '../screens/AddSongsToPlaylistScreen';
+import ProfileScreen     from '../screens/ProfileScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
 import SearchScreen from '../screens/SearchScreen';
 import StoriesScreen from '../screens/StoriesScreen';
@@ -45,9 +46,6 @@ import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import DataExportScreen from '../screens/DataExportScreen';
 import FreezeAccountScreen from '../screens/FreezeAccountScreen';
-import CreatePostScreen from '../screens/CreatePostScreen';
-import PostDetailScreen from '../screens/PostDetailScreen';
-import EditPostScreen from '../screens/EditPostScreen';
 import FollowersListScreen from '../screens/FollowersListScreen';
 import FollowingListScreen from '../screens/FollowingListScreen';
 import BlockedUsersScreen from '../screens/BlockedUsersScreen';
@@ -86,6 +84,14 @@ import ReferralScreen from '../screens/ReferralScreen';
 import BackupScreen from '../screens/BackupScreen';
 import FeedbackScreen from '../screens/FeedbackScreen';
 import LicensesScreen from '../screens/LicensesScreen';
+import AudiomackScreen from '../screens/AudiomackScreen';
+import AccountSettingsScreen from '../screens/AccountSettingsScreen';
+import NotifSettingsScreen from '../screens/NotifSettingsScreen';
+import AudioSettingsScreen from '../screens/AudioSettingsScreen';
+import LanguageRegionScreen from '../screens/LanguageRegionScreen';
+import DataBackupScreen from '../screens/DataBackupScreen';
+import AccessibilitySettingsScreen from '../screens/AccessibilitySettingsScreen';
+import LegalSettingsScreen from '../screens/LegalSettingsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -134,11 +140,16 @@ function AppStack() {
         <>
           <Stack.Screen name="Main" component={MainTabNavigator} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
-          <Stack.Screen name="Notifications" component={NotificationsScreen} />
+          <Stack.Screen
+            name="Notifications"
+            component={NotificationsScreen}
+            options={{ headerShown: false, presentation: 'transparentModal', animation: 'slide_from_bottom', animationDuration: 300 }}
+          />
           <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
           <Stack.Screen name="AdSettings" component={AdSettingsScreen} />
           <Stack.Screen name="PlaylistDetail" component={PlaylistDetailScreen} />
           <Stack.Screen name="AddSongsToPlaylist" component={AddSongsToPlaylistScreen} />
+          <Stack.Screen name="Profile"     component={ProfileScreen}     />
           <Stack.Screen name="UserProfile" component={UserProfileScreen} />
           <Stack.Screen name="Search" component={SearchScreen} />
           <Stack.Screen name="Stories" component={StoriesScreen} />
@@ -168,9 +179,6 @@ function AppStack() {
           <Stack.Screen name="MusicTasteTest" component={MusicTasteTestScreen} />
           <Stack.Screen name="DataExport" component={DataExportScreen} />
           <Stack.Screen name="FreezeAccount" component={FreezeAccountScreen} />
-          <Stack.Screen name="CreatePost" component={CreatePostScreen} options={modalScreenOptions} />
-          <Stack.Screen name="PostDetail" component={PostDetailScreen} />
-          <Stack.Screen name="EditPost" component={EditPostScreen} />
           <Stack.Screen name="FollowersList" component={FollowersListScreen} />
           <Stack.Screen name="FollowingList" component={FollowingListScreen} />
           <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
@@ -207,6 +215,14 @@ function AppStack() {
           <Stack.Screen name="Backup" component={BackupScreen} />
           <Stack.Screen name="Feedback" component={FeedbackScreen} />
           <Stack.Screen name="Licenses" component={LicensesScreen} />
+          <Stack.Screen name="Audiomack" component={AudiomackScreen} />
+          <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+          <Stack.Screen name="NotifSettings" component={NotifSettingsScreen} />
+          <Stack.Screen name="AudioSettings" component={AudioSettingsScreen} />
+          <Stack.Screen name="LanguageRegion" component={LanguageRegionScreen} />
+          <Stack.Screen name="DataBackup" component={DataBackupScreen} />
+          <Stack.Screen name="AccessibilitySettings" component={AccessibilitySettingsScreen} />
+          <Stack.Screen name="LegalSettings" component={LegalSettingsScreen} />
           <Stack.Screen name="NotFound" component={NotFoundScreen} />
         </>
       ) : null}
