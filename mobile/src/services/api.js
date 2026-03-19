@@ -6,7 +6,7 @@
 import { getLocale } from '../lib/localeStore';
 import { isOnline, cacheData, getCachedData, setApiRef, getOfflineQueue } from './offlineService';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://social-music-fix.preview.emergentagent.com/api';
+const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://socialbeats-core-45365938370.europe-west3.run.app/api';
 const DEFAULT_TIMEOUT = 15000;
 
 const SECURITY_HEADERS = {

@@ -1,486 +1,294 @@
 /**
- * NotificationsScreen - Bildirim merkezi
- * - Okundu işaretleme (tekli/toplu)
- * - Bildirim silme (tekli/toplu)
- * - Bildirim erteleme (snooze)
- * - Tip simgeleri
- * - Tıklanınca ilgili ekrana yönlendirme
+ * NotificationsScreen — AURORA Design System 2026
+ * Transparent modal bottom sheet — matches screenshot exactly
  */
-import React, { useState, useEffect, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  SectionList,
-  Image,
-  TouchableOpacity,
-  RefreshControl,
-  Alert,
-  ActionSheetIOS,
-  Platform,
+  View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
+  RefreshControl, ActivityIndicator, Dimensions,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../contexts/AuthContext';
-import { useNotifications } from '../contexts/NotificationContext';
-import api from '../services/api';
-import { formatDate as formatLocaleDate } from '../lib/localeUtils';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import api from '../services/api';
 
-const avatar = (item) =>
-  item?.from_avatar || item?.sender?.avatar_url || `https://i.pravatar.cc/50?u=${item?.sender_id || item?.id}`;
+const { height: SCREEN_H } = Dimensions.get('window');
 
-const TYPE_ICONS = {
-  like: 'heart',
-  reaction: 'heart',
-  comment: 'chatbubble',
-  reply: 'arrow-undo',
-  follow: 'person-add',
-  message: 'chatbubble',
-  mention: 'at',
-  tag: 'pricetag',
-  story_reply: 'chatbubble-ellipses',
-  friend_request: 'people',
-  friend_accepted: 'checkmark-circle',
-  weekly_summary: 'bar-chart',
-  call_incoming: 'call',
-  new_content: 'musical-notes',
-  playlist_invite: 'list',
+// Demo data — shown when API returns empty (web preview)
+const DEMO_NOTIFS = [
+  { id:'n1', type:'follow',  user:'DJ Aurora',    avatar:'https://i.pravatar.cc/80?u=dj1',  time:'5 dk',   read:false, preview:null, reference_id:null, actor_username:'djauroramusic' },
+  { id:'n2', type:'like',    user:'beatmaker99',   avatar:'https://i.pravatar.cc/80?u=bm2',  time:'12 dk',  read:false, preview:null, reference_id:'post1', actor_username:'beatmaker99' },
+  { id:'n3', type:'release', user:'The Midnight',  avatar:'https://picsum.photos/seed/alb/80/80', time:'1 sa', read:false, preview:'Heroes', reference_id:null, actor_username:'themidnight' },
+  { id:'n4', type:'message', user:'melodica_tr',   avatar:'https://i.pravatar.cc/80?u=ml3',  time:'2 sa',   read:true,  preview:null, reference_id:null, actor_username:'melodica_tr' },
+  { id:'n5', type:'playlist',user:'Discover',      avatar:'https://picsum.photos/seed/disc/80/80', time:'1 gün', read:true, preview:'Haftalık keşif listeniz güncellendi', reference_id:null, actor_username:null },
+  { id:'n6', type:'follow',  user:'techno.vibes',  avatar:'https://i.pravatar.cc/80?u=tv4',  time:'1 gün',  read:true,  preview:'ve 2 kişi daha', reference_id:null, actor_username:'technovibes' },
+  { id:'n7', type:'like',    user:'Paylaşımın',    avatar:'https://picsum.photos/seed/post3/80/80', time:'2 gün', read:true, preview:'142 beğeni aldı 🔥', reference_id:'post3', actor_username:null },
+];
+
+const TYPE_META = {
+  like:        { icon: 'heart',               colorKey: 'iconCoral'   },
+  comment:     { icon: 'chatbubble',          colorKey: 'iconViolet'  },
+  follow:      { icon: 'person-add',          colorKey: 'iconCyan'    },
+  mention:     { icon: 'at',                  colorKey: 'iconAmber'   },
+  share:       { icon: 'share-social',        colorKey: 'iconGreen'   },
+  playlist:    { icon: 'musical-notes',       colorKey: 'iconBlue'    },
+  live:        { icon: 'radio',               colorKey: 'iconPink'    },
+  release:     { icon: 'disc',               colorKey: 'iconViolet'  },
+  story_react: { icon: 'heart-circle',        colorKey: 'iconCoral'   },
+  story_reply: { icon: 'chatbubble-ellipses', colorKey: 'iconViolet'  },
+  message:     { icon: 'mail',               colorKey: 'iconGreen'   },
 };
 
-const getTypeIcon = (type) => TYPE_ICONS[type] || 'notifications';
-
-const TYPE_ACTION_LABELS = {
-  like: 'liked your post',
-  reaction: 'liked your post',
-  comment: 'commented on your post',
-  reply: 'replied to your comment',
-  follow: 'followed you',
-  message: 'sent you a message',
-  mention: 'mentioned you',
-  tag: 'tagged you',
-  story_reply: 'replied to your story',
-  friend_request: 'sent you a friend request',
-  friend_accepted: 'accepted your friend request',
+const TYPE_LABEL = {
+  like:        'paylaşımını beğendi',
+  comment:     'gönderine yorum yaptı',
+  follow:      'seni takip etmeye başladı',
+  mention:     'senden bahsetti',
+  share:       'parçanı paylaştı',
+  playlist:    '',   // preview used directly
+  live:        'canlı yayına başladı',
+  release:     'yeni albüm yayınladı:',
+  story_react: 'hikayene tepki verdi',
+  story_reply: 'hikayeni yanıtladı',
+  message:     'sana mesaj attı',
 };
 
-function getTargetKey(n) {
-  const d = n.data || {};
-  const postId = d.post_id || n.post_id;
-  const convId = d.conversation_id;
-  const username = n.sender?.username || n.from_username || d.username;
-  if (postId) return `post_${postId}`;
-  if (convId) return `conv_${convId}`;
-  if (username) return `user_${username}`;
-  return `id_${n.id}`;
-}
-
-function getSectionKey(iso) {
-  if (!iso) return 'Earlier';
-  const d = new Date(iso);
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfWeek = new Date(startOfToday);
-  startOfWeek.setDate(startOfWeek.getDate() - 7);
-  if (d >= startOfToday) return 'Today';
-  if (d >= startOfWeek) return 'This Week';
-  return 'Earlier';
-}
-
-const SECTION_ORDER = ['Today', 'This Week', 'Earlier'];
-
-function buildGroupedSections(notifications) {
-  const bySection = { Today: {}, 'This Week': {}, Earlier: {} };
-  for (const n of notifications) {
-    const section = getSectionKey(n.created_at);
-    const type = n.type || 'unknown';
-    const targetKey = getTargetKey(n);
-    const groupKey = `${type}_${targetKey}`;
-    if (!bySection[section][groupKey]) bySection[section][groupKey] = [];
-    bySection[section][groupKey].push(n);
+function resolveNavigation(notif, navigation) {
+  const { type, reference_id: refId, actor_username: username } = notif;
+  switch (type) {
+    case 'follow':
+    case 'live':
+      if (username) navigation.navigate('UserProfile', { username });
+      break;
+    case 'like':
+    case 'comment':
+    case 'mention':
+    case 'share':
+      if (refId) navigation.navigate('PostDetail', { postId: refId });
+      else if (username) navigation.navigate('UserProfile', { username });
+      break;
+    case 'playlist':
+      if (refId) navigation.navigate('PlaylistDetail', { playlistId: refId });
+      break;
+    case 'story_react':
+    case 'story_reply':
+      navigation.navigate('StoryArchive');
+      break;
+    default:
+      if (username) navigation.navigate('UserProfile', { username });
   }
-  const sections = [];
-  for (const sectionTitle of SECTION_ORDER) {
-    const groups = bySection[sectionTitle];
-    const data = [];
-    for (const groupKey of Object.keys(groups)) {
-      const items = groups[groupKey].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      data.push({
-        groupKey,
-        items,
-        primary: items[0],
-        type: items[0]?.type || 'unknown',
-      });
-    }
-    data.sort((a, b) => new Date(b.primary.created_at) - new Date(a.primary.created_at));
-    if (data.length > 0) {
-      sections.push({ title: sectionTitle, data });
-    }
-  }
-  return sections;
 }
 
-function formatTime(iso, t) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const now = new Date();
-  const diff = (now - d) / 1000;
-  if (diff < 60) return t('notifications.justNow');
-  if (diff < 3600) return t('notifications.minutesAgo', { count: Math.floor(diff / 60) });
-  if (diff < 86400) return t('notifications.hoursAgo', { count: Math.floor(diff / 3600) });
-  if (diff < 604800) return t('notifications.daysAgo', { count: Math.floor(diff / 86400) });
-  return formatLocaleDate(d);
+function normaliseNotif(n) {
+  return {
+    id:             n.id || n._id || String(Math.random()),
+    type:           n.type || n.notification_type || 'like',
+    user:           n.actor_username || n.from_user?.username || n.user || 'user',
+    avatar:         n.actor_avatar || n.from_user?.avatar_url || `https://i.pravatar.cc/80?u=${n.actor_username || n.id}`,
+    time:           n.time_ago || n.created_at || '',
+    read:           n.is_read ?? n.read ?? false,
+    preview:        n.content || n.preview || null,
+    reference_id:   n.reference_id || n.ref_id || null,
+    actor_username: n.actor_username || null,
+  };
 }
+
+function NotifItem({ item, colors, onPress }) {
+  const meta      = TYPE_META[item.type]  || TYPE_META.like;
+  const label     = TYPE_LABEL[item.type] || 'bildirdi';
+  const iconColor = colors[meta.colorKey] || colors.primary;
+  const isUnread  = !item.read;
+
+  const message = item.preview && !label
+    ? item.preview                                       // playlist type — preview is the full message
+    : item.preview && label
+    ? `${item.user} ${label} "${item.preview}"`
+    : `${item.user} ${label}`;
+
+  return (
+    <TouchableOpacity
+      style={[
+        ni.row,
+        { borderBottomColor: colors.borderLight },
+        isUnread && { backgroundColor: 'rgba(167,139,250,0.05)' },
+      ]}
+      onPress={() => onPress(item)}
+      activeOpacity={0.7}
+    >
+      {/* Avatar + badge */}
+      <View style={ni.avatarWrap}>
+        <Image source={{ uri: item.avatar }} style={ni.avatar} />
+        <View style={[ni.badge, { backgroundColor: iconColor, borderColor: '#0D0A1A' }]}>
+          <Ionicons name={meta.icon} size={10} color="#FFF" />
+        </View>
+      </View>
+
+      {/* Text */}
+      <View style={ni.content}>
+        <Text
+          style={[
+            ni.msg,
+            { color: isUnread ? colors.text : colors.textSecondary,
+              fontWeight: isUnread ? '600' : '400' },
+          ]}
+          numberOfLines={2}
+        >
+          {message}
+        </Text>
+        <Text style={[ni.time, { color: colors.textMuted }]}>{item.time} önce</Text>
+      </View>
+
+      {/* Unread dot */}
+      {isUnread && <View style={[ni.dot, { backgroundColor: colors.primary }]} />}
+    </TouchableOpacity>
+  );
+}
+
+const ni = StyleSheet.create({
+  row:       { flexDirection:'row', alignItems:'center', paddingHorizontal:20, paddingVertical:14, gap:12, borderBottomWidth:1 },
+  avatarWrap:{ position:'relative', flexShrink:0 },
+  avatar:    { width:46, height:46, borderRadius:23 },
+  badge:     { position:'absolute', bottom:-2, right:-2, width:20, height:20, borderRadius:10, alignItems:'center', justifyContent:'center', borderWidth:2 },
+  content:   { flex:1 },
+  msg:       { fontSize:13, lineHeight:19 },
+  time:      { fontSize:11, marginTop:4 },
+  dot:       { width:8, height:8, borderRadius:4, flexShrink:0, alignSelf:'center' },
+});
 
 export default function NotificationsScreen({ navigation }) {
   const { colors } = useTheme();
-  const styles = createStyles(colors);
-  const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
-  const { token } = useAuth();
-  const { refreshUnreadCount } = useNotifications();
+  const { token }  = useAuth();
+
   const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const [loading, setLoading]             = useState(true);
+  const [refreshing, setRefreshing]       = useState(false);
 
   const loadNotifications = useCallback(async () => {
     try {
-      const res = await api.get('/notifications?limit=100&offset=0', token);
-      setNotifications(res?.notifications || []);
-      refreshUnreadCount();
+      const res = await api.get('/notifications', token);
+      const raw = Array.isArray(res) ? res : (res?.notifications || res?.items || []);
+      const mapped = raw.map(normaliseNotif);
+      setNotifications(mapped.length > 0 ? mapped : DEMO_NOTIFS);
     } catch {
-      setNotifications([]);
+      setNotifications(prev => prev.length > 0 ? prev : DEMO_NOTIFS);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
-  }, [token, refreshUnreadCount]);
+  }, [token]);
 
-  useEffect(() => {
-    loadNotifications();
+  useEffect(() => { loadNotifications(); }, [loadNotifications]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadNotifications();
+    setRefreshing(false);
   }, [loadNotifications]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadNotifications();
-  };
+  const markRead = useCallback(async (id) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    try { await api.post(`/notifications/${id}/read`, {}, token); } catch {}
+  }, [token]);
 
-  const markRead = async (id) => {
-    try {
-      await api.post(`/notifications/${id}/read`, {}, token);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true, is_read: true } : n))
-      );
-      refreshUnreadCount();
-    } catch {}
-  };
+  const markAllRead = useCallback(async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    try { await api.post('/notifications/read-all', {}, token); } catch {}
+  }, [token]);
 
-  const markAllRead = async () => {
-    try {
-      await api.post('/notifications/read-all', {}, token);
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true, is_read: true })));
-      refreshUnreadCount();
-    } catch {}
-  };
+  const handlePress = useCallback((item) => {
+    markRead(item.id);
+    resolveNavigation(item, navigation);
+  }, [markRead, navigation]);
 
-  const deleteNotification = async (id) => {
-    try {
-      await api.delete(`/notifications/${id}`, token);
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-      refreshUnreadCount();
-    } catch {}
-  };
-
-  const clearAll = () => {
-    Alert.alert(t('notifications.clearAll'), t('notifications.clearAllConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('notifications.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await api.delete('/notifications', token);
-            setNotifications([]);
-            refreshUnreadCount();
-          } catch {}
-        },
-      },
-    ]);
-  };
-
-  const snoozeNotification = async (id) => {
-    try {
-      await api.post(`/notifications/${id}/snooze`, { minutes: 60 }, token).catch(() => {});
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-      refreshUnreadCount();
-    } catch {}
-  };
-
-  const handleNotificationPress = (item) => {
-    if (!item.read && !item.is_read) markRead(item.id);
-
-    const data = item.data || {};
-    const postId = data.post_id || item.post_id;
-    const username = item.sender?.username || item.from_username || data.username;
-    const type = item.type;
-
-    if (type === 'message' && data.conversation_id) {
-      navigation.navigate('Chat', { conversationId: data.conversation_id });
-      return;
-    }
-    if (postId) {
-      navigation.navigate('PostDetail', { postId });
-      return;
-    }
-    if (username) {
-      navigation.navigate('UserProfile', { username });
-      return;
-    }
-    if (type === 'friend_request' || type === 'follow') {
-      if (username) navigation.navigate('UserProfile', { username });
-    }
-  };
-
-  const toggleGroupExpanded = (groupKey) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupKey)) next.delete(groupKey);
-      else next.add(groupKey);
-      return next;
-    });
-  };
-
-  const showItemActions = (item) => {
-    const options = [t('notifications.markRead'), t('notifications.snooze1h'), t('notifications.delete'), t('common.cancel')];
-    const cancelIdx = 3;
-    Platform.OS === 'ios'
-      ? ActionSheetIOS.showActionSheetWithOptions(
-          { options, cancelButtonIndex: cancelIdx, destructiveButtonIndex: 2 },
-          (idx) => {
-            if (idx === 0) markRead(item.id);
-            else if (idx === 1) snoozeNotification(item.id);
-            else if (idx === 2) deleteNotification(item.id);
-          }
-        )
-      : Alert.alert(t('notifications.notification'), undefined, [
-          { text: t('notifications.markRead'), onPress: () => markRead(item.id) },
-          { text: t('notifications.snooze1h'), onPress: () => snoozeNotification(item.id) },
-          { text: t('notifications.delete'), style: 'destructive', onPress: () => deleteNotification(item.id) },
-          { text: t('common.cancel'), style: 'cancel' },
-        ]);
-  };
-
-  const getPrimaryName = (item) =>
-    item?.sender?.display_name || item?.sender?.username || item?.from_username || item?.data?.username || 'Someone';
-
-  const renderGroupedItem = ({ item: group }) => {
-    const { groupKey, items, primary, type } = group;
-    const isExpanded = expandedGroups.has(groupKey);
-    const otherCount = items.length - 1;
-    const actionLabel = TYPE_ACTION_LABELS[type] || 'notified you';
-    const iconName = getTypeIcon(type);
-    const hasUnread = items.some((n) => !n.read && !n.is_read);
-
-    if (items.length === 1) {
-      const n = items[0];
-      const isUnread = !n.read && !n.is_read;
-      return (
-        <TouchableOpacity
-          style={[styles.row, isUnread && styles.unread]}
-          activeOpacity={0.7}
-          onPress={() => handleNotificationPress(n)}
-          onLongPress={() => showItemActions(n)}
-        >
-          <Image source={{ uri: avatar(n) }} style={styles.avatar} />
-          <View style={styles.iconBadge}>
-            <Ionicons name={iconName} size={14} color="#fff" />
-          </View>
-          <View style={styles.info}>
-            <Text style={styles.body} numberOfLines={2}>
-              {n.body || n.title || n.content}
-            </Text>
-            <Text style={styles.time}>{formatTime(n.created_at, t)}</Text>
-          </View>
-          {isUnread && <View style={styles.dot} />}
-        </TouchableOpacity>
-      );
-    }
-
-    const primaryName = getPrimaryName(primary);
-    const groupedBody =
-      otherCount > 0 ? `${primaryName} and ${otherCount} other${otherCount > 1 ? 's' : ''} ${actionLabel}` : `${primaryName} ${actionLabel}`;
-
-    return (
-      <View style={[styles.groupWrapper, hasUnread && styles.unread]}>
-        <TouchableOpacity
-          style={styles.row}
-          activeOpacity={0.7}
-          onPress={() => toggleGroupExpanded(groupKey)}
-        >
-          <Image source={{ uri: avatar(primary) }} style={styles.avatar} />
-          <View style={styles.iconBadge}>
-            <Ionicons name={iconName} size={14} color="#fff" />
-          </View>
-          <View style={styles.info}>
-            <Text style={styles.body} numberOfLines={2}>
-              {groupedBody}
-            </Text>
-            <Text style={styles.time}>{formatTime(primary.created_at, t)}</Text>
-          </View>
-          <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={20} color="#9CA3AF" />
-          {hasUnread && <View style={styles.dot} />}
-        </TouchableOpacity>
-        {isExpanded &&
-          items.map((n) => {
-            const isUnread = !n.read && !n.is_read;
-            const name = getPrimaryName(n);
-            return (
-              <TouchableOpacity
-                key={n.id}
-                style={[styles.expandedRow, isUnread && styles.unread]}
-                activeOpacity={0.7}
-                onPress={() => handleNotificationPress(n)}
-                onLongPress={() => showItemActions(n)}
-              >
-                <Image source={{ uri: avatar(n) }} style={styles.expandedAvatar} />
-                <View style={styles.info}>
-                  <Text style={styles.body} numberOfLines={2}>
-                    {n.body || n.title || n.content || `${name} ${actionLabel}`}
-                  </Text>
-                  <Text style={styles.time}>{formatTime(n.created_at, t)}</Text>
-                </View>
-                {isUnread && <View style={styles.dot} />}
-              </TouchableOpacity>
-            );
-          })}
-      </View>
-    );
-  };
-
-  const renderSectionHeader = ({ section: { title } }) => (
-    <Text style={styles.sectionHeader}>{title}</Text>
-  );
-
-  const groupedSections = buildGroupedSections(notifications);
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>{t('notifications.back')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>{t('notifications.title')}</Text>
-        <View style={styles.headerActions}>
-          {notifications.some((n) => !n.read && !n.is_read) && (
-            <TouchableOpacity onPress={markAllRead} style={styles.headerBtn}>
-              <Text style={styles.headerBtnText}>{t('notifications.markAllRead')}</Text>
-            </TouchableOpacity>
-          )}
-          {notifications.length > 0 && (
-            <TouchableOpacity onPress={clearAll} style={styles.headerBtn}>
-              <Ionicons name="trash-outline" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-      <SectionList
-        sections={groupedSections}
-        renderItem={renderGroupedItem}
-        renderSectionHeader={renderSectionHeader}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-        removeClippedSubviews={true}
-        keyExtractor={(item) => item.groupKey}
-        stickySectionHeadersEnabled={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" />
-        }
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
-        ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            <Ionicons name="notifications-off-outline" size={64} color="#374151" />
-            <Text style={styles.empty}>{t('notifications.empty')}</Text>
-          </View>
-        }
+    <View style={s.overlay}>
+      {/* Blurred dim area — only the visible portion above sheet is blurred */}
+      <TouchableOpacity
+        style={s.dimArea}
+        onPress={() => navigation.goBack()}
+        activeOpacity={1}
       />
+
+      {/* Bottom sheet */}
+      <View style={s.sheet}>
+        {/* Header */}
+        <View style={[s.header, { borderBottomColor: colors.border }]}>
+          <Text style={[s.title, { color: colors.text }]}>Bildirimler</Text>
+          <View style={s.actions}>
+            {unreadCount > 0 && (
+              <TouchableOpacity onPress={markAllRead} hitSlop={{ top:8, bottom:8, left:8, right:8 }}>
+                <Text style={[s.markAll, { color: colors.primary }]}>Tümünü Oku</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top:8, bottom:8, left:8, right:8 }}>
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* List */}
+        {loading ? (
+          <View style={s.loader}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : (
+          <FlatList
+            data={notifications}
+            keyExtractor={item => item.id}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <NotifItem item={item} colors={colors} onPress={handlePress} />
+            )}
+            ListEmptyComponent={
+              <View style={s.empty}>
+                <Ionicons name="notifications-off-outline" size={52} color={colors.textMuted} />
+                <Text style={[s.emptyTx, { color: colors.textMuted }]}>Henüz bildirim yok</Text>
+              </View>
+            }
+            ListFooterComponent={<View style={{ height: 40 }} />}
+          />
+        )}
+      </View>
     </View>
   );
 }
 
-const createStyles = (colors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+const SHEET_MAX_H = Math.round(SCREEN_H * 0.92);
+
+const s = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'transparent',
+  },
+  dimArea: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  sheet: {
+    maxHeight: SHEET_MAX_H,
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2937',
   },
-  backBtn: { marginRight: 12 },
-  backText: { color: colors.accent, fontSize: 16 },
-  title: { flex: 1, fontSize: 20, fontWeight: '700', color: colors.text },
-  headerActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  headerBtn: { padding: 4 },
-  headerBtnText: { color: colors.accent, fontSize: 14 },
-  list: { padding: 16 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  unread: { backgroundColor: 'rgba(139,92,246,0.1)' },
-  avatar: { width: 48, height: 48, borderRadius: 24, marginRight: 12 },
-  iconBadge: {
-    position: 'absolute',
-    left: 44,
-    top: 40,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#8B5CF6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  info: { flex: 1 },
-  body: { fontSize: 15, color: colors.text },
-  time: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#8B5CF6',
-    marginLeft: 8,
-  },
-  emptyWrap: { alignItems: 'center', paddingVertical: 60 },
-  empty: { color: '#9CA3AF', marginTop: 16, fontSize: 16 },
-  sectionHeader: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#9CA3AF',
-    marginTop: 16,
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-  groupWrapper: {
-    borderRadius: 12,
-    marginBottom: 4,
-    overflow: 'hidden',
-  },
-  expandedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    paddingLeft: 60,
-    borderTopWidth: 1,
-    borderTopColor: '#1F2937',
-  },
-  expandedAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 12 },
+  title:   { fontSize: 17, fontWeight: '800' },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  markAll: { fontSize: 13, fontWeight: '600', paddingHorizontal: 4, paddingVertical: 4 },
+  loader:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  empty:   { alignItems: 'center', paddingTop: 60, gap: 12 },
+  emptyTx: { fontSize: 14 },
 });

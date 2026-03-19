@@ -49,7 +49,7 @@ export default function MutedUsersScreen({ navigation }) {
           text: 'Aç',
           onPress: async () => {
             try {
-              await api.delete(`/social/mute/${userId}`, token);
+              await api.delete(`/social/unmute/${userId}`, token);
               setItems((prev) => prev.filter((x) => (x.muted_user_id || x.user?.id) !== userId));
             } catch (e) {
               Alert.alert('Hata', e?.data?.detail || 'İşlem başarısız');
@@ -115,20 +115,20 @@ export default function MutedUsersScreen({ navigation }) {
 
 const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   backBtn: { padding: 4, marginRight: 12 },
   title: { fontSize: 18, fontWeight: '700', color: colors.text },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { padding: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
   left: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   avatar: { width: 48, height: 48, borderRadius: 24, marginRight: 14 },
   info: { flex: 1 },
   name: { fontSize: 16, fontWeight: '600', color: colors.text },
-  username: { fontSize: 14, color: '#9CA3AF', marginTop: 2 },
-  unmuteBtn: { paddingVertical: 8, paddingHorizontal: 16, backgroundColor: '#374151', borderRadius: 8 },
+  username: { fontSize: 14, color: colors.textMuted, marginTop: 2 },
+  unmuteBtn: { paddingVertical: 8, paddingHorizontal: 16, backgroundColor: colors.surface, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
   unmuteText: { fontSize: 14, color: colors.text, fontWeight: '500' },
   empty: { padding: 40, alignItems: 'center' },
-  emptyText: { color: '#9CA3AF', fontSize: 16 },
-  emptySubtext: { color: '#6B7280', fontSize: 14, marginTop: 8 },
+  emptyText: { color: colors.textMuted, fontSize: 16 },
+  emptySubtext: { color: colors.textGhost, fontSize: 14, marginTop: 8 },
 });

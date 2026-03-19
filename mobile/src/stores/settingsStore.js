@@ -19,6 +19,11 @@ const loadStored = async () => {
 export const useSettingsStore = create((set, get) => ({
   themeId: 'dark',
   language: null,
+  // Accessibility
+  fontSizeScale: 1.0,
+  highContrast: false,
+  colorBlindMode: 'none',
+  reduceMotion: false,
   _hydrated: false,
 
   setTheme: (themeId) => {
@@ -31,15 +36,22 @@ export const useSettingsStore = create((set, get) => ({
     get()._persist();
   },
 
+  setFontSizeScale: (fontSizeScale) => { set({ fontSizeScale }); get()._persist(); },
+  setHighContrast: (highContrast) => { set({ highContrast }); get()._persist(); },
+  setColorBlindMode: (colorBlindMode) => { set({ colorBlindMode }); get()._persist(); },
+  setReduceMotion: (reduceMotion) => { set({ reduceMotion }); get()._persist(); },
+
   hydrate: async () => {
     const stored = await loadStored();
     set({ ...stored, _hydrated: true });
   },
 
   _persist: async () => {
-    const { themeId, language } = get();
+    const { themeId, language, fontSizeScale, highContrast, colorBlindMode, reduceMotion } = get();
     try {
-      await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ themeId, language }));
+      await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({
+        themeId, language, fontSizeScale, highContrast, colorBlindMode, reduceMotion,
+      }));
     } catch (e) {
       console.warn('Settings persist error:', e);
     }

@@ -7,7 +7,12 @@ import os
 import uuid
 
 # JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'socialbeats-secret-key-2024')
+JWT_SECRET = os.environ.get('JWT_SECRET')
+if not JWT_SECRET:
+    raise RuntimeError(
+        "JWT_SECRET environment variable is not set. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
@@ -50,6 +55,30 @@ def verify_token(token: str) -> Optional[dict]:
 def decode_token(token: str) -> Optional[dict]:
     """Alias for verify_token"""
     return verify_token(token)
+
+# ============== TOKEN BLACKLIST ==============
+# In-memory blacklist (single-instance). Use Redis in production for distributed systems.
+_token_blacklist: dict = {}  # token -> expiry unix timestamp
+
+def blacklist_token(token: str) -> None:
+    """Add a JWT token to the blacklist until it expires."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        exp = payload.get("exp", 0)
+        if exp > 0:
+            _token_blacklist[token] = exp
+    except Exception:
+        pass
+
+def is_token_blacklisted(token: str) -> bool:
+    """Return True if the token has been revoked."""
+    import time
+    now = time.time()
+    # Purge expired entries
+    expired = [t for t, exp in list(_token_blacklist.items()) if exp <= now]
+    for t in expired:
+        _token_blacklist.pop(t, None)
+    return token in _token_blacklist
 
 # ============== ID HELPERS ==============
 

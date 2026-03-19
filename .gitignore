@@ -21,6 +21,8 @@ __pycache__/
 *.key
 credentials.json
 google-services.json
+backend/cloudrun_env.yaml
+backend/cloudrun_music_env.yaml
 
 # IDE & System
 .vscode/

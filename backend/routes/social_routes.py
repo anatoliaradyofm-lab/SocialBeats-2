@@ -260,3 +260,93 @@ async def mark_notifications_read(current_user: dict = Depends(get_current_user)
         {"$set": {"read": True}}
     )
     return {"message": "Notifications marked as read"}
+
+
+# ============== MUTED USERS ENDPOINTS ==============
+
+@router.get("/muted")
+async def get_muted_users(current_user: dict = Depends(get_current_user)):
+    """Sessize alınan kullanıcılar listesi"""
+    muted_cursor = db.muted_users.find(
+        {"muter_id": current_user["id"]},
+        {"_id": 0, "muted_user_id": 1, "created_at": 1}
+    ).sort("created_at", -1)
+    muted_docs = await muted_cursor.to_list(length=200)
+    muted_ids = [m["muted_user_id"] for m in muted_docs]
+    if not muted_ids:
+        return []
+    users_cursor = db.users.find(
+        {"id": {"$in": muted_ids}},
+        {"_id": 0, "id": 1, "username": 1, "display_name": 1, "avatar_url": 1}
+    )
+    users = await users_cursor.to_list(length=200)
+    return users
+
+
+@router.post("/mute/{user_id}")
+async def mute_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    """Kullanıcıyı sessize al"""
+    if user_id == current_user["id"]:
+        raise HTTPException(status_code=400, detail="Cannot mute yourself")
+    target = await db.users.find_one({"id": user_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    existing = await db.muted_users.find_one({
+        "muter_id": current_user["id"],
+        "muted_user_id": user_id
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="User already muted")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.muted_users.insert_one({
+        "id": str(uuid.uuid4()),
+        "muter_id": current_user["id"],
+        "muted_user_id": user_id,
+        "created_at": now,
+    })
+    return {"muted": True, "user_id": user_id}
+
+
+@router.delete("/unmute/{user_id}")
+async def unmute_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    """Kullanıcıyı sessize almayı kaldır"""
+    result = await db.muted_users.delete_one({
+        "muter_id": current_user["id"],
+        "muted_user_id": user_id
+    })
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User was not muted")
+    return {"unmuted": True, "user_id": user_id}
+
+
+# ============== BLOCKED USERS ENDPOINTS ==============
+
+@router.get("/blocked-users")
+async def get_blocked_users(current_user: dict = Depends(get_current_user)):
+    """Engellenen kullanıcılar listesi"""
+    blocked_cursor = db.blocked_users.find(
+        {"blocker_id": current_user["id"]},
+        {"_id": 0, "blocked_user_id": 1}
+    )
+    blocked_docs = await blocked_cursor.to_list(length=200)
+    blocked_ids = [b["blocked_user_id"] for b in blocked_docs]
+    if not blocked_ids:
+        return []
+    users_cursor = db.users.find(
+        {"id": {"$in": blocked_ids}},
+        {"_id": 0, "id": 1, "username": 1, "display_name": 1, "avatar_url": 1}
+    )
+    users = await users_cursor.to_list(length=200)
+    return users
+
+
+@router.delete("/unblock/{user_id}")
+async def unblock_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    """Kullanıcının engelini kaldır"""
+    result = await db.blocked_users.delete_one({
+        "blocker_id": current_user["id"],
+        "blocked_user_id": user_id
+    })
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User was not blocked")
+    return {"unblocked": True, "user_id": user_id}

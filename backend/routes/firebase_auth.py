@@ -18,6 +18,7 @@ router = APIRouter(prefix="/auth", tags=["firebase-auth"])
 # Firebase yapılandırması
 FIREBASE_PROJECT_ID = os.environ.get('FIREBASE_PROJECT_ID', '')
 FIREBASE_WEB_API_KEY = os.environ.get('FIREBASE_WEB_API_KEY', '')
+DEV_MODE = os.environ.get('DEV_MODE', 'false').lower() == 'true'
 
 # =====================================================
 # MODELLER
@@ -51,15 +52,17 @@ async def verify_firebase_token(id_token: str, expected_uid: str = None) -> dict
     Google'ın public key'leri ile JWT doğrulaması yapar
     """
     if not FIREBASE_PROJECT_ID:
-        # Firebase yapılandırılmamışsa mock doğrulama (geliştirme için)
-        # expected_uid varsa onu kullan, yoksa token'dan üret
-        mock_uid = expected_uid or ("mock_uid_" + id_token[:10])
-        return {
-            "uid": mock_uid,
-            "email": "mock@example.com",
-            "email_verified": True,
-            "is_mock": True
-        }
+        if DEV_MODE:
+            import logging as _log
+            _log.warning("⚠️  Firebase mock mode active — set DEV_MODE=false in production")
+            mock_uid = expected_uid or ("mock_uid_" + id_token[:10])
+            return {
+                "uid": mock_uid,
+                "email": "dev@localhost",
+                "email_verified": True,
+                "is_mock": True
+            }
+        raise HTTPException(status_code=503, detail="Firebase authentication is not configured.")
     
     try:
         # Firebase Auth REST API ile token doğrulama

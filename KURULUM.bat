@@ -5,7 +5,6 @@ title SocialBeats - Altyapi Kurulumu
 set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 set "BACKEND=%ROOT%\backend"
-set "FRONTEND=%ROOT%\frontend"
 set "MOBILE=%ROOT%\mobile"
 
 echo.
@@ -44,23 +43,15 @@ if not exist requirements.txt (
 )
 echo.
 
-REM 3. Frontend
-echo [2/4] Frontend npm bagimliliklari kuruluyor...
-cd /d "%FRONTEND%"
-call npm install
-if errorlevel 1 echo [UYARI] npm install hata verdi.
-call npx expo install react-dom react-native-web @expo/metro-runtime 2>nul
-echo.
-
-REM 4. Mobile
-echo [3/4] Mobile npm bagimliliklari kuruluyor...
+REM 3. Mobile
+echo [2/3] Mobile npm bagimliliklari kuruluyor...
 cd /d "%MOBILE%"
 call npm install
 if errorlevel 1 echo [UYARI] npm install hata verdi.
 echo.
 
-REM 5. TestSprite seed
-echo [4/4] TestSprite kullanicisi olusturuluyor...
+REM 4. TestSprite seed
+echo [3/3] TestSprite kullanicisi olusturuluyor...
 cd /d "%BACKEND%"
 if exist "scripts\seed_testsprite_user.py" (
   python -m scripts.seed_testsprite_user 2>nul
@@ -75,7 +66,8 @@ echo   Kurulum tamamlandi.
 echo ============================================
 echo.
 echo Sonraki adimlar:
-echo   - TEST_ET.bat ile Backend + Frontend baslatin
+echo   - BACKEND_BASLAT.bat ile Backend'i baslatın
+echo   - BASLAT_MOBIL_EXPO.cmd ile Mobil uygulamayı başlatın
 echo   - TestSprite: npx testsprite-mcp generateCodeAndExecute
 echo.
 

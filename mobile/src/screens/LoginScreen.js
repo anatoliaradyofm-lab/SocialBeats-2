@@ -1,316 +1,332 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * LoginScreen — NOVA Design System v3.0
+ * Immersive 2025 auth experience
+ * Inspired by: UI8 premium kits · Dribbble auth trends · Behance case studies
+ * Aurora mesh background · Glassmorphism card · Electric gradient CTA
+ */
+import React, { useState, useRef, useCallback } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-  Switch,
+  View, Text, StyleSheet, TouchableOpacity, TextInput, KeyboardAvoidingView,
+  Platform, ScrollView, Alert, ActivityIndicator, Dimensions, Animated,
 } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
-import api from '../services/api';
-import biometricService from '../services/biometricService';
 import { useTheme } from '../contexts/ThemeContext';
-import { auth as firebaseAuth, googleProvider } from '../lib/firebase';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { useTranslation } from 'react-i18next';
 
-WebBrowser.maybeCompleteAuthSession();
-
-const GOOGLE_DISCOVERY = {
-  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-  tokenEndpoint: 'https://oauth2.googleapis.com/token',
-};
+const { width: W, height: H } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }) {
   const { colors } = useTheme();
-  const styles = createStyles(colors);
   const { t } = useTranslation();
-  const { login, enterAsGuest } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [biometricType, setBiometricType] = useState('fingerprint');
-  const [biometricLoading, setBiometricLoading] = useState(false);
+  const insets = useSafeAreaInsets();
+  const { login, loginAsGuest } = useAuth();
 
-  useEffect(() => {
-    checkBiometric();
+  const [email, setEmail]         = useState('');
+  const [password, setPassword]   = useState('');
+  const [showPass, setShowPass]   = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [focused, setFocused]     = useState(null);
+  const [errors, setErrors]       = useState({});
+
+  const passRef = useRef(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 700, useNativeDriver: true }).start();
   }, []);
 
-  const checkBiometric = async () => {
-    const result = await biometricService.isAvailable();
-    if (!result.available) return;
-
-    setBiometricType(result.type);
-    const enabled = await biometricService.isEnabled();
-    if (!enabled) return;
-
-    const hasToken = await biometricService.getSavedToken();
-    setBiometricAvailable(true);
-    if (hasToken) {
-      handleBiometricLogin();
-    }
+  const validate = () => {
+    const e = {};
+    if (!email.trim()) e.email = t('Email required');
+    else if (!/\S+@\S+\.\S+/.test(email)) e.email = t('Invalid email');
+    if (!password) e.password = t('Password required');
+    else if (password.length < 8) e.password = t('Min 8 characters');
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
-  const handleBiometricLogin = async () => {
-    setBiometricLoading(true);
-    try {
-      const result = await biometricService.biometricLogin();
-      if (result.success) {
-        const res = await api.post('/auth/verify-token', { token: result.token });
-        const authToken = res.access_token || res.token || result.token;
-        if (res.user) {
-          await login(authToken, res.user, true);
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-        } else {
-          await login(result.token, res, true);
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-        }
-      } else if (result.reason === 'no_token') {
-        Alert.alert(t('common.error'), 'Biometric credentials not found. Please log in with password first.');
-      } else if (result.reason === 'auth_failed') {
-        // User cancelled or failed — do nothing
-      }
-    } catch (err) {
-      Alert.alert(t('common.error'), err.message || 'Biometric login failed');
-    } finally {
-      setBiometricLoading(false);
-    }
-  };
-
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: 'socialbeats',
-    path: 'auth/callback',
-    useProxy: false,
-  });
-
-  const clientId = Platform.OS === 'android' ? (process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) : process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-
-  const [request, , promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: clientId || '',
-      scopes: ['openid', 'email', 'profile'],
-      redirectUri: Platform.select({
-        web: 'http://localhost:8082/auth/callback',
-        default: redirectUri,
-      }),
-      responseType: AuthSession.ResponseType.Token,
-      usePKCE: false,
-    },
-    GOOGLE_DISCOVERY
-  );
-
-  const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
-    try {
-      if (Platform.OS === 'web') {
-        const result = await signInWithPopup(firebaseAuth, googleProvider);
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-
-        let payload = {};
-        if (credential?.idToken) {
-          payload = { id_token: credential.idToken };
-        } else if (credential?.accessToken) {
-          const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-            headers: { Authorization: `Bearer ${credential.accessToken}` },
-          });
-          const googleUser = await userInfoRes.json();
-          payload = {
-            email: googleUser.email,
-            name: googleUser.name || googleUser.email?.split('@')[0],
-            picture: googleUser.picture || null,
-            google_id: googleUser.id,
-            access_token: credential.accessToken,
-          };
-        } else if (result.user) {
-          // Fallback to Firebase user info if Google auth credential missing
-          const token = await result.user.getIdToken();
-          payload = {
-            email: result.user.email,
-            name: result.user.displayName,
-            picture: result.user.photoURL,
-            google_id: result.user.uid,
-            access_token: token,
-          };
-        }
-
-        const res = await api.post('/auth/google/mobile', payload);
-        const token = res.access_token || res.token;
-        if (token && res.user) {
-          await login(token, res.user, rememberMe);
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-        } else {
-          Alert.alert(t('common.error'), t('login.googleError'));
-        }
-        return;
-      }
-
-      if (!clientId) {
-        Alert.alert(t('common.error'), 'Google OAuth yapılandırılmadı. Client ID eksik.');
-        return;
-      }
-      if (!request) return;
-
-      const result = await promptAsync();
-      if (result?.type !== 'success') {
-        if (result?.type === 'cancel') return;
-        throw new Error(result?.params?.error || result?.error?.message || 'Giriş iptal edildi');
-      }
-      const idToken = result.params?.id_token;
-      const accessToken = result.params?.access_token;
-      let payload = {};
-      if (idToken) {
-        payload = { id_token: idToken };
-      } else if (accessToken) {
-        const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (!userInfoRes.ok) throw new Error('Kullanıcı bilgisi alınamadı');
-        const googleUser = await userInfoRes.json();
-        payload = {
-          email: googleUser.email,
-          name: googleUser.name || googleUser.email?.split('@')[0],
-          picture: googleUser.picture || null,
-          google_id: googleUser.id,
-          access_token: accessToken,
-        };
-      } else {
-        throw new Error('Google yanıtı geçersiz');
-      }
-      const res = await api.post('/auth/google/mobile', payload);
-      const token = res.access_token || res.token;
-      if (token && res.user) {
-        await login(token, res.user, rememberMe);
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-      } else {
-        Alert.alert(t('common.error'), t('login.googleError'));
-      }
-    } catch (err) {
-      Alert.alert(t('common.error'), err.message || t('login.googleError'));
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
-  const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert(t('common.error'), t('login.fillAll'));
-      return;
-    }
+  const handleLogin = useCallback(async () => {
+    if (!validate()) return;
     setLoading(true);
     try {
-      const res = await api.post('/auth/login', { email: email.trim(), password });
-      const token = res.access_token || res.token;
-      if (token && res.user) {
-        await login(token, res.user, rememberMe);
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-      } else {
-        Alert.alert(t('common.error'), t('login.failed'));
-      }
+      await login(email.trim().toLowerCase(), password);
+      navigation.navigate('Main');
     } catch (err) {
-      const msg = err.data?.detail || err.message || t('login.failed');
-      Alert.alert(t('common.error'), typeof msg === 'string' ? msg : JSON.stringify(msg));
+      const msg = err?.data?.detail;
+      const detail = Array.isArray(msg) ? msg.map(m => m.msg || m).join(', ') : (msg || err?.message || t('Check your credentials'));
+      Alert.alert(t('Login failed'), detail);
     } finally {
       setLoading(false);
     }
-  };
+  }, [email, password]);
+
+
+  const s = createStyles(colors, insets);
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>{t('login.title')}</Text>
-        <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
-        <TextInput style={styles.input} placeholder={t('login.email')} placeholderTextColor="#6B7280" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" accessibilityLabel="Email input" accessibilityRole="none" />
-        <TextInput style={styles.input} placeholder={t('login.password')} placeholderTextColor="#6B7280" value={password} onChangeText={setPassword} secureTextEntry accessibilityLabel="Password input" />
-        <View style={styles.rememberRow}>
-          <Switch value={rememberMe} onValueChange={setRememberMe} trackColor={{ false: '#374151', true: '#8B5CF6' }} thumbColor="#fff" />
-          <Text style={styles.rememberText}>Beni hatırla</Text>
-        </View>
-        <TouchableOpacity style={styles.linkSmall} onPress={() => navigation.navigate('ForgotPassword')}>
-          <Text style={styles.linkText}>Şifremi unuttum</Text>
-        </TouchableOpacity>
-        {biometricAvailable && (
-          <TouchableOpacity
-            style={[styles.biometricBtn, (loading || biometricLoading) && styles.buttonDisabled]}
-            onPress={handleBiometricLogin}
-            disabled={loading || biometricLoading}
-          >
-            {biometricLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Text style={styles.biometricIcon}>
-                  {biometricType === 'face' ? '👤' : '🔐'}
-                </Text>
-                <Text style={styles.buttonText}>
-                  {biometricType === 'face' ? 'Face ID ile giriş' : biometricType === 'fingerprint' ? 'Touch ID ile giriş' : 'Biyometrik giriş'}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleLogin} disabled={loading} accessibilityLabel="Sign in" accessibilityRole="button">
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t('login.submit')}</Text>}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.googleButton, (loading || googleLoading) && styles.buttonDisabled]}
-          onPress={handleGoogleSignIn}
-          disabled={loading || googleLoading}
-          accessibilityLabel="Sign in with Google"
-          accessibilityRole="button"
+    <View style={s.root}>
+      {/* ── Auth Background — adapts per theme ── */}
+      <LinearGradient
+        colors={colors.authBgGrad}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* Glow orbs */}
+      <View style={[s.orb, s.orb1, { backgroundColor: colors.orbColor1 }]} />
+      <View style={[s.orb, s.orb2, { backgroundColor: colors.orbColor2 }]} />
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={s.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {googleLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t('login.googleSignIn')}</Text>}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.link} onPress={() => navigation.navigate('Register')}>
-          <Text style={styles.linkText}>{t('login.noAccount')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.guestBtn} onPress={async () => { await enterAsGuest(); navigation.reset({ index: 0, routes: [{ name: 'Main' }] }); }}>
-          <Text style={styles.guestBtnText}>Misafir olarak devam et</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <Animated.View style={[s.inner, { opacity: fadeAnim }]}>
+
+            {/* ── Logo ── */}
+            <View style={s.logoWrap}>
+              <LinearGradient
+                colors={colors.gradPrimary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={s.logoIcon}
+              >
+                <Ionicons name="musical-notes" size={32} color="#FFF" />
+              </LinearGradient>
+              <Text style={s.logoText}>SocialBeats</Text>
+              <Text style={s.logoSub}>Your music universe</Text>
+            </View>
+
+            {/* ── Glass Card ── */}
+            <View style={s.card}>
+              <Text style={s.cardTitle}>Welcome back</Text>
+              <Text style={s.cardSub}>Sign in to continue</Text>
+
+              {/* Email */}
+              <View style={s.fieldWrap}>
+                <Text style={s.label}>Email</Text>
+                <View style={[s.inputRow, focused === 'email' && s.inputFocused, errors.email && s.inputError]}>
+                  <Ionicons name="mail-outline" size={18} color={focused === 'email' ? colors.primary : colors.textMuted} style={s.inputIcon} />
+                  <TextInput
+                    style={s.input}
+                    value={email}
+                    onChangeText={v => { setEmail(v); setErrors(e => ({ ...e, email: null })); }}
+                    placeholder="you@example.com"
+                    placeholderTextColor={colors.textGhost}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    returnKeyType="next"
+                    onSubmitEditing={() => passRef.current?.focus()}
+                    onFocus={() => setFocused('email')}
+                    onBlur={() => setFocused(null)}
+                  />
+                </View>
+                {errors.email && <Text style={s.errorText}>{errors.email}</Text>}
+              </View>
+
+              {/* Password */}
+              <View style={s.fieldWrap}>
+                <Text style={s.label}>Password</Text>
+                <View style={[s.inputRow, focused === 'pass' && s.inputFocused, errors.password && s.inputError]}>
+                  <Ionicons name="lock-closed-outline" size={18} color={focused === 'pass' ? colors.primary : colors.textMuted} style={s.inputIcon} />
+                  <TextInput
+                    ref={passRef}
+                    style={s.input}
+                    value={password}
+                    onChangeText={v => { setPassword(v); setErrors(e => ({ ...e, password: null })); }}
+                    placeholder="Min. 8 characters"
+                    placeholderTextColor={colors.textGhost}
+                    secureTextEntry={!showPass}
+                    returnKeyType="done"
+                    onSubmitEditing={handleLogin}
+                    onFocus={() => setFocused('pass')}
+                    onBlur={() => setFocused(null)}
+                  />
+                  <TouchableOpacity onPress={() => setShowPass(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+                {errors.password && <Text style={s.errorText}>{errors.password}</Text>}
+              </View>
+
+              {/* Forgot */}
+              <TouchableOpacity style={s.forgotRow} onPress={() => navigation.navigate('ForgotPassword')}>
+                <Text style={s.forgotText}>Forgot password?</Text>
+              </TouchableOpacity>
+
+              {/* Sign In Button */}
+              <TouchableOpacity onPress={handleLogin} disabled={loading} activeOpacity={0.85} style={s.btnWrap}>
+                <LinearGradient
+                  colors={colors.gradPrimary}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={s.btn}
+                >
+                  {loading
+                    ? <ActivityIndicator color="#FFF" />
+                    : <Text style={s.btnText}>Sign In</Text>
+                  }
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* Guest */}
+              <TouchableOpacity style={s.guestBtn} onPress={() => loginAsGuest?.()} activeOpacity={0.75}>
+                <Text style={s.guestText}>Browse as guest</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* ── Register Link ── */}
+            <View style={s.footer}>
+              <Text style={s.footerText}>Don't have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                <Text style={s.footerLink}>Create one</Text>
+              </TouchableOpacity>
+            </View>
+
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
-const createStyles = (colors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: 24, paddingTop: 60 },
-  title: { fontSize: 28, fontWeight: '700', color: colors.text, marginBottom: 8 },
-  subtitle: { fontSize: 16, color: '#9CA3AF', marginBottom: 32 },
-  input: { backgroundColor: '#1F2937', borderRadius: 12, padding: 16, fontSize: 16, color: colors.text, marginBottom: 16 },
-  button: { backgroundColor: '#8B5CF6', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
-  googleButton: { backgroundColor: '#4285F4', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 12 },
-  buttonDisabled: { opacity: 0.7 },
-  buttonText: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  rememberRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  rememberText: { color: '#9CA3AF', fontSize: 14, marginLeft: 8 },
-  linkSmall: { alignSelf: 'flex-start', marginBottom: 16 },
-  link: { marginTop: 24, alignItems: 'center' },
-  linkText: { color: colors.accent, fontSize: 14 },
-  guestBtn: { marginTop: 16, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: '#374151', borderRadius: 12 },
-  guestBtnText: { color: '#9CA3AF', fontSize: 14 },
-  biometricBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#374151',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#4B5563',
-  },
-  biometricIcon: { fontSize: 20 },
-});
+function createStyles(colors, insets) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.background },
+    orb: {
+      position: 'absolute',
+      borderRadius: 999,
+      opacity: 0.35,
+    },
+    orb1: {
+      width: 280,
+      height: 280,
+      top: -60,
+      right: -60,
+    },
+    orb2: {
+      width: 200,
+      height: 200,
+      bottom: 100,
+      left: -80,
+    },
+    scroll: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      paddingHorizontal: 20,
+      paddingTop: insets.top + 24,
+      paddingBottom: insets.bottom + 32,
+    },
+    inner: { gap: 24 },
+
+    // Logo
+    logoWrap: { alignItems: 'center', gap: 10 },
+    logoIcon: {
+      width: 72,
+      height: 72,
+      borderRadius: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.5,
+      shadowRadius: 20,
+      elevation: 12,
+    },
+    logoText: {
+      fontSize: 32,
+      fontWeight: '900',
+      color: colors.text,
+      letterSpacing: -1.2,
+    },
+    logoSub: {
+      fontSize: 14,
+      color: colors.textMuted,
+      letterSpacing: 0.3,
+    },
+
+    // Card
+    card: {
+      backgroundColor: colors.glass,
+      borderRadius: 28,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+      padding: 24,
+      gap: 4,
+    },
+    cardTitle: {
+      fontSize: 26,
+      fontWeight: '800',
+      color: colors.text,
+      letterSpacing: -0.8,
+    },
+    cardSub: {
+      fontSize: 14,
+      color: colors.textMuted,
+      marginBottom: 16,
+    },
+
+    // Fields
+    fieldWrap: { gap: 6, marginBottom: 4 },
+    label: { fontSize: 12, fontWeight: '600', color: colors.textSecondary, letterSpacing: 0.4, textTransform: 'uppercase' },
+    inputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.inputBg,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.inputBorder,
+      paddingHorizontal: 14,
+      paddingVertical: Platform.OS === 'ios' ? 14 : 10,
+      gap: 10,
+    },
+    inputFocused: {
+      borderColor: colors.primary,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    inputError: { borderColor: colors.error },
+    inputIcon: { width: 20 },
+    input: { flex: 1, fontSize: 15, color: colors.text, fontWeight: '400' },
+    errorText: { fontSize: 12, color: colors.error, marginTop: 2 },
+
+    forgotRow: { alignSelf: 'flex-end', marginTop: 2, marginBottom: 4 },
+    forgotText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
+
+    // Buttons
+    btnWrap: { marginTop: 8 },
+    btn: {
+      height: 54,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.40,
+      shadowRadius: 16,
+      elevation: 8,
+    },
+    btnText: { fontSize: 16, fontWeight: '700', color: '#FFF', letterSpacing: 0.2 },
+
+    guestBtn: { alignItems: 'center', paddingVertical: 10 },
+    guestText: { fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
+
+    footer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    footerText: { fontSize: 14, color: colors.textMuted },
+    footerLink: { fontSize: 14, fontWeight: '700', color: colors.primary },
+  });
+}

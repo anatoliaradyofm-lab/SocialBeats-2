@@ -1,0 +1,25 @@
+// react-native-reanimated — web-safe stubs
+import { Animated } from 'react-native';
+export default { View: Animated.View, Text: Animated.Text, ScrollView: Animated.ScrollView, Image: Animated.Image };
+export const useSharedValue      = (v) => ({ value: v });
+export const useAnimatedStyle    = (fn) => fn();
+export const withTiming          = (v) => v;
+export const withSpring          = (v) => v;
+export const withDelay           = (_, v) => v;
+export const withRepeat          = (v) => v;
+export const withSequence        = (...args) => args[args.length - 1];
+export const runOnJS             = (fn) => fn;
+export const runOnUI             = (fn) => fn;
+export const useAnimatedScrollHandler = () => () => {};
+export const useAnimatedGestureHandler = () => () => {};
+export const interpolate         = (v, i, o) => o[0];
+export const interpolateColor    = (v, i, o) => o[0];
+export const Easing              = { linear: (t) => t, ease: (t) => t, in: (e) => e, out: (e) => e, inOut: (e) => e, bezier: () => (t) => t };
+export const FadeIn              = {};
+export const FadeOut             = {};
+export const SlideInRight        = {};
+export const SlideOutLeft        = {};
+export const ZoomIn              = {};
+export const ZoomOut             = {};
+export const Layout              = {};
+export const createAnimatedComponent = (C) => C;

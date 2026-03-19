@@ -147,7 +147,8 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function login(authToken, userData, doRememberMe = true) {
+  // ── Internal: apply auth state (called after API response) ──────────────────
+  async function applyAuth(authToken, userData, doRememberMe = true) {
     const u = userData && typeof userData === 'object' ? userData : null;
     if (!authToken || !u) throw new Error('Invalid auth data');
     setRememberMe(doRememberMe);
@@ -176,6 +177,34 @@ export function AuthProvider({ children }) {
         await biometricService.enable(authToken);
       }
     } catch (_) { }
+  }
+
+  // ── Public: login with email + password (calls backend) ──────────────────────
+  async function login(email, password) {
+    const res = await api.post('/auth/login', { email, password });
+    if (!res?.access_token) {
+      throw new Error(res?.detail || 'Invalid email or password');
+    }
+    await applyAuth(res.access_token, res.user);
+  }
+
+  // ── Public: register new account (calls backend + auto-login) ────────────────
+  async function register({ email, password, username, name }) {
+    const res = await api.post('/auth/register', {
+      email,
+      password,
+      username,
+      display_name: name || username,
+    });
+    if (!res?.access_token) {
+      throw new Error(res?.detail || 'Registration failed');
+    }
+    await applyAuth(res.access_token, res.user);
+  }
+
+  // ── Public: enter as guest ───────────────────────────────────────────────────
+  async function loginAsGuest() {
+    await enterAsGuest();
   }
 
   async function switchAccount(index) {
@@ -245,6 +274,8 @@ export function AuthProvider({ children }) {
     isAuthenticated: !!(token && user),
     isGuest: user?.isGuest === true,
     login,
+    register,
+    loginAsGuest,
     logout,
     updateUser,
     enterAsGuest,

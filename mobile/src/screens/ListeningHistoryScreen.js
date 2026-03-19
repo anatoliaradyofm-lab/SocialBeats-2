@@ -97,10 +97,13 @@ export default function ListeningHistoryScreen({ navigation }) {
       style={styles.trackRow}
       activeOpacity={0.7}
       onPress={() => playTrack({
-        id: item.trackId,
-        title: item.title,
-        artist: item.artist,
+        id:        item.trackId,
+        title:     item.title,
+        artist:    item.artist,
         thumbnail: item.thumbnail,
+        cover_url: item.thumbnail,
+        audio_url: item.audio_url || null,
+        source:    item.source || null,
       })}
     >
       <Image

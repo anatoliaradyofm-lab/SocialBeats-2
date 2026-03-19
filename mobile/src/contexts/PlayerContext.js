@@ -7,6 +7,8 @@ import api from '../services/api';
 
 const PlayerContext = createContext(null);
 
+const MUSIC_API_BASE = process.env.EXPO_PUBLIC_MUSIC_API_URL || 'https://music-backend-45365938370.europe-west3.run.app';
+
 function normalizeTrack(track) {
   if (!track) return null;
   return {
@@ -14,10 +16,34 @@ function normalizeTrack(track) {
     title: track.title || track.name,
     artist: track.artist || '',
     thumbnail: track.thumbnail || track.cover_url,
-    audio_url: track.audio_url,
+    // audio_url may be a relative path (/music-hybrid/stream/{id}) — resolved at play time
+    audio_url: track.audio_url || track.stream_url || null,
     embedUrl: track.embed_url || `https://www.youtube.com/embed/${track.id || track.song_id}`,
     youtubeUrl: track.youtube_url || `https://www.youtube.com/watch?v=${track.id || track.song_id}`,
+    source: track.source || null,
   };
+}
+
+/**
+ * If audio_url is a relative /music-hybrid/stream/{id} path,
+ * call the music backend to get the actual CDN URL.
+ */
+async function resolveAudioUrl(audioUrl) {
+  if (!audioUrl) return null;
+  // Already absolute — use directly
+  if (audioUrl.startsWith('https://') || audioUrl.startsWith('http://')) return audioUrl;
+  // Relative backend path — resolve to CDN URL
+  if (audioUrl.startsWith('/music-hybrid/stream/') || audioUrl.startsWith('/stream/')) {
+    try {
+      const res = await fetch(`${MUSIC_API_BASE}${audioUrl}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.url || null;
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
 }
 
 export function PlayerProvider({ children }) {
@@ -36,6 +62,9 @@ export function PlayerProvider({ children }) {
 
   // Repeat mode: 'off' | 'all' | 'one'
   const [repeatMode, setRepeatMode] = useState('off');
+
+  // Shuffle state
+  const [isShuffle, setIsShuffle] = useState(false);
 
   // Playback speed
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
@@ -97,6 +126,33 @@ export function PlayerProvider({ children }) {
     audioService.setOnPlaybackStatusUpdate(onPlaybackStatusUpdate);
   }, [onPlaybackStatusUpdate]);
 
+  // Poll position/duration every second since TrackPlayer uses event-based
+  // listeners (not the legacy callback pattern)
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(async () => {
+      const status = await audioService.getStatus();
+      if (!status?.isLoaded) return;
+      setPositionMillis(status.positionMillis || 0);
+      setDurationMillis(status.durationMillis || 0);
+      if (status.positionMillis > 0 && status.durationMillis > 0) {
+        const remaining = status.durationMillis - status.positionMillis;
+        if (
+          crossfadeDuration > 0 &&
+          remaining <= crossfadeDuration * 1000 &&
+          remaining > 0 &&
+          !crossfadeTriggeredRef.current
+        ) {
+          crossfadeTriggeredRef.current = true;
+          advanceToNext();
+        } else if (remaining <= 500) {
+          advanceToNext();
+        }
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isPlaying, crossfadeDuration, advanceToNext]);
+
   const playTrackInternal = async (track, showFull = true) => {
     if (!track) return;
     const normalized = normalizeTrack(track);
@@ -106,14 +162,20 @@ export function PlayerProvider({ children }) {
     setDurationMillis(0);
     if (showFull) setIsFullVisible(true);
 
-    let audioUrl = normalized.audio_url;
-    if (!audioUrl && !isOnline()) {
-      const cachedUrl = await getCachedData(`track:audio:${normalized.id}`);
-      if (cachedUrl) audioUrl = cachedUrl;
+    // Check offline cache first
+    let audioUrl = null;
+    if (!isOnline()) {
+      audioUrl = await getCachedData(`track:audio:${normalized.id}`);
+    }
+
+    if (!audioUrl) {
+      // Resolve relative /music-hybrid/stream/{id} → CDN URL
+      audioUrl = await resolveAudioUrl(normalized.audio_url);
     }
 
     if (audioUrl) {
       hasAudioUrl.current = true;
+      // Cache the resolved CDN URL for offline use
       cacheData(`track:audio:${normalized.id}`, audioUrl).catch(() => { });
       await audioService.loadAndPlay(audioUrl);
       await audioService.setRate(playbackSpeed);
@@ -239,10 +301,16 @@ export function PlayerProvider({ children }) {
         const j = Math.floor(Math.random() * (i + 1));
         [rest[i], rest[j]] = [rest[j], rest[i]];
       }
-      const shuffled = [current, ...rest];
-      return shuffled;
+      return [current, ...rest];
     });
     setCurrentIndex(0);
+  };
+
+  const toggleShuffle = () => {
+    setIsShuffle((prev) => {
+      if (!prev) shuffleQueue();
+      return !prev;
+    });
   };
 
   const toggleRepeat = () => {
@@ -315,6 +383,8 @@ export function PlayerProvider({ children }) {
       playNext,
       playPrevious,
       shuffleQueue,
+      isShuffle,
+      toggleShuffle,
       repeatMode,
       toggleRepeat,
       canPlayNext,

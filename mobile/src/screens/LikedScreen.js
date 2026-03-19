@@ -4,37 +4,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
-  RefreshControl, ActivityIndicator} from 'react-native';
+  RefreshControl, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { usePlayer } from '../contexts/PlayerContext';
-import { useAuth } from '../contexts/AuthContext';
-import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { getLikedTracks, toggleLike, subscribe as likedSubscribe } from '../lib/likedStore';
 
 function toTrack(item) {
   const cover = item.cover || item.thumbnail || item.cover_url;
   return {
-    id: item.id || item.song_id,
-    title: item.title || item.name,
-    artist: item.artist || '',
+    id:        item.id || item.song_id,
+    title:     item.title || item.name,
+    artist:    item.artist || '',
     thumbnail: cover,
     cover_url: cover,
-    embed_url: item.embed_url || `https://www.youtube.com/embed/${item.id || item.song_id}`,
+    audio_url: item.audio_url || item.stream_url || null,
+    source:    item.source || null,
   };
 }
 
-function normalizeItem(item) {
-  const cover = item.cover || item.thumbnail || item.cover_url;
-  return {
-    id: item.id || item.song_id,
-    title: item.title || item.name,
-    artist: item.artist || '',
-    duration: item.duration,
-    cover,
-  };
-}
 
 export default function LikedScreen({ navigation }) {
   const { colors } = useTheme();
@@ -42,41 +32,25 @@ export default function LikedScreen({ navigation }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { playTrack } = usePlayer();
-  const { token } = useAuth();
-  const [likedItems, setLikedItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+
+  const [likedItems, setLikedItems] = useState(() => getLikedTracks());
   const [refreshing, setRefreshing] = useState(false);
-
-  const loadLiked = useCallback(async () => {
-    try {
-      const res = await api.get('/users/me/liked-tracks', token);
-      setLikedItems(Array.isArray(res) ? res : res?.tracks || []);
-    } catch {
-      setLikedItems([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    if (token) {
-      loadLiked();
-    } else {
-      setLoading(false);
-    }
-  }, [loadLiked, token]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadLiked();
+    setLikedItems(getLikedTracks());
+    setRefreshing(false);
   };
+
+  // Re-render when liked store changes (e.g. user likes/unlikes from player)
+  useEffect(() => {
+    return likedSubscribe(() => setLikedItems(getLikedTracks()));
+  }, []);
 
   const removeLike = (id) => {
-    setLikedItems((prev) => prev.filter((t) => (t.id || t.song_id) !== id));
+    const track = likedItems.find(t => String(t.id) === String(id));
+    if (track) toggleLike(track);
   };
-
-  const tracks = likedItems.map(normalizeItem);
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
@@ -84,7 +58,7 @@ export default function LikedScreen({ navigation }) {
       activeOpacity={0.8}
       onPress={() => playTrack(toTrack(item))}
     >
-      <Image source={{ uri: item.cover }} style={styles.cover} />
+      <Image source={{ uri: item.cover || item.thumbnail || item.cover_url }} style={styles.cover} />
       <View style={styles.info}>
         <Text style={styles.trackTitle} numberOfLines={1}>{item.title}</Text>
         <Text style={styles.artist} numberOfLines={1}>{item.artist}</Text>
@@ -100,24 +74,6 @@ export default function LikedScreen({ navigation }) {
     </TouchableOpacity>
   );
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>{t('liked.title')}</Text>
-          </View>
-        </View>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#6366F1" />
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -126,13 +82,13 @@ export default function LikedScreen({ navigation }) {
         </TouchableOpacity>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle}>{t('liked.title')}</Text>
-          <Text style={styles.subtitle}>{t('liked.trackCount', { count: tracks.length })}</Text>
+          <Text style={styles.subtitle}>{t('liked.trackCount', { count: likedItems.length })}</Text>
         </View>
       </View>
       <FlatList
-        data={tracks}
+        data={likedItems}
         renderItem={renderItem}
-        keyExtractor={(item) => String(item.id)}
+        keyExtractor={(item) => String(item.id || item.song_id)}
         contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 140 }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366F1" />

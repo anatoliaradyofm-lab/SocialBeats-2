@@ -1,164 +1,279 @@
 /**
- * MiniPlayer - Tab bar'ın üstünde 70px oynatma çubuğu
- * Cover 48x48, parça bilgisi, oynat/pauz, sonraki, kuyruk
- * Thin progress bar at top showing current position
+ * MiniPlayer — NOVA Design System v3.0
+ * Floating island player · 2025 premium aesthetic
+ * Inspired by: Apple Dynamic Island · Spotify mini player · Mobbin player patterns
+ * Glassmorphism · Gradient play button · Glow progress
  */
-import React from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, Image, Animated,
+  Pressable, Dimensions,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { usePlayer } from '../../contexts/PlayerContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { isLiked, toggleLike, subscribe as likedSubscribe } from '../../lib/likedStore';
+import AddToPlaylistModal from '../AddToPlaylistModal';
 
-const TAB_BAR_HEIGHT = 60;
+const { width: W } = Dimensions.get('window');
 
-export default function MiniPlayer({ navigation }) {
-  const insets = useSafeAreaInsets();
+export default function MiniPlayer({ tabBarHeight = 64, onPress }) {
+  const { colors } = useTheme();
+  const player = usePlayer() || {};
   const {
     currentTrack,
     isPlaying,
-    playTrack,
+    positionMillis = 0,
+    durationMillis = 0,
     togglePlay,
     playNext,
     playPrevious,
     closePlayer,
-    canPlayNext,
-    canPlayPrevious,
-    positionMillis,
-    durationMillis,
-  } = usePlayer();
+  } = player;
+
+  // Computed progress ratio 0–1
+  const progress = durationMillis > 0 ? positionMillis / durationMillis : 0;
+
+  const trackId = currentTrack?.id;
+  const [liked, setLiked]           = useState(() => isLiked(trackId));
+  const [addToPlaylist, setAddToPlaylist] = useState(false);
+
+  useEffect(() => { setLiked(isLiked(trackId)); }, [trackId]);
+  useEffect(() => likedSubscribe(() => setLiked(isLiked(trackId))), [trackId]);
+
+  const handleLike = (e) => {
+    e.stopPropagation?.();
+    if (!currentTrack) return;
+    toggleLike(currentTrack);
+    setLiked(isLiked(currentTrack.id));
+  };
+
+  const slideAnim = useRef(new Animated.Value(100)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.spring(slideAnim, {
+      toValue: currentTrack ? 0 : 100,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 200,
+    }).start();
+  }, [!!currentTrack]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.08, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1,    duration: 800, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [isPlaying]);
 
   if (!currentTrack) return null;
 
-  const bottomOffset = TAB_BAR_HEIGHT + insets.bottom;
-  const progress = durationMillis > 0 ? positionMillis / durationMillis : 0;
+  const s = createStyles(colors, tabBarHeight);
 
   return (
-    <TouchableOpacity
-      style={[styles.container, { bottom: bottomOffset }]}
-      onPress={() => playTrack(currentTrack)}
-      activeOpacity={0.95}
-    >
-      <View style={styles.progressBarBg}>
-        <View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} />
+    <Animated.View style={[s.container, { transform: [{ translateY: slideAnim }] }]}>
+      {/* Background — adapts per theme */}
+      <LinearGradient
+        colors={colors.miniPlayerBgGrad}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* Ambient glow */}
+      <View style={[s.glow, { backgroundColor: colors.primaryDeep, opacity: 0.3 }]} />
+
+      {/* Progress bar (top) */}
+      <View style={s.progressTrack}>
+        <Animated.View style={[s.progressFill, { width: `${(progress || 0) * 100}%` }]}>
+          <LinearGradient colors={colors.gradPrimary} start={{ x:0,y:0 }} end={{ x:1,y:0 }} style={StyleSheet.absoluteFill} />
+        </Animated.View>
       </View>
-      <View style={styles.content}>
-        <Image source={{ uri: currentTrack.thumbnail }} style={styles.thumb} />
-        <View style={styles.info}>
-          <Text style={styles.title} numberOfLines={1}>{currentTrack.title}</Text>
-          <Text style={styles.artist} numberOfLines={1}>{currentTrack.artist}</Text>
+
+      <Pressable style={s.inner} onPress={onPress}>
+        {/* Album art */}
+        <Animated.View style={[s.artWrap, isPlaying && { transform: [{ scale: pulseAnim }] }]}>
+          <Image
+            source={{ uri: currentTrack?.thumbnail || `https://picsum.photos/seed/${currentTrack?.id}/80/80` }}
+            style={s.art}
+          />
+        </Animated.View>
+
+        {/* Track info */}
+        <View style={s.info}>
+          <Text style={[s.title, { color: colors.text }]} numberOfLines={1}>
+            {currentTrack?.title || 'Unknown Track'}
+          </Text>
+          <Text style={[s.artist, { color: colors.textMuted }]} numberOfLines={1}>
+            {currentTrack?.artist || 'Unknown Artist'}
+          </Text>
         </View>
-        <View style={styles.actions}>
+
+        {/* Controls */}
+        <View style={s.controls}>
+          {/* Like */}
           <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={(e) => { e.stopPropagation(); playPrevious(); }}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            disabled={!canPlayPrevious}
-            accessibilityLabel="Previous track"
-            accessibilityRole="button"
+            onPress={handleLike}
+            style={s.ctrlBtn}
+            hitSlop={{ top:10,bottom:10,left:10,right:10 }}
           >
-            <Ionicons
-              name="play-skip-back"
-              size={20}
-              color={canPlayPrevious ? '#fff' : '#555'}
-            />
+            <Ionicons name={liked ? 'heart' : 'heart-outline'} size={18} color={liked ? '#FF2D55' : colors.textMuted} />
           </TouchableOpacity>
+
+          {/* Add to playlist */}
           <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={(e) => { e.stopPropagation(); togglePlay(); }}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-            accessibilityRole="button"
+            onPress={(e) => { e.stopPropagation?.(); setAddToPlaylist(true); }}
+            style={s.ctrlBtn}
+            hitSlop={{ top:10,bottom:10,left:10,right:10 }}
           >
-            <Ionicons
-              name={isPlaying ? 'pause' : 'play'}
-              size={28}
-              color="#fff"
-            />
+            <Ionicons name="add-circle-outline" size={18} color={colors.textMuted} />
           </TouchableOpacity>
+
           <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={(e) => { e.stopPropagation(); playNext(); }}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            disabled={!canPlayNext}
-            accessibilityLabel="Next track"
-            accessibilityRole="button"
+            onPress={() => playPrevious?.()}
+            style={s.ctrlBtn}
+            hitSlop={{ top:10,bottom:10,left:10,right:10 }}
           >
-            <Ionicons
-              name="play-skip-forward"
-              size={20}
-              color={canPlayNext ? '#fff' : '#555'}
-            />
+            <Ionicons name="play-skip-back" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
+
+          {/* Play / Pause */}
           <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={(e) => { e.stopPropagation(); closePlayer(); }}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityLabel="Close player"
-            accessibilityRole="button"
+            onPress={() => togglePlay?.()}
+            activeOpacity={0.8}
           >
-            <Ionicons name="close" size={20} color="#9CA3AF" />
+            <LinearGradient
+              colors={colors.gradPrimary}
+              start={{ x:0,y:0 }}
+              end={{ x:1,y:1 }}
+              style={s.playBtn}
+            >
+              <Ionicons name={isPlaying ? 'pause' : 'play'} size={20} color="#FFF" />
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => playNext?.()}
+            style={s.ctrlBtn}
+            hitSlop={{ top:10,bottom:10,left:10,right:10 }}
+          >
+            <Ionicons name="play-skip-forward" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => closePlayer?.()}
+            style={s.ctrlBtn}
+            hitSlop={{ top:10,bottom:10,left:10,right:10 }}
+          >
+            <Ionicons name="close" size={18} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
-      </View>
-    </TouchableOpacity>
+      </Pressable>
+    </Animated.View>
+
+    <AddToPlaylistModal
+      visible={addToPlaylist}
+      track={currentTrack}
+      onClose={() => setAddToPlaylist(false)}
+    />
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 70,
-    backgroundColor: '#181818',
-    borderTopWidth: 1,
-    borderTopColor: '#2a2a2a',
-  },
-  progressBarBg: {
-    height: 2,
-    backgroundColor: '#333',
-    width: '100%',
-  },
-  progressBarFill: {
-    height: 2,
-    backgroundColor: '#6366F1',
-  },
-  content: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-  },
-  thumb: {
-    width: 48,
-    height: 48,
-    borderRadius: 4,
-    marginRight: 12,
-  },
-  info: {
-    flex: 1,
-    minWidth: 0,
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  artist: {
-    fontSize: 12,
-    color: '#B3B3B3',
-    marginTop: 2,
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  actionBtn: {
-    padding: 8,
-    minWidth: 40,
-    minHeight: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
+function createStyles(colors, tabBarHeight) {
+  return StyleSheet.create({
+    container: {
+      position: 'absolute',
+      bottom: tabBarHeight,
+      left: 8,
+      right: 8,
+      borderRadius: 20,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 20,
+      elevation: 12,
+    },
+    glow: {
+      position: 'absolute',
+      top: -30,
+      left: '20%',
+      width: '60%',
+      height: 60,
+      borderRadius: 30,
+    },
+    progressTrack: {
+      height: 2,
+      backgroundColor: colors.borderLight,
+      overflow: 'hidden',
+    },
+    progressFill: {
+      height: '100%',
+      overflow: 'hidden',
+    },
+    inner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      gap: 12,
+    },
+    artWrap: {
+      borderRadius: 10,
+      overflow: 'hidden',
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.4,
+      shadowRadius: 8,
+      elevation: 6,
+    },
+    art: {
+      width: 42,
+      height: 42,
+      borderRadius: 10,
+      backgroundColor: colors.surface,
+    },
+    info: {
+      flex: 1,
+      gap: 2,
+    },
+    title: {
+      fontSize: 14,
+      fontWeight: '700',
+      letterSpacing: -0.2,
+    },
+    artist: {
+      fontSize: 12,
+    },
+    controls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    ctrlBtn: {
+      width: 32,
+      height: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    playBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.5,
+      shadowRadius: 10,
+      elevation: 6,
+    },
+  });
+}

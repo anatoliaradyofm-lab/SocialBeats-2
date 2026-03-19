@@ -1,22 +1,37 @@
-FROM python:3.11-slim
+# Production build for Frankfurt europe-west3
+FROM python:3.11-slim as builder
 
-# Çalışma dizinini ayarla
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
 WORKDIR /app
 
-# Sistem bağımlılıklarını yükle (Gerekliyse)
+COPY requirements_fixed.txt requirements.txt
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+    build-essential \
+    curl \
+    ca-certificates \
+    git \
+    pkg-config \
+    libssl-dev && \
+    pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --prefer-binary --prefix=/install -r requirements.txt
 
-# Bağımlılıkları kopyala ve yükle
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Final Stage
+FROM python:3.11-slim
 
-# Uygulama kodunu kopyala
+WORKDIR /app
+
+# Copy installed dependencies
+COPY --from=builder /install /usr/local
 COPY . .
 
-# Cloud Run varsayılan portu
-EXPOSE 8080
+# Cloud Run / Frankfurt Optimizations
+ENV PORT 8080
+ENV WORKERS 4
+ENV TIMEOUT 0
 
-# Uygulamayı başlat
-CMD uvicorn server:fastapi_app --host 0.0.0.0 --port ${PORT:-8080}
+# Use Gunicorn as a process manager for Uvicorn workers
+# server:fastapi_app is the main entry point
+ENV PATH="/usr/local/bin:$PATH"
+CMD exec /usr/local/bin/gunicorn --bind :$PORT --workers $WORKERS --worker-class uvicorn.workers.UvicornWorker --threads 8 server:fastapi_app

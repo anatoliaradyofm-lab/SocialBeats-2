@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libxml2 libxslt1.1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements_music.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY main.py .
+
+ENV PORT=8080
+ENV UPSTASH_REDIS_REST_URL=""
+ENV UPSTASH_REDIS_REST_TOKEN=""
+ENV MEILI_URL=""
+ENV MEILI_MASTER_KEY=""
+
+CMD exec gunicorn \
+    --bind :$PORT \
+    --workers 2 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --timeout 120 \
+    --keep-alive 10 \
+    --log-level info \
+    main:app

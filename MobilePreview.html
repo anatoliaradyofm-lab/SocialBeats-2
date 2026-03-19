@@ -1,0 +1,2225 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SocialBeats — AURORA Design 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+html,body{height:100%;background:#030308;
+  font-family:'Inter','Plus Jakarta Sans',system-ui,-apple-system,sans-serif;
+  font-feature-settings:'cv02','cv03','cv04','cv11';
+  overflow:hidden;text-rendering:optimizeLegibility}
+::-webkit-scrollbar{width:2px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(167,139,250,0.3);border-radius:2px}
+button{font-family:inherit;font-feature-settings:'cv02','cv03','cv04','cv11'}
+input,textarea{font-family:'Inter',system-ui,sans-serif;font-feature-settings:'cv02','cv03','cv04','cv11'}
+@keyframes aurora{0%,100%{transform:translate(0,0) scale(1) rotate(0deg)}33%{transform:translate(40px,-30px) scale(1.15) rotate(5deg)}66%{transform:translate(-25px,20px) scale(0.9) rotate(-3deg)}}
+@keyframes aurora2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-35px,25px) scale(1.1)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideInUp{from{transform:translateY(48px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes glow{0%,100%{box-shadow:0 0 20px rgba(167,139,250,0.4)}50%{box-shadow:0 0 45px rgba(167,139,250,0.8),0 0 80px rgba(244,114,182,0.3)}}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.95)}}
+@keyframes wave{0%{transform:scaleY(0.4)}100%{transform:scaleY(1.2)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes shimmer{0%{opacity:.4}50%{opacity:.9}100%{opacity:.4}}
+@keyframes popIn{from{transform:scale(0.88);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes storyProgress{from{width:0}to{width:100%}}
+</style>
+</head>
+<body>
+<div id="root" style="height:100vh;display:flex;align-items:center;justify-content:center"></div>
+<script type="text/babel">
+
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+/* ═══════════════════════════════════════════════════════════════
+   AURORA DESIGN SYSTEM — SocialBeats 2026
+   ═══════════════════════════════════════════════════════════════ */
+const A = {
+  bg:          '#08080F',
+  surface:     'rgba(255,255,255,0.055)',
+  surfaceHigh: 'rgba(255,255,255,0.09)',
+  card:        'rgba(255,255,255,0.06)',
+  glass:       'rgba(255,255,255,0.08)',
+  glassBorder: 'rgba(255,255,255,0.12)',
+  text:        '#F8FAFF',
+  textSec:     'rgba(248,250,255,0.60)',
+  textMut:     'rgba(248,250,255,0.35)',
+  textGhost:   'rgba(248,250,255,0.18)',
+  primary:     '#A78BFA',
+  primaryGlow: 'rgba(167,139,250,0.28)',
+  primaryDeep: '#7C3AED',
+  accent:      '#F472B6',
+  accentGlow:  'rgba(244,114,182,0.22)',
+  highlight:   '#38BDF8',
+  border:      'rgba(255,255,255,0.09)',
+  borderLight: 'rgba(255,255,255,0.05)',
+  inputBg:     'rgba(255,255,255,0.07)',
+  tabBar:      'rgba(8,8,20,0.97)',
+  error:       '#F87171',
+  success:     '#34D399',
+  badge:       '#F472B6',
+  // Typography scale
+  fontDisplay: "'Plus Jakarta Sans','Inter',system-ui,sans-serif",
+  fontBody:    "'Inter',system-ui,-apple-system,sans-serif",
+  // Text size tokens
+  xs:  '11px', sm:  '12px', base: '14px',
+  md:  '15px', lg:  '17px', xl:  '20px',
+  '2xl':'24px','3xl':'28px','4xl':'34px',
+};
+
+/* ─── Mock data ───────────────────────────────────────────── */
+const STORIES = [
+  {id:'s1',u:'melodikbeat',img:'https://i.pravatar.cc/100?u=melodikbeat',unviewed:true},
+  {id:'s2',u:'djvibe',img:'https://i.pravatar.cc/100?u=djvibe',unviewed:true},
+  {id:'s3',u:'synthwave_',img:'https://i.pravatar.cc/100?u=synthwave_',unviewed:true},
+  {id:'s4',u:'lofi_girl',img:'https://i.pravatar.cc/100?u=lofi_girl',unviewed:false},
+];
+const FEATURED = [
+  {id:'f0',title:'Midnight Pulse',artist:'Aurora X',cover:'https://picsum.photos/seed/feat0/400/400',label:'NEW RELEASE',g:['#3B0764','#7C3AED','#A78BFA']},
+  {id:'f1',title:'Neon Dreams',artist:'The Midnight',cover:'https://picsum.photos/seed/feat1/400/400',label:'TRENDING',g:['#0C4A6E','#0EA5E9','#38BDF8']},
+  {id:'f2',title:'Rose Gold',artist:'Lana Wave',cover:'https://picsum.photos/seed/feat2/400/400',label:'HOT NOW',g:['#7F1D1D','#BE185D','#F472B6']},
+];
+const RECENTS = [
+  {id:'r0',title:'Blinding Lights',artist:'The Weeknd',cover:'https://picsum.photos/seed/rc0/120/120'},
+  {id:'r1',title:'Levitating',artist:'Dua Lipa',cover:'https://picsum.photos/seed/rc1/120/120'},
+  {id:'r2',title:'Peaches',artist:'Justin Bieber',cover:'https://picsum.photos/seed/rc2/120/120'},
+  {id:'r3',title:'Stay',artist:'Kid Laroi',cover:'https://picsum.photos/seed/rc3/120/120'},
+];
+const TRACKS = [
+  {id:'t0',n:1,title:'Shape of You',artist:'Ed Sheeran',cover:'https://picsum.photos/seed/pop0/80/80',dur:'3:53',plays:'1.2B'},
+  {id:'t1',n:2,title:'Dance Monkey',artist:'Tones and I',cover:'https://picsum.photos/seed/pop1/80/80',dur:'3:29',plays:'980M'},
+  {id:'t2',n:3,title:'Rockstar',artist:'Post Malone',cover:'https://picsum.photos/seed/pop2/80/80',dur:'3:38',plays:'850M'},
+  {id:'t3',n:4,title:'One Dance',artist:'Drake',cover:'https://picsum.photos/seed/pop3/80/80',dur:'2:54',plays:'720M'},
+];
+const GENRES = [
+  {id:'pop',name:'Pop',emoji:'✨',g:['#9333EA','#F472B6']},
+  {id:'hiphop',name:'Hip-Hop',emoji:'🔥',g:['#EA580C','#F472B6']},
+  {id:'edm',name:'EDM',emoji:'⚡',g:['#0EA5E9','#A78BFA']},
+  {id:'latin',name:'Latin',emoji:'🌴',g:['#10B981','#06B6D4']},
+  {id:'rock',name:'Rock',emoji:'🎸',g:['#DC2626','#F97316']},
+  {id:'kpop',name:'K-Pop',emoji:'💜',g:['#EC4899','#A78BFA']},
+];
+const PLAYLISTS = [
+  {id:'pl0',name:'Chill Vibes',cover:'https://picsum.photos/seed/pl0/200/200',cnt:24},
+  {id:'pl1',name:'Workout Mix',cover:'https://picsum.photos/seed/pl1/200/200',cnt:18},
+  {id:'pl2',name:'Night Owl',cover:'https://picsum.photos/seed/pl2/200/200',cnt:22},
+  {id:'pl3',name:'Focus Mode',cover:'https://picsum.photos/seed/pl3/200/200',cnt:20},
+  {id:'pl4',name:'Road Trip',cover:'https://picsum.photos/seed/pl4/200/200',cnt:28},
+];
+const MESSAGES = [
+  {id:'m0',u:'melodikbeat',img:'https://i.pravatar.cc/100?u=melodikbeat',msg:'Yeni parça nasıl?🎵',time:'2dk',unread:3},
+  {id:'m1',u:'djvibe',img:'https://i.pravatar.cc/100?u=djvibe',msg:'Bu gece sahne var!🔥',time:'15dk',unread:0},
+  {id:'m2',u:'synthwave_',img:'https://i.pravatar.cc/100?u=synthwave_',msg:'Retro vibes incoming 🎹',time:'1sa',unread:1},
+  {id:'m3',u:'lofi_girl',img:'https://i.pravatar.cc/100?u=lofi_girl',msg:'Study playlist updated',time:'3sa',unread:0},
+  {id:'m4',u:'beatmaker99',img:'https://i.pravatar.cc/100?u=beatmaker99',msg:'FL Studio session 🎛️',time:'5sa',unread:0},
+];
+
+/* ─── Gradient helper ─────────────────────────────────────── */
+const Grad = ({colors, style, children, angle='135deg'}) => (
+  <div style={{background:`linear-gradient(${angle},${colors.join(',')})`, ...style}}>
+    {children}
+  </div>
+);
+
+/* ─── Icon set (SVG-based for precision) ─────────────────── */
+function Ico({n, s=20, c=A.textSec}) {
+  const icons = {
+    home:    <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>,
+    homeo:   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>,
+    albums:  <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>,
+    albumso: <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>,
+    play:    <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M8 5v14l11-7z"/></svg>,
+    pause:   <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>,
+    playc:   <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>,
+    playCo:  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z" fill={c} stroke="none"/></svg>,
+    glasses: <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M2 12h2m16 0h2M4 12a4 4 0 108 0 4 4 0 00-8 0m8 0a4 4 0 108 0 4 4 0 00-8 0"/></svg>,
+    radio:   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M12 1a3 3 0 100 6 3 3 0 000-6zm0 0v6M5.5 8h13M4 8a8 8 0 0016 0"/><circle cx="12" cy="18" r="2" fill={c} stroke="none"/><path d="M12 16v-2"/></svg>,
+    search:  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>,
+    bell:    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>,
+    msg:     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
+    heart:   <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>,
+    hearto:  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>,
+    skip:    <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zm8.5-3.86v12h2V6h-2z"/></svg>,
+    prev:    <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>,
+    close:   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>,
+    plus:    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>,
+    gear:    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
+    add:     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="3" stroke={c} fill="none"/><path d="M12 8v8M8 12h8"/></svg>,
+    user:    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+    eq:      <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M12 5v14M6 10v9M18 8v11M3 15v4M21 13v6"/></svg>,
+    share:   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51L8.59 10.49"/></svg>,
+    back:    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><path d="M19 12H5m7-7l-7 7 7 7"/></svg>,
+    dot3:    <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>,
+    music:   <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z"/></svg>,
+    lock:    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>,
+    mail:    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
+    eye:     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+    check:   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>,
+    checkc:  <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5l-4-4 1.41-1.41L10 13.67l6.59-6.59L18 8.5l-8 8z"/></svg>,
+    star:    <svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>,
+    staro:   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>,
+    grid:    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
+    list:    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>,
+    globe:   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>,
+    shuffle: <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>,
+    repeat:  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>,
+    vol:     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>,
+    queue:   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>,
+  };
+  return icons[n] || <span style={{fontSize:s*0.8,color:c}}>●</span>;
+}
+
+/* ─── Reusable UI atoms ───────────────────────────────────── */
+const Avatar = ({src, size=36, ring=false, badge=false, onClick}) => (
+  <div onClick={onClick} style={{position:'relative',flexShrink:0,cursor:onClick?'pointer':'default'}}>
+    <div style={{width:size,height:size,borderRadius:'50%',
+      background:ring?`linear-gradient(135deg,${A.primary},${A.accent})`:'none',
+      padding:ring?2:0,cursor:'pointer'}}>
+      {ring && <div style={{width:'100%',height:'100%',borderRadius:'50%',background:A.bg,padding:2}}>
+        <img src={src} style={{width:'100%',height:'100%',borderRadius:'50%',objectFit:'cover'}} alt="" onError={e=>e.target.src='https://i.pravatar.cc/100?u=x'}/>
+      </div>}
+      {!ring && <img src={src} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',border:`2px solid ${A.border}`,display:'block'}} alt="" onError={e=>e.target.src='https://i.pravatar.cc/100?u=x'}/>}
+    </div>
+    {badge && <div style={{position:'absolute',bottom:0,right:0,width:size*0.32,height:size*0.32,borderRadius:'50%',background:A.primary,border:`2px solid ${A.bg}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <Ico n="plus" s={size*0.18} c="#fff"/>
+    </div>}
+  </div>
+);
+
+const Cover = ({src, size=48, radius=10}) => (
+  <img src={src} style={{width:size,height:size,borderRadius:radius,objectFit:'cover',flexShrink:0,display:'block'}} alt="" onError={e=>e.target.style.background='#333'}/>
+);
+
+/* ─── Search Bar (with inline results) ───────────────────── */
+const MUSIC_API = 'https://music-backend-45365938370.europe-west3.run.app';
+const MOCK_USERS = [
+  {id:'u1',u:'djaurora',name:'DJ Aurora',img:'https://i.pravatar.cc/80?u=dj1',followers:'12.4K'},
+  {id:'u2',u:'beatmaker99',name:'BeatMaker',img:'https://i.pravatar.cc/80?u=bm2',followers:'8.2K'},
+  {id:'u3',u:'melodica_tr',name:'Melodica',img:'https://i.pravatar.cc/80?u=ml3',followers:'5.7K'},
+];
+function SearchBar({onNavigate, onPlayTrack}) {
+  const {t} = useLang();
+  const [query, setQuery] = useState('');
+  const [mode, setMode] = useState('music'); // 'music' | 'user'
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); setOpen(false); return; }
+    setOpen(true);
+    clearTimeout(timerRef.current);
+    if (mode === 'user') {
+      setResults(MOCK_USERS.filter(u=>u.u.includes(query)||u.name.toLowerCase().includes(query.toLowerCase())));
+      return;
+    }
+    timerRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`${MUSIC_API}/search?q=${encodeURIComponent(query)}&limit=5`);
+        const data = await res.json();
+        const tracks = (data.tracks||data.results||data||[]).slice(0,5).map((t,i)=>({
+          id:t.id||`q${i}`,title:t.title||t.name||'Bilinmiyor',artist:t.artist||t.uploader||'',
+          cover:t.thumbnail||`https://picsum.photos/seed/qs${i}/60/60`,dur:t.duration_str||'',
+        }));
+        setResults(tracks.length?tracks:TRACKS.slice(0,4));
+      } catch { setResults(TRACKS.slice(0,4)); }
+      finally { setLoading(false); }
+    }, 500);
+    return () => clearTimeout(timerRef.current);
+  }, [query, mode]);
+
+  return (
+    <div style={{padding:'0 20px',marginBottom:20,position:'relative',zIndex:20}}>
+      <div style={{display:'flex',background:A.inputBg,border:`1px solid ${open?A.primary:A.glassBorder}`,
+        borderRadius:open&&results.length?'16px 16px 0 0':16,overflow:'hidden',alignItems:'center',
+        transition:'border-color 0.2s'}}>
+        <div style={{padding:'0 14px',opacity:0.5,display:'flex',alignItems:'center'}}>
+          {loading?<div style={{width:17,height:17,border:`2px solid ${A.primary}`,borderTopColor:'transparent',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
+                  :<Ico n="search" s={17} c={A.textSec}/>}
+        </div>
+        <input
+          value={query}
+          onChange={e=>setQuery(e.target.value)}
+          placeholder={mode==='music'?t('searchMusic'):t('searchUser')}
+          style={{flex:1,background:'none',border:'none',outline:'none',color:A.text,fontSize:14,fontWeight:500,
+            padding:'13px 0',fontFamily:"'Inter',system-ui,sans-serif",letterSpacing:-0.1}}
+        />
+        {query && <button onClick={()=>{setQuery('');setOpen(false);setResults([]);}} style={{background:'none',border:'none',cursor:'pointer',padding:'0 8px'}}>
+          <Ico n="close" s={14} c={A.textMut}/>
+        </button>}
+        <div style={{display:'flex',margin:'6px 8px',gap:4}}>
+          <button onClick={()=>{setMode('music');setResults([]);}} style={{padding:'5px 10px',borderRadius:10,border:'none',cursor:'pointer',fontSize:12,fontWeight:600,
+            background:mode==='music'?A.primary:'transparent',color:mode==='music'?'#fff':A.textMut}}>{t('modeMusic')}</button>
+          <button onClick={()=>{setMode('user');setResults([]);}} style={{padding:'5px 10px',borderRadius:10,border:'none',cursor:'pointer',fontSize:12,fontWeight:600,
+            background:mode==='user'?A.primary:'transparent',color:mode==='user'?'#fff':A.textMut}}>{t('modeUser')}</button>
+        </div>
+      </div>
+      {/* Dropdown results */}
+      {open && results.length>0 && (
+        <div style={{background:A.surface,border:`1px solid ${A.primary}`,borderTop:'none',borderRadius:'0 0 16px 16px',overflow:'hidden'}}>
+          {mode==='music' ? results.map((t,i)=>(
+            <div key={t.id} onClick={()=>{onPlayTrack&&onPlayTrack(t);setQuery('');setOpen(false);setResults([]);}}
+              style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',borderTop:i>0?`1px solid ${A.borderLight}`:'none'}}>
+              <Cover src={t.cover} size={38} radius={6}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{color:A.text,fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
+                <div style={{color:A.textMut,fontSize:11}}>{t.artist}</div>
+              </div>
+              <span style={{color:A.textMut,fontSize:11}}>{t.dur}</span>
+            </div>
+          )) : results.map((u,i)=>(
+            <div key={u.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',borderTop:i>0?`1px solid ${A.borderLight}`:'none'}}>
+              <img src={u.img} style={{width:38,height:38,borderRadius:19,objectFit:'cover'}} alt=""/>
+              <div style={{flex:1}}>
+                <div style={{color:A.text,fontSize:13,fontWeight:700}}>{u.name}</div>
+                <div style={{color:A.textMut,fontSize:11}}>@{u.u} · {u.followers} {t('followersLabel')}</div>
+              </div>
+              <button style={{background:A.primaryGlow,border:`1px solid ${A.primary}`,borderRadius:20,padding:'5px 12px',color:A.primary,fontSize:12,fontWeight:700,cursor:'pointer'}}>{t('followBtn')}</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const GlassCard = ({style, children, onClick}) => (
+  <div onClick={onClick} style={{background:A.card,border:`1px solid ${A.glassBorder}`,borderRadius:16,overflow:'hidden',cursor:onClick?'pointer':'default',...style}}>
+    {children}
+  </div>
+);
+
+const Pill = ({label, color=A.primary}) => (
+  <div style={{display:'inline-flex',alignItems:'center',background:color,borderRadius:20,padding:'3px 9px'}}>
+    <span style={{color:'#fff',fontSize:9,fontWeight:800,letterSpacing:0.8}}>{label}</span>
+  </div>
+);
+
+/* ─── Waveform animation ──────────────────────────────────── */
+const Waveform = ({active, color=A.primary}) => (
+  <div style={{display:'flex',alignItems:'center',gap:2,height:20}}>
+    {[1,2,3,4,5].map(i => (
+      <div key={i} style={{width:3,height:active?`${[8,16,12,18,10][i-1]}px`:'4px',background:color,borderRadius:2,
+        animation:active?`wave ${0.6+i*0.1}s ease-in-out infinite alternate`:'none',
+        transition:'height 0.3s'}}/>
+    ))}
+  </div>
+);
+
+/* ─── WirePlayer (MiniPlayer) ─────────────────────────────── */
+const MiniPlayer = ({track, isPlaying, progress=0, posMs=0, durMs=233000, fmtTime, onToggle, onClose, onExpand, onPrev, onNext}) => {
+  if (!track) return null;
+  const pct = Math.min(100, Math.max(0, progress*100)).toFixed(1)+'%';
+  return (
+    <div onClick={onExpand} style={{position:'absolute',left:0,right:0,bottom:60,height:66,
+      background:A.tabBar,borderTop:`1px solid ${A.border}`,cursor:'pointer',zIndex:10}}>
+      <div style={{height:2,background:A.borderLight}}>
+        <div style={{height:2,width:pct,background:`linear-gradient(90deg,${A.primaryDeep},${A.primary})`,borderRadius:1,transition:'width 0.5s linear'}}/>
+      </div>
+      <div style={{display:'flex',alignItems:'center',padding:'0 14px',height:64,gap:12}}>
+        <Cover src={track.cover} size={44} radius={10}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{color:A.text,fontSize:13,fontWeight:700,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontFamily:A.fontDisplay,letterSpacing:-0.2}}>{track.title}</div>
+          <div style={{color:A.textMut,fontSize:11,marginTop:2,fontWeight:400}}>{track.artist}</div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:4}}>
+          <button onClick={e=>{e.stopPropagation();onPrev&&onPrev();}} style={{background:'none',border:'none',cursor:'pointer',padding:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Ico n="prev" s={17} c={A.textSec}/>
+          </button>
+          <button onClick={e=>{e.stopPropagation();onToggle();}} style={{width:36,height:36,borderRadius:'50%',
+            background:`linear-gradient(135deg,${A.primaryDeep},${A.primary})`,border:'none',cursor:'pointer',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            boxShadow:`0 0 14px ${A.primaryGlow}`}}>
+            <Ico n={isPlaying?'pause':'play'} s={16} c="#fff"/>
+          </button>
+          <button onClick={e=>{e.stopPropagation();onNext&&onNext();}} style={{background:'none',border:'none',cursor:'pointer',padding:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Ico n="skip" s={17} c={A.textSec}/>
+          </button>
+          <button onClick={e=>{e.stopPropagation();onClose();}} style={{background:'none',border:'none',cursor:'pointer',padding:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Ico n="close" s={16} c={A.textMut}/>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ─── FullPlayer Screen ───────────────────────────────────── */
+const FullPlayerScreen = ({track, isPlaying, progress=0, posMs=0, durMs=233000, fmtTime, onClose, onToggle, onPrev, onNext, onShare}) => {
+  const {t} = useLang();
+  const [liked, setLiked] = useState(false);
+  const pct = Math.min(100, Math.max(0, progress*100)).toFixed(1)+'%';
+  const fmt = fmtTime || (ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; });
+  return (
+    <div style={{position:'absolute',inset:0,background:A.bg,zIndex:50,display:'flex',flexDirection:'column',animation:'slideInUp 0.35s ease'}}>
+      <div style={{position:'absolute',inset:0,background:`radial-gradient(ellipse at 50% 30%, rgba(124,58,237,0.25) 0%, transparent 65%)`,pointerEvents:'none'}}/>
+      {/* Header */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'52px 20px 0',position:'relative',zIndex:1}}>
+        <button onClick={onClose} style={{background:A.surface,border:`1px solid ${A.border}`,borderRadius:'50%',width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+          <Ico n="back" s={18} c={A.textSec}/>
+        </button>
+        <div style={{textAlign:'center'}}>
+          <div style={{color:A.primary,fontSize:10,letterSpacing:2,marginBottom:3,fontWeight:600,textTransform:'uppercase',fontFamily:A.fontBody}}>{t('nowPlaying')}</div>
+          <div style={{color:A.text,fontSize:13,fontWeight:700,fontFamily:A.fontDisplay,letterSpacing:-0.3}}>SocialBeats</div>
+        </div>
+        <button onClick={()=>onShare&&onShare()} style={{background:A.surface,border:`1px solid ${A.border}`,borderRadius:'50%',width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+          <Ico n="dot3" s={16} c={A.textSec}/>
+        </button>
+      </div>
+
+      {/* Cover */}
+      <div style={{display:'flex',justifyContent:'center',padding:'36px 40px 28px',position:'relative',zIndex:1}}>
+        <div style={{width:240,height:240,borderRadius:24,overflow:'hidden',
+          boxShadow:`0 20px 60px rgba(0,0,0,0.6), 0 0 40px ${A.primaryGlow}`,
+          animation:'float 3s ease-in-out infinite'}}>
+          <img src={track.cover} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
+        </div>
+      </div>
+
+      {/* Info */}
+      <div style={{padding:'0 28px',position:'relative',zIndex:1}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+          <div>
+            <div style={{color:A.text,fontSize:24,fontWeight:800,letterSpacing:-0.8,fontFamily:A.fontDisplay,lineHeight:1.1}}>{track.title}</div>
+            <div style={{color:A.textSec,fontSize:14,marginTop:5,fontWeight:500,letterSpacing:0.1}}>{track.artist}</div>
+          </div>
+          <button onClick={()=>setLiked(l=>!l)} style={{background:'none',border:'none',cursor:'pointer'}}>
+            <Ico n={liked?'heart':'hearto'} s={26} c={liked?A.accent:A.textSec}/>
+          </button>
+        </div>
+
+        {/* Progress */}
+        <div style={{margin:'20px 0 8px'}}>
+          <div style={{height:4,background:A.borderLight,borderRadius:2,cursor:'pointer',position:'relative',overflow:'hidden'}}>
+            <div style={{height:'100%',width:pct,background:`linear-gradient(90deg,${A.primaryDeep},${A.primary})`,borderRadius:2,transition:'width 0.5s linear'}}/>
+            <div style={{position:'absolute',top:-6,left:pct,width:16,height:16,borderRadius:'50%',background:A.primary,transform:'translateX(-50%)',boxShadow:`0 0 8px ${A.primaryGlow}`}}/>
+          </div>
+          <div style={{display:'flex',justifyContent:'space-between',marginTop:8}}>
+            <span style={{color:A.textMut,fontSize:11,fontVariantNumeric:'tabular-nums'}}>{fmt(posMs)}</span>
+            <span style={{color:A.textMut,fontSize:11,fontVariantNumeric:'tabular-nums'}}>{fmt(durMs)}</span>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-around',padding:'16px 0'}}>
+          <button onClick={()=>setLiked(l=>!l)} style={{background:'none',border:'none',cursor:'pointer'}}>
+            <Ico n={liked?'heart':'hearto'} s={22} c={liked?A.accent:A.textSec}/>
+          </button>
+          <button onClick={()=>onPrev&&onPrev()} style={{background:'none',border:'none',cursor:'pointer'}}><Ico n="prev" s={28} c={A.text}/></button>
+          <button onClick={onToggle} style={{width:64,height:64,borderRadius:'50%',border:'none',cursor:'pointer',
+            background:`linear-gradient(135deg,${A.primaryDeep},${A.primary})`,display:'flex',alignItems:'center',justifyContent:'center',
+            boxShadow:`0 0 30px ${A.primaryGlow}, 0 8px 24px rgba(0,0,0,0.4)`}}>
+            <Ico n={isPlaying?'pause':'play'} s={28} c="#fff"/>
+          </button>
+          <button onClick={()=>onNext&&onNext()} style={{background:'none',border:'none',cursor:'pointer'}}><Ico n="skip" s={28} c={A.text}/></button>
+          <button onClick={()=>onShare&&onShare()} style={{background:'none',border:'none',cursor:'pointer'}}><Ico n="share" s={22} c={A.textSec}/></button>
+        </div>
+
+        {/* Waveform */}
+        <div style={{display:'flex',justifyContent:'center',marginTop:8}}>
+          <Waveform active={isPlaying} color={A.primary}/>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ─── REGISTER SCREEN ────────────────────────────────────── */
+const RegisterScreen = ({onBack, onRegister}) => {
+  const {t} = useLang();
+  const [name, setName]   = useState('');
+  const [email, setEmail] = useState('');
+  const [pass, setPass]   = useState('');
+  const [showPass, setShowPass] = useState(false);
+  return (
+    <div style={{flex:1,overflowY:'auto',background:A.bg,position:'relative'}}>
+      <div style={{position:'absolute',top:-60,right:-60,width:220,height:220,borderRadius:'50%',background:'rgba(244,114,182,0.14)',filter:'blur(60px)',pointerEvents:'none'}}/>
+      <div style={{padding:'60px 24px 32px',position:'relative',zIndex:1}}>
+        <div style={{textAlign:'center',marginBottom:32}}>
+          <div style={{display:'inline-flex',marginBottom:14,borderRadius:20,overflow:'hidden',boxShadow:`0 0 30px ${A.primaryGlow}`}}>
+            <Grad colors={[A.primaryDeep,A.accent]} style={{width:64,height:64,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Ico n="music" s={28} c="#fff"/>
+            </Grad>
+          </div>
+          <div style={{color:A.text,fontSize:28,fontWeight:800,letterSpacing:-1,marginBottom:6}}>{t('regTitle')}</div>
+          <div style={{color:A.textMut,fontSize:13}}>{t('regSub')}</div>
+        </div>
+        <div style={{background:A.card,border:`1px solid ${A.glassBorder}`,borderRadius:28,padding:24}}>
+          {[{labelKey:'regFullName',val:name,set:setName,phKey:'regNamePh',ico:'user',type:'text'},
+            {labelKey:'regEmail',val:email,set:setEmail,phKey:'regEmailPh',ico:'mail',type:'email'},
+          ].map(f=>(
+            <div key={f.labelKey} style={{marginBottom:14}}>
+              <div style={{color:A.textSec,fontSize:11,fontWeight:600,marginBottom:8,letterSpacing:0.5}}>{t(f.labelKey)}</div>
+              <div style={{display:'flex',alignItems:'center',background:A.inputBg,borderRadius:14,border:`1px solid ${A.border}`,padding:'0 14px',gap:10}}>
+                <Ico n={f.ico} s={17} c={A.textMut}/>
+                <input value={f.val} onChange={e=>f.set(e.target.value)} placeholder={t(f.phKey)} type={f.type}
+                  style={{flex:1,background:'none',border:'none',outline:'none',color:A.text,fontSize:14,fontWeight:500,padding:'13px 0',fontFamily:"'Inter',system-ui,sans-serif"}}/>
+              </div>
+            </div>
+          ))}
+          <div style={{marginBottom:20}}>
+            <div style={{color:A.textSec,fontSize:11,fontWeight:600,marginBottom:8,letterSpacing:0.5}}>{t('regPass')}</div>
+            <div style={{display:'flex',alignItems:'center',background:A.inputBg,borderRadius:14,border:`1px solid ${A.border}`,padding:'0 14px',gap:10}}>
+              <Ico n="lock" s={17} c={A.textMut}/>
+              <input value={pass} onChange={e=>setPass(e.target.value)} placeholder={t('regPassPh')} type={showPass?'text':'password'}
+                style={{flex:1,background:'none',border:'none',outline:'none',color:A.text,fontSize:14,fontWeight:500,padding:'13px 0',fontFamily:"'Inter',system-ui,sans-serif"}}/>
+              <button onClick={()=>setShowPass(p=>!p)} style={{background:'none',border:'none',cursor:'pointer',padding:4}}>
+                <Ico n="eye" s={17} c={A.textMut}/>
+              </button>
+            </div>
+          </div>
+          <button onClick={onRegister} style={{width:'100%',border:'none',borderRadius:16,padding:16,cursor:'pointer',
+            background:`linear-gradient(135deg,${A.primaryDeep},${A.accent})`,color:'#fff',fontSize:16,fontWeight:700,
+            letterSpacing:-0.2,boxShadow:`0 6px 20px rgba(244,114,182,0.35)`,fontFamily:"'Inter',system-ui,sans-serif"}}>
+            {t('regBtn')}
+          </button>
+          <div style={{textAlign:'center',marginTop:20}}>
+            <span style={{color:A.textMut,fontSize:13}}>{t('regHaveAccount')} </span>
+            <span onClick={onBack} style={{color:A.primary,fontWeight:700,cursor:'pointer',fontSize:13}}>{t('regLogin')}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ─── MODAL SYSTEM ────────────────────────────────────────── */
+function ModalSystem({modal, onClose, onPlayTrack}) {
+  const {type, data} = modal;
+  const {t} = useLang();
+
+  // Backdrop
+  const Backdrop = ({children, full=false}) => (
+    <div onClick={onClose} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.65)',zIndex:200,display:'flex',
+      flexDirection:'column',justifyContent:full?'flex-start':'flex-end',backdropFilter:'blur(4px)'}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:full?A.bg:A.surface,border:`1px solid ${A.glassBorder}`,
+        borderRadius:full?0:'24px 24px 0 0',maxHeight:full?'100%':'85%',overflow:'hidden',
+        display:'flex',flexDirection:'column',animation:full?'slideIn 0.28s ease':'slideInUp 0.28s ease'}}>
+        {children}
+      </div>
+    </div>
+  );
+
+  /* ── STORY VIEWER ── */
+  if (type === 'story') {
+    const {users, idx: initIdx} = data;
+    const StoryInner = () => {
+      const [si, setSi] = useState(initIdx||0);
+      const [paused, setPaused] = useState(false);
+      const [barPct, setBarPct] = useState(0);
+      const STORY_DUR = 5000;
+      const user = users[si];
+      useEffect(() => {
+        setBarPct(0);
+        if (paused) return;
+        const start = Date.now();
+        const iv = setInterval(() => {
+          const elapsed = Date.now() - start;
+          const pct = Math.min(100, (elapsed / STORY_DUR) * 100);
+          setBarPct(pct);
+          if (elapsed >= STORY_DUR) {
+            clearInterval(iv);
+            if (si < users.length - 1) setSi(s => s + 1);
+            else onClose();
+          }
+        }, 50);
+        return () => clearInterval(iv);
+      }, [si, paused]);
+      return (
+        <div style={{position:'absolute',inset:0,background:'#000',zIndex:200,
+          display:'flex',flexDirection:'column',animation:'fadeUp 0.2s ease'}}>
+          <div style={{position:'absolute',inset:0,backgroundImage:`url(https://picsum.photos/seed/story${si}/393/852)`,backgroundSize:'cover',backgroundPosition:'center'}}/>
+          <div style={{position:'absolute',inset:0,background:'linear-gradient(to bottom,rgba(0,0,0,0.55) 0%,transparent 30%,transparent 70%,rgba(0,0,0,0.7) 100%)'}}/>
+          {/* Progress bars */}
+          <div style={{position:'relative',zIndex:1,padding:'54px 12px 12px',display:'flex',gap:3}}>
+            {users.map((_,i)=>(
+              <div key={i} style={{flex:1,height:2.5,borderRadius:2,background:'rgba(255,255,255,0.3)',overflow:'hidden'}}>
+                <div style={{height:'100%',borderRadius:2,background:'#fff',
+                  width: i < si ? '100%' : i === si ? `${barPct}%` : '0%',
+                  transition: i === si ? 'none' : 'none'}}/>
+              </div>
+            ))}
+          </div>
+          {/* Header */}
+          <div style={{position:'relative',zIndex:1,display:'flex',alignItems:'center',gap:10,padding:'8px 16px'}}>
+            <img src={user.img} style={{width:36,height:36,borderRadius:18,objectFit:'cover',border:'2px solid #fff'}} alt=""/>
+            <span style={{color:'#fff',fontWeight:700,fontSize:14}}>{user.u}</span>
+            <span style={{color:'rgba(255,255,255,0.6)',fontSize:12,marginLeft:4}}>2dk</span>
+            <button onClick={e=>{e.stopPropagation();setPaused(p=>!p);}}
+              style={{marginLeft:'auto',background:'rgba(0,0,0,0.3)',border:'none',cursor:'pointer',
+                borderRadius:'50%',width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Ico n={paused?'play':'pause'} s={14} c="#fff"/>
+            </button>
+            <button onClick={onClose} style={{background:'rgba(0,0,0,0.3)',border:'none',cursor:'pointer',
+              borderRadius:'50%',width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Ico n="close" s={14} c="#fff"/>
+            </button>
+          </div>
+          {/* Tap zones */}
+          <div style={{position:'absolute',inset:0,display:'flex',zIndex:1}}>
+            <div style={{flex:1}} onClick={e=>{e.stopPropagation();si>0?setSi(si-1):onClose();}}/>
+            <div style={{flex:1}} onClick={e=>{e.stopPropagation();si<users.length-1?setSi(si+1):onClose();}}/>
+          </div>
+        </div>
+      );
+    };
+    return <StoryInner/>;
+  }
+
+  /* ── PLAYLIST DETAIL ── */
+  if (type === 'playlist') {
+    const pl = data;
+    return (
+      <Backdrop full>
+        <div style={{display:'flex',alignItems:'center',gap:12,padding:'52px 20px 16px',borderBottom:`1px solid ${A.border}`,flexShrink:0}}>
+          <button onClick={onClose} style={{background:A.surface,border:`1px solid ${A.border}`,borderRadius:'50%',width:34,height:34,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+            <Ico n="back" s={16} c={A.textSec}/>
+          </button>
+          <Cover src={pl.cover} size={44} radius={10}/>
+          <div style={{flex:1}}>
+            <div style={{color:A.text,fontSize:16,fontWeight:800,letterSpacing:-0.4}}>{pl.name}</div>
+            <div style={{color:A.textMut,fontSize:12}}>{pl.cnt} parça</div>
+          </div>
+          <button onClick={()=>{if(TRACKS.length>0){onPlayTrack(TRACKS[0]);onClose();}}}
+            style={{width:40,height:40,borderRadius:20,background:`linear-gradient(135deg,${A.primaryDeep},${A.primary})`,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 0 16px ${A.primaryGlow}`}}>
+            <Ico n="play" s={18} c="#fff"/>
+          </button>
+        </div>
+        <div style={{overflowY:'auto',flex:1,padding:'8px 0'}}>
+          {TRACKS.map((t,i) => (
+            <div key={t.id} onClick={()=>{onPlayTrack(t);onClose();}}
+              style={{display:'flex',alignItems:'center',padding:'10px 20px',gap:12,cursor:'pointer'}}>
+              <span style={{color:A.textGhost,fontSize:13,fontWeight:600,width:18,textAlign:'center'}}>{i+1}</span>
+              <Cover src={t.cover} size={46} radius={8}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{color:A.text,fontSize:14,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
+                <div style={{color:A.textMut,fontSize:12,marginTop:2}}>{t.artist}</div>
+              </div>
+              <span style={{color:A.textMut,fontSize:12}}>{t.dur}</span>
+            </div>
+          ))}
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── GENRE TRACKS ── */
+  if (type === 'genre') {
+    const g = data;
+    return (
+      <Backdrop full>
+        <div style={{position:'relative',height:140,flexShrink:0,background:`linear-gradient(135deg,${g.g[0]},${g.g[1]})`,display:'flex',alignItems:'flex-end',padding:'0 20px 16px'}}>
+          <div style={{position:'absolute',top:52,left:16}}>
+            <button onClick={onClose} style={{background:'rgba(0,0,0,0.3)',border:'none',borderRadius:'50%',width:34,height:34,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+              <Ico n="back" s={16} c="#fff"/>
+            </button>
+          </div>
+          <div>
+            <div style={{fontSize:28,marginBottom:4}}>{g.emoji}</div>
+            <div style={{color:'#fff',fontSize:22,fontWeight:800,letterSpacing:-0.5}}>{g.name}</div>
+            <div style={{color:'rgba(255,255,255,0.7)',fontSize:12}}>{TRACKS.length} parça</div>
+          </div>
+        </div>
+        <div style={{overflowY:'auto',flex:1,padding:'8px 0'}}>
+          {TRACKS.map((t,i) => (
+            <div key={t.id} onClick={()=>{onPlayTrack(t);onClose();}}
+              style={{display:'flex',alignItems:'center',padding:'10px 20px',gap:12,cursor:'pointer'}}>
+              <span style={{color:A.textGhost,fontSize:13,width:18,textAlign:'center'}}>{i+1}</span>
+              <Cover src={t.cover} size={46} radius={8}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{color:A.text,fontSize:14,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
+                <div style={{color:A.textMut,fontSize:12,marginTop:2}}>{t.artist}</div>
+              </div>
+              <span style={{color:A.textMut,fontSize:12}}>{t.dur}</span>
+            </div>
+          ))}
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── CHAT SCREEN ── */
+  if (type === 'chat') {
+    const user = data;
+    const CHATS = [
+      {me:false,text:'Yeni parça nasıl? 🎵',time:'14:22'},
+      {me:true, text:'Harika! Sence de değil mi?',time:'14:23'},
+      {me:false,text:'Kesinlikle 🔥 Beni de ekle çalma listesine',time:'14:25'},
+      {me:true, text:'Tamam ekliyorum 😄',time:'14:26'},
+      {me:false,text:user.msg,time:user.time},
+    ];
+    const [msg, setMsg] = useState('');
+    const [msgs, setMsgs] = useState(CHATS);
+    return (
+      <Backdrop full>
+        <div style={{display:'flex',alignItems:'center',gap:12,padding:'52px 16px 14px',borderBottom:`1px solid ${A.border}`,flexShrink:0}}>
+          <button onClick={onClose} style={{background:A.surface,border:`1px solid ${A.border}`,borderRadius:'50%',width:34,height:34,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+            <Ico n="back" s={16} c={A.textSec}/>
+          </button>
+          <img src={user.img} style={{width:36,height:36,borderRadius:18,objectFit:'cover'}} alt=""/>
+          <div style={{flex:1}}>
+            <div style={{color:A.text,fontSize:15,fontWeight:700}}>{user.u}</div>
+            <div style={{color:A.success,fontSize:11,fontWeight:500}}>● Çevrimiçi</div>
+          </div>
+          <button style={{background:'none',border:'none',cursor:'pointer',padding:6}}>
+            <Ico n="dot3" s={18} c={A.textSec}/>
+          </button>
+        </div>
+        <div style={{flex:1,overflowY:'auto',padding:'12px 16px',display:'flex',flexDirection:'column',gap:8}}>
+          {msgs.map((m,i) => (
+            <div key={i} style={{display:'flex',justifyContent:m.me?'flex-end':'flex-start'}}>
+              <div style={{maxWidth:'72%',padding:'10px 14px',borderRadius:m.me?'18px 18px 4px 18px':'18px 18px 18px 4px',
+                background:m.me?`linear-gradient(135deg,${A.primaryDeep},${A.primary})`:`${A.surface}`,
+                border:m.me?'none':`1px solid ${A.border}`}}>
+                <div style={{color:'#fff',fontSize:14,lineHeight:1.5}}>{m.text}</div>
+                <div style={{color:'rgba(255,255,255,0.5)',fontSize:10,marginTop:4,textAlign:m.me?'right':'left'}}>{m.time}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{padding:'10px 14px',borderTop:`1px solid ${A.border}`,display:'flex',gap:8,flexShrink:0}}>
+          <div style={{flex:1,display:'flex',alignItems:'center',background:A.inputBg,borderRadius:24,border:`1px solid ${A.border}`,padding:'0 14px'}}>
+            <input value={msg} onChange={e=>setMsg(e.target.value)}
+              onKeyDown={e=>{if(e.key==='Enter'&&msg.trim()){setMsgs(p=>[...p,{me:true,text:msg,time:'Şimdi'}]);setMsg('');}}}
+              placeholder="Mesaj yaz…"
+              style={{flex:1,background:'none',border:'none',outline:'none',color:A.text,fontSize:14,padding:'10px 0',fontFamily:"'Inter',system-ui,sans-serif"}}/>
+          </div>
+          <button onClick={()=>{if(msg.trim()){setMsgs(p=>[...p,{me:true,text:msg,time:'Şimdi'}]);setMsg('');}}}
+            style={{width:40,height:40,borderRadius:20,background:`linear-gradient(135deg,${A.primaryDeep},${A.primary})`,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Ico n="play" s={16} c="#fff"/>
+          </button>
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── PROFILE EDIT ── */
+  if (type === 'editProfile') {
+    const [bio, setBio] = useState('Electronic · Hip-Hop · Indie vibes 🌙');
+    const [username, setUsername] = useState('musicfan2026');
+    return (
+      <Backdrop>
+        <div style={{padding:'20px 20px 8px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:`1px solid ${A.border}`,flexShrink:0}}>
+          <button onClick={onClose} style={{color:A.textSec,fontSize:15,fontWeight:600,background:'none',border:'none',cursor:'pointer'}}>İptal</button>
+          <span style={{color:A.text,fontSize:16,fontWeight:700}}>Profili Düzenle</span>
+          <button onClick={onClose} style={{color:A.primary,fontSize:15,fontWeight:700,background:'none',border:'none',cursor:'pointer'}}>Kaydet</button>
+        </div>
+        <div style={{overflowY:'auto',padding:'20px'}}>
+          <div style={{textAlign:'center',marginBottom:20}}>
+            <div style={{position:'relative',display:'inline-block'}}>
+              <img src="https://i.pravatar.cc/200?u=me" style={{width:80,height:80,borderRadius:40,objectFit:'cover',border:`3px solid ${A.primary}`}} alt=""/>
+              <div style={{position:'absolute',inset:0,borderRadius:40,background:'rgba(0,0,0,0.4)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+                <Ico n="plus" s={20} c="#fff"/>
+              </div>
+            </div>
+            <div style={{color:A.primary,fontSize:13,fontWeight:600,marginTop:8,cursor:'pointer'}}>Fotoğrafı Değiştir</div>
+          </div>
+          {[{label:'KULLANICI ADI',val:username,set:setUsername},{label:'BİYOGRAFİ',val:bio,set:setBio}].map(f=>(
+            <div key={f.label} style={{marginBottom:16}}>
+              <div style={{color:A.textSec,fontSize:11,fontWeight:600,letterSpacing:0.5,marginBottom:8}}>{f.label}</div>
+              <input value={f.val} onChange={e=>f.set(e.target.value)}
+                style={{width:'100%',background:A.inputBg,border:`1px solid ${A.border}`,borderRadius:12,padding:'12px 14px',
+                  color:A.text,fontSize:14,outline:'none',fontFamily:"'Inter',system-ui,sans-serif"}}/>
+            </div>
+          ))}
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── STATS ── */
+  if (type === 'stats') {
+    const statItems = [
+      {label:'Toplam Dinleme',val:'1.247 sa',ico:'music'},
+      {label:'En Sevilen Tür',val:'Electronic',ico:'eq'},
+      {label:'Bu Hafta',val:'14 sa 32dk',ico:'radio'},
+      {label:'Streak',val:'12 gün 🔥',ico:'heart'},
+    ];
+    return (
+      <Backdrop>
+        <div style={{padding:'20px 20px 8px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:`1px solid ${A.border}`,flexShrink:0}}>
+          <span style={{color:A.text,fontSize:16,fontWeight:700}}>İstatistiklerim</span>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer'}}><Ico n="close" s={20} c={A.textSec}/></button>
+        </div>
+        <div style={{padding:'16px',display:'flex',flexDirection:'column',gap:10}}>
+          {statItems.map(s=>(
+            <div key={s.label} style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',background:A.card,borderRadius:16,border:`1px solid ${A.border}`}}>
+              <div style={{width:42,height:42,borderRadius:12,background:A.primaryGlow,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <Ico n={s.ico} s={20} c={A.primary}/>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{color:A.textMut,fontSize:12,fontWeight:500}}>{s.label}</div>
+                <div style={{color:A.text,fontSize:18,fontWeight:800,letterSpacing:-0.5,marginTop:2}}>{s.val}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── SHARE ── */
+  if (type === 'share') {
+    const item = data;
+    return (
+      <Backdrop>
+        <div style={{padding:'20px',borderBottom:`1px solid ${A.border}`,display:'flex',gap:12,alignItems:'center',flexShrink:0}}>
+          <Cover src={item?.cover||item?.img} size={52} radius={10}/>
+          <div>
+            <div style={{color:A.text,fontSize:15,fontWeight:700}}>{item?.title||item?.u}</div>
+            <div style={{color:A.textMut,fontSize:12,marginTop:2}}>{item?.artist||'Profil'}</div>
+          </div>
+        </div>
+        <div style={{padding:'16px',display:'flex',gap:14,justifyContent:'center',flexWrap:'wrap'}}>
+          {[{label:'WhatsApp',emoji:'💬'},{label:'Instagram',emoji:'📸'},{label:'Twitter',emoji:'🐦'},{label:'Kopyala',emoji:'🔗'}].map(s=>(
+            <div key={s.label} onClick={onClose} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8,cursor:'pointer',width:68}}>
+              <div style={{width:56,height:56,borderRadius:18,background:A.surfaceHigh,border:`1px solid ${A.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24}}>
+                {s.emoji}
+              </div>
+              <span style={{color:A.textSec,fontSize:11,fontWeight:600}}>{s.label}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{padding:'0 16px 20px'}}>
+          <button onClick={onClose} style={{width:'100%',padding:14,borderRadius:14,background:A.surface,border:`1px solid ${A.border}`,color:A.textSec,fontSize:15,fontWeight:600,cursor:'pointer',fontFamily:"'Inter',system-ui,sans-serif"}}>İptal</button>
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── SETTINGS SUB PAGE ── */
+  if (type === 'settingPage') {
+    const {title, items: pageItems} = data;
+    const SettingPageInner = () => {
+      const {lang: currentLang, setLang: globalSetLang} = useLang();
+      const [states, setStates] = useState(() => {
+        const s = {};
+        pageItems.forEach((item,i) => { if (item.toggle !== undefined) s[i] = item.toggle; });
+        return s;
+      });
+      const [langModal, setLangModal] = useState(false);
+      const currentLangObj = LANGUAGES.find(l=>l.code===currentLang)||LANGUAGES[0];
+      const [selectedLang, setSelectedLang] = useState(currentLangObj.name);
+      const [langSearch, setLangSearch] = useState('');
+      const toggle = i => setStates(p => ({...p, [i]: !p[i]}));
+      const filteredLangs = LANGUAGES.filter(l =>
+        l.name.toLowerCase().includes(langSearch.toLowerCase()) ||
+        l.flag.includes(langSearch)
+      );
+      return (
+        <Backdrop full>
+          <div style={{display:'flex',alignItems:'center',gap:12,padding:'52px 20px 16px',borderBottom:`1px solid ${A.border}`,flexShrink:0}}>
+            <button onClick={onClose} style={{background:A.surface,border:`1px solid ${A.border}`,borderRadius:'50%',width:34,height:34,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+              <Ico n="back" s={16} c={A.textSec}/>
+            </button>
+            <div style={{color:A.text,fontSize:18,fontWeight:800,letterSpacing:-0.5}}>{title}</div>
+          </div>
+          <div style={{overflowY:'auto',padding:'12px 20px',display:'flex',flexDirection:'column',gap:8,flex:1}}>
+            {pageItems.map((item,i)=>{
+              const isOn = states[i];
+              const isDil = item.isDilRow === true;
+              return (
+                <div key={i} onClick={isDil ? ()=>setLangModal(true) : (item.toggle!==undefined ? ()=>toggle(i) : undefined)}
+                  style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',
+                    background:A.card,borderRadius:14,border:`1px solid ${A.border}`,cursor:'pointer',
+                    transition:'opacity 0.15s', userSelect:'none'}}>
+                  <div>
+                    <div style={{color:A.text,fontSize:14,fontWeight:600}}>{item.label}</div>
+                    {item.sub && <div style={{color:A.textMut,fontSize:11,marginTop:2}}>{item.sub}</div>}
+                  </div>
+                  {item.toggle !== undefined
+                    ? <div style={{width:46,height:26,borderRadius:13,background:isOn?A.primary:A.borderLight,
+                        position:'relative',cursor:'pointer',transition:'background 0.25s',flexShrink:0,
+                        boxShadow:isOn?`0 0 10px ${A.primaryGlow}`:'none'}}>
+                        <div style={{position:'absolute',top:3,left:isOn?23:3,width:20,height:20,borderRadius:10,
+                          background:'#fff',transition:'left 0.25s',boxShadow:'0 1px 4px rgba(0,0,0,0.3)'}}/>
+                      </div>
+                    : isDil
+                      ? <div style={{display:'flex',alignItems:'center',gap:6}}>
+                          <span style={{color:A.textSec,fontSize:13,fontWeight:500}}>{selectedLang}</span>
+                          <span style={{color:A.textMut,fontSize:13}}>›</span>
+                        </div>
+                      : <span style={{color:item.val?A.textSec:A.textMut,fontSize:13}}>{item.val||'›'}</span>}
+                </div>
+              );
+            })}
+          </div>
+          {/* Language Picker Modal */}
+          {langModal && (
+            <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(8px)',
+              display:'flex',flexDirection:'column',zIndex:100,animation:'fadeIn 0.2s'}}>
+              <div style={{background:A.surface,borderRadius:'24px 24px 0 0',marginTop:'auto',
+                maxHeight:'80%',display:'flex',flexDirection:'column',border:`1px solid ${A.border}`}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+                  padding:'20px 20px 12px',borderBottom:`1px solid ${A.border}`,flexShrink:0}}>
+                  <div style={{color:A.text,fontSize:17,fontWeight:800}}>{t('selectLang')}</div>
+                  <button onClick={()=>setLangModal(false)} style={{background:A.card,border:'none',borderRadius:'50%',
+                    width:30,height:30,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <Ico n="close" s={14} c={A.textSec}/>
+                  </button>
+                </div>
+                <div style={{padding:'12px 16px',flexShrink:0}}>
+                  <input value={langSearch} onChange={e=>setLangSearch(e.target.value)}
+                    placeholder={t('langSearch')} style={{width:'100%',background:A.card,border:`1px solid ${A.border}`,
+                      borderRadius:12,padding:'10px 14px',color:A.text,fontSize:14,outline:'none',
+                      fontFamily:'inherit',boxSizing:'border-box'}}/>
+                </div>
+                <div style={{overflowY:'auto',padding:'0 16px 24px',flex:1}}>
+                  {filteredLangs.map(l => (
+                    <div key={l.code} onClick={()=>{setSelectedLang(l.name);globalSetLang(l.code);setLangModal(false);setLangSearch('');onClose();}}
+                      style={{display:'flex',alignItems:'center',gap:14,padding:'13px 12px',
+                        borderRadius:12,cursor:'pointer',marginBottom:4,
+                        background:selectedLang===l.name?A.primaryGlow:'transparent',
+                        border:`1px solid ${selectedLang===l.name?A.primary:'transparent'}`,
+                        transition:'all 0.15s'}}>
+                      <span style={{fontSize:24}}>{l.flag}</span>
+                      <div style={{flex:1}}>
+                        <div style={{color:A.text,fontSize:14,fontWeight:selectedLang===l.name?700:500}}>{l.name}</div>
+                        <div style={{color:A.textMut,fontSize:11}}>{l.code.toUpperCase()}</div>
+                      </div>
+                      {selectedLang===l.name && <Ico n="check" s={16} c={A.primary}/>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </Backdrop>
+      );
+    };
+    return <SettingPageInner/>;
+  }
+
+  /* ── NOTIFICATIONS ── */
+  if (type === 'notifications') {
+    const NOTIFS = [
+      {ico:'user',  color:'#A78BFA',msg:'DJ Aurora seni takip etmeye başladı',time:'5 dk',img:'https://i.pravatar.cc/60?u=dj1'},
+      {ico:'heart', color:'#F472B6',msg:'beatmaker99 paylaşımını beğendi',time:'12 dk',img:'https://i.pravatar.cc/60?u=bm2'},
+      {ico:'music', color:'#38BDF8',msg:'The Midnight yeni albüm yayınladı: "Heroes"',time:'1 sa',img:'https://picsum.photos/seed/alb/60/60'},
+      {ico:'mail',  color:'#34D399',msg:'melodica_tr sana mesaj attı',time:'2 sa',img:'https://i.pravatar.cc/60?u=ml3'},
+      {ico:'eq',    color:'#FBBF24',msg:'Haftalık keşif listeniz güncellendi',time:'1 gün',img:'https://picsum.photos/seed/disc/60/60'},
+      {ico:'user',  color:'#A78BFA',msg:'techno.vibes ve 2 kişi daha takip etti',time:'1 gün',img:'https://i.pravatar.cc/60?u=tv4'},
+      {ico:'heart', color:'#F472B6',msg:'Paylaşımın 142 beğeni aldı 🔥',time:'2 gün',img:'https://picsum.photos/seed/post3/60/60'},
+    ];
+    return (
+      <Backdrop>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'20px 20px 14px',borderBottom:`1px solid ${A.border}`,flexShrink:0}}>
+          <span style={{color:A.text,fontSize:17,fontWeight:800}}>{t('notifTitle')}</span>
+          <div style={{display:'flex',gap:8}}>
+            <button style={{color:A.primary,fontSize:13,fontWeight:600,background:'none',border:'none',cursor:'pointer'}}>Tümünü Oku</button>
+            <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer'}}><Ico n="close" s={18} c={A.textSec}/></button>
+          </div>
+        </div>
+        <div style={{overflowY:'auto',flex:1}}>
+          {NOTIFS.map((n,i)=>(
+            <div key={i} onClick={onClose} style={{display:'flex',gap:12,padding:'14px 20px',cursor:'pointer',borderBottom:`1px solid ${A.borderLight}`,
+              background:i<3?`rgba(167,139,250,0.04)`:'transparent'}}>
+              <div style={{position:'relative',flexShrink:0}}>
+                <img src={n.img} style={{width:46,height:46,borderRadius:23,objectFit:'cover'}} alt=""/>
+                <div style={{position:'absolute',bottom:-2,right:-2,width:20,height:20,borderRadius:10,background:n.color,display:'flex',alignItems:'center',justifyContent:'center',border:`2px solid ${A.bg}`}}>
+                  <Ico n={n.ico} s={10} c="#fff"/>
+                </div>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{color:i<3?A.text:A.textSec,fontSize:13,fontWeight:i<3?600:400,lineHeight:1.5}}>{n.msg}</div>
+                <div style={{color:A.textMut,fontSize:11,marginTop:4}}>{n.time} önce</div>
+              </div>
+              {i<3 && <div style={{width:8,height:8,borderRadius:4,background:A.primary,flexShrink:0,marginTop:6}}/>}
+            </div>
+          ))}
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── TRACK OPTIONS (3-dot) ── */
+  if (type === 'trackOptions') {
+    const track = data;
+    const opts = [
+      {ico:'add',    label:'Sıraya Ekle',         action:()=>onClose()},
+      {ico:'plus',   label:'Çalma Listesine Ekle', action:()=>{}},
+      {ico:'user',   label:'Sanatçıya Git',         action:()=>onClose()},
+      {ico:'share',  label:'Paylaş',               action:()=>{}},
+      {ico:'music',  label:'Şarkı Sözleri',         action:()=>{}},
+      {ico:'eq',     label:'Benzer Parçalar',       action:()=>onClose()},
+      {ico:'lock',   label:'Şikayet Et',            action:()=>onClose()},
+    ];
+    return (
+      <Backdrop>
+        <div style={{padding:'16px 20px 12px',borderBottom:`1px solid ${A.border}`,display:'flex',gap:12,alignItems:'center',flexShrink:0}}>
+          <Cover src={track?.cover} size={48} radius={10}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{color:A.text,fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{track?.title||'Parça'}</div>
+            <div style={{color:A.textMut,fontSize:12,marginTop:2}}>{track?.artist||'Sanatçı'}</div>
+          </div>
+          <button onClick={()=>{}/*like*/} style={{background:'none',border:'none',cursor:'pointer'}}><Ico n="hearto" s={22} c={A.textSec}/></button>
+        </div>
+        <div style={{overflowY:'auto',paddingBottom:8}}>
+          {opts.map((o,i)=>(
+            <div key={i} onClick={()=>{o.action();if(o.label==='Paylaş'){}else if(o.label!=='Çalma Listesine Ekle')onClose();}}
+              style={{display:'flex',alignItems:'center',gap:14,padding:'14px 20px',cursor:'pointer',borderBottom:`1px solid ${A.borderLight}`}}>
+              <div style={{width:36,height:36,borderRadius:10,background:A.surface,border:`1px solid ${A.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <Ico n={o.ico} s={17} c={A.textSec}/>
+              </div>
+              <span style={{color:A.text,fontSize:15,fontWeight:500}}>{o.label}</span>
+            </div>
+          ))}
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── ADD TO PLAYLIST ── */
+  if (type === 'addToPlaylist') {
+    const track = data;
+    const [added, setAdded] = useState(null);
+    return (
+      <Backdrop>
+        <div style={{padding:'20px 20px 14px',borderBottom:`1px solid ${A.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+          <span style={{color:A.text,fontSize:16,fontWeight:800}}>Çalma Listesi Seç</span>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer'}}><Ico n="close" s={18} c={A.textSec}/></button>
+        </div>
+        <div style={{overflowY:'auto',flex:1,padding:'8px 0'}}>
+          <div onClick={()=>{setAdded('new');setTimeout(onClose,600);}}
+            style={{display:'flex',alignItems:'center',gap:14,padding:'12px 20px',cursor:'pointer',borderBottom:`1px solid ${A.borderLight}`}}>
+            <div style={{width:52,height:52,borderRadius:12,background:`linear-gradient(135deg,${A.primaryDeep},${A.primary})`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Ico n="plus" s={24} c="#fff"/>
+            </div>
+            <span style={{color:A.primary,fontSize:15,fontWeight:700}}>Yeni Liste Oluştur</span>
+          </div>
+          {PLAYLISTS.map(pl=>(
+            <div key={pl.id} onClick={()=>{setAdded(pl.id);setTimeout(onClose,600);}}
+              style={{display:'flex',alignItems:'center',gap:14,padding:'12px 20px',cursor:'pointer',
+                background:added===pl.id?A.primaryGlow:'transparent',transition:'background 0.2s',borderBottom:`1px solid ${A.borderLight}`}}>
+              <Cover src={pl.cover} size={52} radius={10}/>
+              <div style={{flex:1}}>
+                <div style={{color:A.text,fontSize:14,fontWeight:600}}>{pl.name}</div>
+                <div style={{color:A.textMut,fontSize:12,marginTop:2}}>{pl.cnt} parça</div>
+              </div>
+              {added===pl.id && <Ico n="heart" s={20} c={A.primary}/>}
+            </div>
+          ))}
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── POST DETAIL ── */
+  if (type === 'postDetail') {
+    const {idx} = data;
+    const [liked, setLiked] = useState(false);
+    const [cmt, setCmt] = useState('');
+    const [cmts, setCmts] = useState([
+      {u:'djaurora',img:'https://i.pravatar.cc/40?u=dj1',text:'Harika kare! 🔥',time:'3 dk'},
+      {u:'beatmaker99',img:'https://i.pravatar.cc/40?u=bm2',text:'Çok güzel vibe 💜',time:'7 dk'},
+      {u:'melodica_tr',img:'https://i.pravatar.cc/40?u=ml3',text:'Bu şarkı bu kadar yakışmaz 😭',time:'14 dk'},
+    ]);
+    const likes = 142 + (liked?1:0);
+    return (
+      <Backdrop full>
+        <div style={{display:'flex',alignItems:'center',gap:12,padding:'52px 16px 14px',borderBottom:`1px solid ${A.border}`,flexShrink:0}}>
+          <button onClick={onClose} style={{background:A.surface,border:`1px solid ${A.border}`,borderRadius:'50%',width:34,height:34,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+            <Ico n="back" s={16} c={A.textSec}/>
+          </button>
+          <img src="https://i.pravatar.cc/40?u=me" style={{width:34,height:34,borderRadius:17,objectFit:'cover'}} alt=""/>
+          <div style={{flex:1}}>
+            <div style={{color:A.text,fontSize:14,fontWeight:700}}>musicfan2026</div>
+          </div>
+          <button style={{background:'none',border:'none',cursor:'pointer'}}><Ico n="dot3" s={18} c={A.textSec}/></button>
+        </div>
+        <div style={{overflowY:'auto',flex:1}}>
+          <img src={`https://picsum.photos/seed/post${idx}/393/393`} style={{width:'100%',aspectRatio:'1',objectFit:'cover',display:'block'}} alt=""/>
+          <div style={{display:'flex',gap:16,padding:'12px 16px'}}>
+            <button onClick={()=>setLiked(l=>!l)} style={{background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+              <Ico n={liked?'heart':'hearto'} s={26} c={liked?A.accent:A.text}/>
+              <span style={{color:A.textSec,fontSize:12,fontWeight:600}}>{likes}</span>
+            </button>
+            <button style={{background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+              <Ico n="add" s={26} c={A.text}/>
+              <span style={{color:A.textSec,fontSize:12,fontWeight:600}}>{cmts.length}</span>
+            </button>
+            <button style={{background:'none',border:'none',cursor:'pointer',marginLeft:'auto'}}>
+              <Ico n="share" s={26} c={A.text}/>
+            </button>
+          </div>
+          <div style={{padding:'0 16px 8px'}}>
+            <span style={{color:A.text,fontSize:13,fontWeight:700}}>musicfan2026 </span>
+            <span style={{color:A.textSec,fontSize:13}}>Müzik ve yaşam. 🎵 #{['electronic','hiphop','indie','lofi','beats'][idx%5]}</span>
+          </div>
+          {cmts.map((c,i)=>(
+            <div key={i} style={{display:'flex',gap:10,padding:'8px 16px'}}>
+              <img src={c.img} style={{width:32,height:32,borderRadius:16,objectFit:'cover',flexShrink:0}} alt=""/>
+              <div style={{flex:1}}>
+                <span style={{color:A.text,fontSize:13,fontWeight:700}}>{c.u} </span>
+                <span style={{color:A.textSec,fontSize:13}}>{c.text}</span>
+                <div style={{color:A.textMut,fontSize:11,marginTop:4}}>{c.time} önce</div>
+              </div>
+              <button style={{background:'none',border:'none',cursor:'pointer',alignSelf:'center'}}><Ico n="hearto" s={14} c={A.textMut}/></button>
+            </div>
+          ))}
+        </div>
+        <div style={{padding:'10px 14px',borderTop:`1px solid ${A.border}`,display:'flex',gap:8,flexShrink:0}}>
+          <img src="https://i.pravatar.cc/32?u=me" style={{width:32,height:32,borderRadius:16,objectFit:'cover'}} alt=""/>
+          <div style={{flex:1,display:'flex',alignItems:'center',background:A.inputBg,borderRadius:20,border:`1px solid ${A.border}`,padding:'0 14px'}}>
+            <input value={cmt} onChange={e=>setCmt(e.target.value)}
+              onKeyDown={e=>{if(e.key==='Enter'&&cmt.trim()){setCmts(p=>[...p,{u:'musicfan2026',img:'https://i.pravatar.cc/40?u=me',text:cmt,time:'Şimdi'}]);setCmt('');}}}
+              placeholder="Yorum yaz…"
+              style={{flex:1,background:'none',border:'none',outline:'none',color:A.text,fontSize:13,padding:'9px 0',fontFamily:"'Inter',system-ui,sans-serif"}}/>
+            {cmt && <button onClick={()=>{if(cmt.trim()){setCmts(p=>[...p,{u:'musicfan2026',img:'https://i.pravatar.cc/40?u=me',text:cmt,time:'Şimdi'}]);setCmt('');}}}
+              style={{background:'none',border:'none',cursor:'pointer',color:A.primary,fontWeight:700,fontSize:13}}>Gönder</button>}
+          </div>
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── USER PROFILE ── */
+  if (type === 'userProfile') {
+    const user = data;
+    const [following, setFollowing] = useState(false);
+    return (
+      <Backdrop full>
+        <div style={{display:'flex',alignItems:'center',gap:12,padding:'52px 16px 14px',borderBottom:`1px solid ${A.border}`,flexShrink:0}}>
+          <button onClick={onClose} style={{background:A.surface,border:`1px solid ${A.border}`,borderRadius:'50%',width:34,height:34,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+            <Ico n="back" s={16} c={A.textSec}/>
+          </button>
+          <div style={{flex:1,color:A.text,fontSize:16,fontWeight:800}}>@{user?.u||user?.id}</div>
+          <button style={{background:'none',border:'none',cursor:'pointer'}}><Ico n="dot3" s={18} c={A.textSec}/></button>
+        </div>
+        <div style={{overflowY:'auto',flex:1}}>
+          <div style={{padding:'20px 20px 0',display:'flex',gap:20,alignItems:'center'}}>
+            <img src={user?.img||user?.cover||`https://i.pravatar.cc/80?u=${user?.id}`}
+              style={{width:72,height:72,borderRadius:36,objectFit:'cover',border:`3px solid ${A.primary}`}} alt=""/>
+            <div style={{flex:1,display:'flex',gap:12,justifyContent:'center'}}>
+              {[{v:'47',l:'Gönderi'},{v:user?.followers||'3.2K',l:'Takipçi'},{v:'211',l:'Takip'}].map(s=>(
+                <div key={s.l} style={{textAlign:'center'}}>
+                  <div style={{color:A.text,fontSize:18,fontWeight:800}}>{s.v}</div>
+                  <div style={{color:A.textMut,fontSize:11}}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{padding:'12px 20px'}}>
+            <div style={{color:A.text,fontSize:15,fontWeight:700}}>{user?.name||user?.u}</div>
+            <div style={{color:A.textSec,fontSize:13,lineHeight:1.5,marginTop:4}}>🎵 Müzik üreticisi & DJ · Electronic / Ambient</div>
+            <div style={{color:A.highlight,fontSize:13,marginTop:4}}>socialbeats.app/{user?.u}</div>
+          </div>
+          <div style={{display:'flex',gap:8,padding:'0 20px 16px'}}>
+            <button onClick={()=>setFollowing(f=>!f)} style={{flex:1,border:'none',borderRadius:12,padding:'10px 0',cursor:'pointer',fontWeight:700,fontSize:14,fontFamily:"'Inter',system-ui,sans-serif",
+              background:following?A.surface:`linear-gradient(135deg,${A.primaryDeep},${A.primary})`,
+              color:following?A.text:'#fff',border:following?`1px solid ${A.border}`:'none'}}>
+              {following?'Takip Ediliyor':'Takip Et'}
+            </button>
+            <button style={{flex:1,background:A.surface,border:`1px solid ${A.border}`,borderRadius:12,padding:'10px 0',color:A.text,fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:"'Inter',system-ui,sans-serif"}}>
+              Mesaj Gönder
+            </button>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:2,padding:'2px 0'}}>
+            {Array.from({length:9},(_,i)=>(
+              <div key={i} style={{aspectRatio:'1',overflow:'hidden'}}>
+                <img src={`https://picsum.photos/seed/${user?.u||'u'}post${i}/200/200`} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── QUEUE ── */
+  if (type === 'queue') {
+    const {queue:q, idx, currentTrack, onPlayTrack:playFn} = data;
+    return (
+      <Backdrop>
+        <div style={{padding:'20px 20px 14px',borderBottom:`1px solid ${A.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+          <span style={{color:A.text,fontSize:16,fontWeight:800}}>Oynatma Kuyruğu</span>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer'}}><Ico n="close" s={18} c={A.textSec}/></button>
+        </div>
+        <div style={{padding:'12px 20px 8px',flexShrink:0}}>
+          <div style={{color:A.textMut,fontSize:11,fontWeight:600,letterSpacing:0.5,marginBottom:8}}>ŞIMDI ÇALIYOR</div>
+          {currentTrack && (
+            <div style={{display:'flex',gap:12,alignItems:'center',padding:'10px 12px',background:A.primaryGlow,borderRadius:12,border:`1px solid ${A.primary}`}}>
+              <Cover src={currentTrack.cover} size={42} radius={8}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{color:A.text,fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{currentTrack.title}</div>
+                <div style={{color:A.textMut,fontSize:11}}>{currentTrack.artist}</div>
+              </div>
+              <Waveform active color={A.primary}/>
+            </div>
+          )}
+        </div>
+        <div style={{overflowY:'auto',flex:1,padding:'0 0 8px'}}>
+          <div style={{color:A.textMut,fontSize:11,fontWeight:600,letterSpacing:0.5,padding:'8px 20px'}}>SIRADAN SONRA</div>
+          {(q||TRACKS).filter(t=>t.id!==currentTrack?.id).map((t,i)=>(
+            <div key={t.id} onClick={()=>{playFn&&playFn(t);onClose();}}
+              style={{display:'flex',alignItems:'center',gap:12,padding:'10px 20px',cursor:'pointer',borderBottom:`1px solid ${A.borderLight}`}}>
+              <span style={{color:A.textGhost,fontSize:12,width:16}}>{i+1}</span>
+              <Cover src={t.cover} size={42} radius={8}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{color:A.text,fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
+                <div style={{color:A.textMut,fontSize:11}}>{t.artist}</div>
+              </div>
+              <span style={{color:A.textMut,fontSize:12}}>{t.dur}</span>
+            </div>
+          ))}
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── NEW MESSAGE ── */
+  if (type === 'newMessage') {
+    const [search, setSearch] = useState('');
+    const all = [...MOCK_USERS,{id:'u4',u:'musiclover',name:'Music Lover',img:'https://i.pravatar.cc/80?u=ml4',followers:'2.1K'}];
+    const filtered = search ? all.filter(u=>u.name.toLowerCase().includes(search.toLowerCase())||u.u.includes(search)) : all;
+    return (
+      <Backdrop>
+        <div style={{padding:'20px 20px 14px',borderBottom:`1px solid ${A.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+          <span style={{color:A.text,fontSize:16,fontWeight:800}}>Yeni Mesaj</span>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer'}}><Ico n="close" s={18} c={A.textSec}/></button>
+        </div>
+        <div style={{padding:'12px 20px',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,background:A.inputBg,borderRadius:12,border:`1px solid ${A.border}`,padding:'0 12px'}}>
+            <Ico n="search" s={15} c={A.textMut}/>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Kullanıcı ara…"
+              style={{flex:1,background:'none',border:'none',outline:'none',color:A.text,fontSize:14,padding:'11px 0',fontFamily:"'Inter',system-ui,sans-serif"}}/>
+          </div>
+        </div>
+        <div style={{overflowY:'auto',flex:1}}>
+          {filtered.map(u=>(
+            <div key={u.id} onClick={onClose} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 20px',cursor:'pointer',borderBottom:`1px solid ${A.borderLight}`}}>
+              <img src={u.img} style={{width:46,height:46,borderRadius:23,objectFit:'cover'}} alt=""/>
+              <div style={{flex:1}}>
+                <div style={{color:A.text,fontSize:14,fontWeight:700}}>{u.name}</div>
+                <div style={{color:A.textMut,fontSize:12}}>@{u.u} · {u.followers} takipçi</div>
+              </div>
+              <button style={{background:`linear-gradient(135deg,${A.primaryDeep},${A.primary})`,border:'none',borderRadius:20,padding:'7px 14px',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Mesaj</button>
+            </div>
+          ))}
+        </div>
+      </Backdrop>
+    );
+  }
+
+  /* ── STORY CREATE ── */
+  if (type === 'storyCreate') {
+    const StoryCreate = () => {
+      const {t} = useLang();
+      const [step, setStep] = useState('choose'); // 'choose' | 'camera' | 'text' | 'preview'
+      const [textVal, setTextVal] = useState('');
+      const [bgColor, setBgColor] = useState('#7C3AED');
+      const colors = ['#7C3AED','#F472B6','#38BDF8','#34D399','#F59E0B','#EF4444','#1E1B4B','#064E3B'];
+      const [mockImg, setMockImg] = useState(`https://picsum.photos/seed/story${Date.now()}/393/500`);
+      return (
+        <Backdrop full>
+          {/* Header */}
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'52px 20px 16px',flexShrink:0}}>
+            <button onClick={step==='choose'?onClose:()=>setStep('choose')}
+              style={{background:A.surface,border:`1px solid ${A.border}`,borderRadius:'50%',width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+              <Ico n="back" s={16} c={A.textSec}/>
+            </button>
+            <div style={{color:A.text,fontSize:18,fontWeight:800,fontFamily:A.fontDisplay,letterSpacing:-0.5}}>{t('createStory')}</div>
+            {step!=='choose'
+              ? <button onClick={onClose} style={{background:`linear-gradient(135deg,${A.primaryDeep},${A.primary})`,border:'none',borderRadius:20,padding:'8px 16px',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',boxShadow:`0 0 14px ${A.primaryGlow}`}}>Paylaş</button>
+              : <div style={{width:36}}/>}
+          </div>
+
+          {step === 'choose' && (
+            <div style={{flex:1,padding:'8px 20px 32px',display:'flex',flexDirection:'column',gap:12}}>
+              {/* Camera option */}
+              <div onClick={()=>setStep('camera')} style={{borderRadius:20,overflow:'hidden',position:'relative',cursor:'pointer',height:160}}>
+                <img src={mockImg} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
+                <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.4)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8}}>
+                  <div style={{width:56,height:56,borderRadius:28,background:'rgba(255,255,255,0.2)',backdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid rgba(255,255,255,0.5)'}}>
+                    <span style={{fontSize:24}}>📷</span>
+                  </div>
+                  <div style={{color:'#fff',fontSize:15,fontWeight:700}}>{t('camera')} / {t('gallery')}</div>
+                  <div style={{color:'rgba(255,255,255,0.7)',fontSize:12}}>Fotoğraf veya video seç</div>
+                </div>
+              </div>
+              {/* Text story option */}
+              <div onClick={()=>setStep('text')} style={{borderRadius:20,background:`linear-gradient(135deg,${A.primaryDeep},${A.primary})`,padding:24,cursor:'pointer',display:'flex',alignItems:'center',gap:16,boxShadow:`0 0 20px ${A.primaryGlow}`}}>
+                <div style={{width:48,height:48,borderRadius:24,background:'rgba(255,255,255,0.15)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  <span style={{fontSize:22}}>✏️</span>
+                </div>
+                <div>
+                  <div style={{color:'#fff',fontSize:16,fontWeight:700}}>{t('storyText')} Hikayesi</div>
+                  <div style={{color:'rgba(255,255,255,0.7)',fontSize:13,marginTop:2}}>Metin ve renk arka planı seç</div>
+                </div>
+                <Ico n="back" s={18} c="rgba(255,255,255,0.6)" style={{marginLeft:'auto',transform:'rotate(180deg)'}}/>
+              </div>
+              {/* Music story option */}
+              <div style={{borderRadius:20,background:A.card,border:`1px solid ${A.border}`,padding:24,display:'flex',alignItems:'center',gap:16,cursor:'pointer',opacity:0.7}}>
+                <div style={{width:48,height:48,borderRadius:24,background:A.accentGlow,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  <Ico n="music" s={22} c={A.accent}/>
+                </div>
+                <div>
+                  <div style={{color:A.text,fontSize:16,fontWeight:700}}>Müzik Hikayesi</div>
+                  <div style={{color:A.textMut,fontSize:13,marginTop:2}}>Şarkıyla paylaş <span style={{fontSize:11,color:A.accent}}>Yakında</span></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 'camera' && (
+            <div style={{flex:1,display:'flex',flexDirection:'column',padding:'0 20px 32px',gap:12}}>
+              <div style={{flex:1,borderRadius:20,overflow:'hidden',position:'relative'}}>
+                <img src={mockImg} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
+                <div style={{position:'absolute',top:12,right:12,display:'flex',flexDirection:'column',gap:8}}>
+                  {['✨','🎵','😊','🔥','💜'].map(emoji=>(
+                    <button key={emoji} style={{background:'rgba(0,0,0,0.5)',border:'none',borderRadius:'50%',width:36,height:36,fontSize:18,cursor:'pointer'}}>{emoji}</button>
+                  ))}
+                </div>
+                <div style={{position:'absolute',bottom:0,left:0,right:0,padding:16,background:'linear-gradient(to top,rgba(0,0,0,0.8),transparent)'}}>
+                  <div style={{color:'#fff',fontSize:13,fontWeight:600}}>Fotoğraf seçildi</div>
+                  <div style={{color:'rgba(255,255,255,0.6)',fontSize:11}}>Sticker veya yazı ekleyebilirsiniz</div>
+                </div>
+              </div>
+              <button onClick={()=>setMockImg(`https://picsum.photos/seed/s${Math.random()}/393/500`)}
+                style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:14,padding:'12px 16px',color:A.text,fontSize:14,fontWeight:600,cursor:'pointer'}}>
+                Farklı Fotoğraf Seç 🖼️
+              </button>
+            </div>
+          )}
+
+          {step === 'text' && (
+            <div style={{flex:1,display:'flex',flexDirection:'column',padding:'0 20px 32px',gap:12}}>
+              <div style={{flex:1,borderRadius:20,background:bgColor,display:'flex',alignItems:'center',justifyContent:'center',position:'relative',overflow:'hidden'}}>
+                <div style={{position:'absolute',inset:0,background:'radial-gradient(circle at 30% 70%,rgba(255,255,255,0.15),transparent)'}}/>
+                {textVal
+                  ? <div style={{color:'#fff',fontSize:22,fontWeight:800,textAlign:'center',padding:24,textShadow:'0 2px 12px rgba(0,0,0,0.5)',fontFamily:A.fontDisplay,letterSpacing:-0.5}}>{textVal}</div>
+                  : <div style={{color:'rgba(255,255,255,0.4)',fontSize:16,fontWeight:500}}>Bir şey yaz…</div>}
+              </div>
+              <input value={textVal} onChange={e=>setTextVal(e.target.value)} placeholder="Metninizi yazın…"
+                style={{background:A.inputBg,border:`1px solid ${A.border}`,borderRadius:14,padding:'13px 16px',color:A.text,fontSize:15,outline:'none',fontFamily:A.fontDisplay,fontWeight:600}}/>
+              <div style={{display:'flex',gap:8}}>
+                {colors.map(c=>(
+                  <div key={c} onClick={()=>setBgColor(c)} style={{width:32,height:32,borderRadius:16,background:c,cursor:'pointer',flexShrink:0,
+                    border:bgColor===c?'3px solid #fff':'2px solid transparent',transition:'border 0.15s'}}/>
+                ))}
+              </div>
+            </div>
+          )}
+        </Backdrop>
+      );
+    };
+    return <StoryCreate/>;
+  }
+
+  return null;
+}
+
+/* ─── TAB BAR ─────────────────────────────────────────────── */
+const TabBar = ({active, onChange}) => {
+  const tabs = [
+    {key:'home', on:'home', off:'homeo'},
+    {key:'library', on:'albums', off:'albumso'},
+    {key:'reels', on:'playc', off:'playCo'},
+    {key:'ar', on:'glasses', off:'glasses'},
+    {key:'rooms', on:'radio', off:'radio'},
+  ];
+  return (
+    <div style={{position:'absolute',left:0,right:0,bottom:0,height:60,background:A.tabBar,
+      borderTop:`1px solid ${A.border}`,display:'flex',alignItems:'center',zIndex:20}}>
+      {tabs.map(t => (
+        <button key={t.key} onClick={()=>onChange(t.key)}
+          style={{flex:1,border:'none',background:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:0,padding:'8px 0',position:'relative'}}>
+          <div style={{width:44,height:34,borderRadius:17,display:'flex',alignItems:'center',justifyContent:'center',
+            background:active===t.key?A.primaryGlow:'transparent',
+            transition:'background 0.2s',position:'relative'}}>
+            {active===t.key && <div style={{position:'absolute',inset:0,borderRadius:17,boxShadow:`0 0 14px ${A.primaryGlow}`,pointerEvents:'none'}}/>}
+            <Ico n={active===t.key?t.on:t.off} s={22} c={active===t.key?A.primary:A.textMut}/>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+};
+
+/* ─── DASHBOARD SCREEN ────────────────────────────────────── */
+const DashboardScreen = ({onNavigate, onPlayTrack, currentTrack, openModal}) => {
+  const {t} = useLang();
+  const [likedTracks, setLikedTracks] = useState({});
+  const toggleLike = id => setLikedTracks(p=>({...p,[id]:!p[id]}));
+  const allStories = [{id:'my',u:t('myStory'),img:'https://i.pravatar.cc/100?u=me',unviewed:false},...STORIES];
+  const ref = useRef(null);
+
+  return (
+    <div ref={ref} style={{flex:1,overflowY:'auto',paddingBottom:currentTrack?134:72}}>
+      {/* Ambient glow */}
+      <div style={{position:'fixed',top:-100,left:'50%',transform:'translateX(-50%)',width:300,height:300,
+        borderRadius:'50%',background:A.primaryGlow,filter:'blur(80px)',pointerEvents:'none',opacity:0.5,zIndex:0}}/>
+
+      {/* Header */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'52px 20px 20px',position:'relative',zIndex:10}}>
+        <div>
+          <div style={{color:A.primary,fontSize:11,fontWeight:700,letterSpacing:1.2,marginBottom:5,textTransform:'uppercase',fontFamily:A.fontBody}}>{t('greet')}</div>
+          <div style={{color:A.text,fontSize:30,fontWeight:800,letterSpacing:-1.2,lineHeight:1,fontFamily:A.fontDisplay}}>musicfan2026</div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <button onClick={()=>openModal('notifications',{})} style={{width:40,height:40,borderRadius:20,background:A.surface,border:`1px solid ${A.border}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}>
+            <Ico n="bell" s={18} c={A.textSec}/>
+            <div style={{position:'absolute',top:8,right:8,width:8,height:8,borderRadius:4,background:A.badge,border:`1.5px solid ${A.bg}`}}/>
+          </button>
+          <Avatar src="https://i.pravatar.cc/100?u=me" size={38} ring onClick={()=>onNavigate('profile')}/>
+        </div>
+      </div>
+
+      {/* Stories */}
+      <div style={{overflowX:'auto',display:'flex',gap:14,padding:'0 20px 4px',marginBottom:28,scrollbarWidth:'none',position:'relative',zIndex:1}}>
+        {allStories.map((s,i) => (
+          <div key={s.id}
+            onClick={()=> i===0 ? openModal('storyCreate',{}) : openModal('story',{users:allStories.slice(1),idx:i-1})}
+            style={{display:'flex',flexDirection:'column',alignItems:'center',gap:5,cursor:'pointer',flexShrink:0,width:64}}>
+            <Avatar src={s.img} size={62} ring={s.unviewed} badge={i===0}/>
+            <span style={{color:i===0?A.primary:A.textSec,fontSize:10,fontWeight:i===0?600:500,textAlign:'center',width:64,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.u}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Search Bar */}
+      <SearchBar onNavigate={onNavigate} onPlayTrack={onPlayTrack}/>
+
+      {/* Section: Featured */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0 20px',marginBottom:12,position:'relative',zIndex:1}}>
+        <span style={{color:A.text,fontSize:18,fontWeight:800,letterSpacing:-0.6,fontFamily:A.fontDisplay}}>{t('featured')}</span>
+      </div>
+      <div style={{overflowX:'auto',display:'flex',gap:12,padding:'0 20px 4px',marginBottom:28,scrollbarWidth:'none',position:'relative',zIndex:1}}>
+        {FEATURED.map(f => (
+          <div key={f.id} onClick={()=>onPlayTrack(f)} style={{flexShrink:0,width:256,height:180,borderRadius:20,overflow:'hidden',cursor:'pointer',position:'relative'}}>
+            <img src={f.cover} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
+            <div style={{position:'absolute',inset:0,background:`linear-gradient(to top, ${f.g[0]} 0%, ${f.g[1]}80 60%, transparent 100%)`}}/>
+            <div style={{position:'absolute',bottom:0,left:0,padding:'14px 16px'}}>
+              <Pill label={f.label} color={A.primaryDeep}/>
+              <div style={{color:'#fff',fontSize:20,fontWeight:800,letterSpacing:-0.5,marginTop:6}}>{f.title}</div>
+              <div style={{color:'rgba(255,255,255,0.7)',fontSize:13,marginTop:2}}>{f.artist}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Section: Recently Played */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0 20px',marginBottom:12,position:'relative',zIndex:1}}>
+        <span style={{color:A.text,fontSize:18,fontWeight:800,letterSpacing:-0.6,fontFamily:A.fontDisplay}}>{t('recents')}</span>
+        <span style={{color:A.primary,fontSize:12,fontWeight:600,cursor:'pointer',letterSpacing:0.1}}>{t('seeAll')}</span>
+      </div>
+      <div style={{overflowX:'auto',display:'flex',gap:14,padding:'0 20px 4px',marginBottom:28,scrollbarWidth:'none',position:'relative',zIndex:1}}>
+        {RECENTS.map(r => (
+          <div key={r.id} onClick={()=>onPlayTrack(r)} style={{flexShrink:0,width:88,cursor:'pointer',textAlign:'center'}}>
+            <img src={r.cover} style={{width:88,height:88,borderRadius:44,objectFit:'cover',marginBottom:8}} alt=""/>
+            <div style={{color:A.text,fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.title}</div>
+            <div style={{color:A.textMut,fontSize:11,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.artist}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Section: Discover People Banner */}
+      <div style={{margin:'0 20px 28px',position:'relative',zIndex:1}}>
+        <div onClick={()=>onNavigate('search')} style={{borderRadius:20,overflow:'hidden',cursor:'pointer',
+          background:`linear-gradient(135deg,${A.primaryDeep},${A.primary})`,padding:20,
+          display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{color:'#fff',fontSize:17,fontWeight:800,marginBottom:4}}>Müzik arkadaşlarını bul</div>
+            <div style={{color:'rgba(255,255,255,0.7)',fontSize:13,lineHeight:1.4}}>Aynı müzik zevkini paylaşanlarla bağlan</div>
+          </div>
+          <div style={{width:40,height:40,borderRadius:20,background:'rgba(255,255,255,0.15)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <span style={{color:'#fff',fontSize:18}}>→</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Section: Genres */}
+      <div style={{padding:'0 20px',marginBottom:14,position:'relative',zIndex:1}}>
+        <span style={{color:A.text,fontSize:18,fontWeight:800,letterSpacing:-0.6,fontFamily:A.fontDisplay}}>{t('discover')}</span>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,padding:'0 20px',marginBottom:28,position:'relative',zIndex:1}}>
+        {GENRES.map(g => (
+          <div key={g.id} onClick={()=>openModal('genre',g)} style={{borderRadius:16,overflow:'hidden',cursor:'pointer',height:80,
+            background:`linear-gradient(135deg,${g.g[0]},${g.g[1]})`,
+            display:'flex',flexDirection:'column',justifyContent:'flex-end',padding:'10px 14px'}}>
+            <div style={{fontSize:20,marginBottom:2}}>{g.emoji}</div>
+            <div style={{color:'#fff',fontSize:15,fontWeight:800,letterSpacing:-0.2}}>{g.name}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Section: Popular Tracks */}
+      <div style={{padding:'0 20px',marginBottom:14,position:'relative',zIndex:1}}>
+        <span style={{color:A.text,fontSize:16,fontWeight:700,letterSpacing:-0.4}}>Popüler Parçalar</span>
+      </div>
+      <div style={{position:'relative',zIndex:1}}>
+        {TRACKS.map((t,i) => (
+          <div key={t.id} onClick={()=>onPlayTrack(t)}
+            style={{display:'flex',alignItems:'center',padding:'10px 20px',gap:12,cursor:'pointer',
+              background:currentTrack?.id===t.id?A.primaryGlow:'transparent',transition:'background 0.2s'}}>
+            {currentTrack?.id===t.id
+              ? <Waveform active={true} color={A.primary}/>
+              : <span style={{color:A.textGhost,fontSize:13,fontWeight:600,width:22,textAlign:'center'}}>{t.n}</span>}
+            <Cover src={t.cover} size={50} radius={10}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{color:A.text,fontSize:14,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
+              <div style={{color:A.textMut,fontSize:12,marginTop:2}}>{t.artist}</div>
+            </div>
+            <span style={{color:A.textMut,fontSize:12}}>{t.dur}</span>
+            <button onClick={e=>{e.stopPropagation();toggleLike(t.id);}} style={{background:'none',border:'none',cursor:'pointer',padding:4}}>
+              <Ico n={likedTracks[t.id]?'heart':'hearto'} s={20} c={likedTracks[t.id]?A.accent:A.textMut}/>
+            </button>
+            <button onClick={e=>{e.stopPropagation();openModal('trackOptions',t);}} style={{background:'none',border:'none',cursor:'pointer',padding:4}}>
+              <Ico n="dot3" s={16} c={A.textMut}/>
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ─── LIBRARY SCREEN ──────────────────────────────────────── */
+const LibraryScreen = ({onPlayTrack, openModal}) => {
+  const {t} = useLang();
+  return (
+  <div style={{flex:1,overflowY:'auto',paddingBottom:72}}>
+    <div style={{padding:'52px 20px 24px'}}>
+      <div style={{color:A.text,fontSize:30,fontWeight:800,letterSpacing:-1.2,marginBottom:5,fontFamily:A.fontDisplay}}>{t('library')}</div>
+      <div style={{color:A.textMut,fontSize:13,fontWeight:400}}>{PLAYLISTS.length} {t('playlistOf')} · 128 {t('tracksOf')}</div>
+    </div>
+    <div style={{padding:'0 20px',display:'flex',flexDirection:'column',gap:12}}>
+      {PLAYLISTS.map(pl => (
+        <GlassCard key={pl.id} style={{display:'flex',alignItems:'center',gap:14,padding:14}} onClick={()=>openModal('playlist',pl)}>
+          <Cover src={pl.cover} size={60} radius={12}/>
+          <div style={{flex:1}}>
+            <div style={{color:A.text,fontSize:15,fontWeight:700}}>{pl.name}</div>
+            <div style={{color:A.textMut,fontSize:12,marginTop:3}}>{pl.cnt} parça</div>
+          </div>
+          <button onClick={e=>{e.stopPropagation();openModal('share',pl);}} style={{background:'none',border:'none',cursor:'pointer',padding:8}}>
+            <Ico n="dot3" s={18} c={A.textMut}/>
+          </button>
+        </GlassCard>
+      ))}
+    </div>
+  </div>
+  );
+};
+
+/* ─── SEARCH SCREEN ───────────────────────────────────────── */
+const SearchScreen = ({onPlayTrack, openModal}) => {
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    if (!q.trim()) { setResults([]); setError(null); return; }
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(async () => {
+      setLoading(true); setError(null);
+      try {
+        const res = await fetch(`${MUSIC_API}/search?q=${encodeURIComponent(q)}&limit=10`);
+        if (!res.ok) throw new Error('API Hatası');
+        const data = await res.json();
+        const tracks = (data.tracks||data.results||data||[]).map((t,i)=>({
+          id: t.id||`sr${i}`, title: t.title||t.name||'Bilinmiyor',
+          artist: t.artist||t.uploader||'Bilinmiyor',
+          cover: t.thumbnail||t.cover_url||`https://picsum.photos/seed/sr${i}/80/80`,
+          dur: t.duration_str||t.duration||'--',
+        }));
+        setResults(tracks);
+      } catch(e) {
+        setError('Sonuç bulunamadı, mock veriler gösteriliyor');
+        setResults(TRACKS);
+      } finally { setLoading(false); }
+    }, 500);
+    return () => clearTimeout(timerRef.current);
+  }, [q]);
+
+  return (
+    <div style={{flex:1,overflowY:'auto',paddingBottom:72}}>
+      <div style={{padding:'52px 20px 20px'}}>
+        <div style={{color:A.text,fontSize:26,fontWeight:800,letterSpacing:-1,marginBottom:16}}>Arama</div>
+        <div style={{display:'flex',alignItems:'center',gap:10,background:A.inputBg,borderRadius:14,
+          border:`1px solid ${A.glassBorder}`,padding:'12px 16px'}}>
+          <Ico n="search" s={18} c={A.textMut}/>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Şarkı, sanatçı, çalma listesi…"
+            style={{flex:1,background:'none',border:'none',outline:'none',color:A.text,fontSize:14,fontWeight:500,fontFamily:"'Inter',system-ui,sans-serif"}}/>
+          {q && <button onClick={()=>setQ('')} style={{background:'none',border:'none',cursor:'pointer',padding:2}}><Ico n="close" s={16} c={A.textMut}/></button>}
+        </div>
+      </div>
+
+      {/* Search Results */}
+      {q.trim() ? (
+        <div style={{padding:'0 20px'}}>
+          {error && <div style={{color:A.textMut,fontSize:12,marginBottom:12,padding:'8px 12px',background:A.surface,borderRadius:8}}>{error}</div>}
+          {loading
+            ? <div style={{textAlign:'center',padding:'32px 0',color:A.textMut,fontSize:14}}>Aranıyor…</div>
+            : results.length === 0
+              ? <div style={{textAlign:'center',padding:'32px 0',color:A.textMut,fontSize:14}}>Sonuç bulunamadı</div>
+              : results.map((t,i) => (
+                <div key={t.id} onClick={()=>onPlayTrack(t)}
+                  style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',cursor:'pointer',borderBottom:`1px solid ${A.borderLight}`}}>
+                  <span style={{color:A.textGhost,fontSize:12,width:20,textAlign:'center'}}>{i+1}</span>
+                  <Cover src={t.cover} size={46} radius={8}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{color:A.text,fontSize:14,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
+                    <div style={{color:A.textMut,fontSize:12,marginTop:2}}>{t.artist}</div>
+                  </div>
+                  <span style={{color:A.textMut,fontSize:12,flexShrink:0}}>{t.dur}</span>
+                </div>
+              ))
+          }
+        </div>
+      ) : (
+        <>
+          <div style={{padding:'0 20px',marginBottom:14}}>
+            <span style={{color:A.text,fontSize:16,fontWeight:700,letterSpacing:-0.4}}>Türlere Göz At</span>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,padding:'0 20px'}}>
+            {GENRES.map(g => (
+              <div key={g.id} onClick={()=>openModal('genre',g)} style={{borderRadius:16,overflow:'hidden',cursor:'pointer',height:88,
+                background:`linear-gradient(135deg,${g.g[0]},${g.g[1]})`,
+                display:'flex',flexDirection:'column',justifyContent:'flex-end',padding:'12px 16px'}}>
+                <div style={{fontSize:22,marginBottom:2}}>{g.emoji}</div>
+                <div style={{color:'#fff',fontSize:16,fontWeight:800}}>{g.name}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+/* ─── PROFILE SCREEN ──────────────────────────────────────── */
+const ProfileScreen = ({onNavigate, openModal, onLogout}) => {
+  const [tab, setTab] = useState('posts');
+  const stats = [{v:'247',l:'Gönderi'},{v:'12.4K',l:'Takipçi'},{v:'384',l:'Takip'}];
+  const actionBtns = [
+    {label:'Profili Düzenle', action:()=>openModal('editProfile',{})},
+    {label:'İstatistikler',   action:()=>openModal('stats',{})},
+    {label:'Paylaş',          action:()=>openModal('share',{u:'musicfan2026',img:'https://i.pravatar.cc/200?u=me'})},
+  ];
+  return (
+    <div style={{flex:1,overflowY:'auto',paddingBottom:72}}>
+      {/* Header */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'52px 20px 0'}}>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <Ico n="lock" s={13} c={A.text}/>
+          <span style={{color:A.text,fontSize:18,fontWeight:800,letterSpacing:-0.3}}>musicfan2026</span>
+        </div>
+        <div style={{display:'flex',gap:10}}>
+          <button onClick={()=>onNavigate('messages')} style={{width:36,height:36,borderRadius:18,background:A.surface,border:`1px solid ${A.border}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Ico n="add" s={18} c={A.text}/>
+          </button>
+          <button onClick={()=>onNavigate('settings')} style={{width:36,height:36,borderRadius:18,background:A.surface,border:`1px solid ${A.border}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Ico n="gear" s={17} c={A.text}/>
+          </button>
+        </div>
+      </div>
+
+      {/* Info row */}
+      <div style={{display:'flex',alignItems:'center',padding:'18px 20px',gap:24}}>
+        <div style={{position:'relative'}}>
+          <div style={{width:90,height:90,borderRadius:45,padding:2.5,background:`linear-gradient(135deg,${A.primary},${A.accent})`}}>
+            <div style={{width:'100%',height:'100%',borderRadius:45,padding:2,background:A.bg}}>
+              <img src="https://i.pravatar.cc/100?u=me" style={{width:'100%',height:'100%',borderRadius:40,objectFit:'cover'}} alt=""/>
+            </div>
+          </div>
+          <div style={{position:'absolute',bottom:0,right:0,width:26,height:26,borderRadius:13,
+            background:A.primary,border:`2.5px solid ${A.bg}`,display:'flex',alignItems:'center',justifyContent:'center',
+            boxShadow:`0 0 12px ${A.primaryGlow}`}}>
+            <Ico n="plus" s={13} c="#fff"/>
+          </div>
+        </div>
+        <div style={{flex:1,display:'flex',justifyContent:'space-around'}}>
+          <div style={{textAlign:'center',cursor:'pointer'}}>
+            <div style={{color:A.text,fontSize:20,fontWeight:800,letterSpacing:-0.5}}>0</div>
+            <div style={{color:A.textMut,fontSize:11,marginTop:3,fontWeight:500}}>Gönderi</div>
+          </div>
+          <div style={{textAlign:'center',cursor:'pointer'}}>
+            <div style={{color:A.text,fontSize:20,fontWeight:800,letterSpacing:-0.5}}>12.4K</div>
+            <div style={{color:A.textMut,fontSize:11,marginTop:3,fontWeight:500}}>Takipçi</div>
+          </div>
+          <div style={{textAlign:'center',cursor:'pointer'}}>
+            <div style={{color:A.text,fontSize:20,fontWeight:800,letterSpacing:-0.5}}>384</div>
+            <div style={{color:A.textMut,fontSize:11,marginTop:3,fontWeight:500}}>Takip</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bio */}
+      <div style={{padding:'0 20px 16px'}}>
+        <div style={{color:A.text,fontSize:16,fontWeight:700,marginBottom:5,fontFamily:A.fontDisplay,letterSpacing:-0.3}}>Music Fan 🎵</div>
+        <div style={{color:A.textSec,fontSize:13,lineHeight:1.7,fontWeight:400}}>Electronic · Hip-Hop · Indie vibes 🌙{'\n'}SocialBeats 2026 ✨</div>
+        <div style={{color:A.highlight,fontSize:13,fontWeight:600,marginTop:7,letterSpacing:-0.1}}>socialbeats.app/musicfan2026</div>
+      </div>
+
+      {/* Action buttons */}
+      <div style={{display:'flex',gap:8,padding:'0 20px 16px'}}>
+        {actionBtns.map(b => (
+          <button key={b.label} onClick={b.action} style={{flex:1,background:A.surface,border:`1px solid ${A.glassBorder}`,
+            borderRadius:12,padding:'9px 0',color:A.text,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:"'Inter',system-ui,sans-serif"}}>
+            {b.label}
+          </button>
+        ))}
+        <button onClick={()=>openModal('share',{u:'musicfan2026',img:'https://i.pravatar.cc/200?u=me'})}
+          style={{width:38,background:A.surface,border:`1px solid ${A.glassBorder}`,
+          borderRadius:12,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <Ico n="user" s={17} c={A.text}/>
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div style={{display:'flex',borderTop:`1px solid ${A.border}`,borderBottom:`1px solid ${A.border}`}}>
+        {['posts','reels','tagged'].map(t => (
+          <button key={t} onClick={()=>setTab(t)} style={{flex:1,border:'none',background:'none',cursor:'pointer',
+            padding:'14px 0',borderBottom:`2px solid ${tab===t?A.primary:'transparent'}`,
+            display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Ico n={t==='posts'?'eq':t==='reels'?'playc':'user'} s={22} c={tab===t?A.primary:A.textMut}/>
+          </button>
+        ))}
+      </div>
+
+      {/* Post grid */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:2,padding:'2px 0'}}>
+        {Array.from({length:9},(_,i)=>(
+          <div key={i} style={{aspectRatio:'1',overflow:'hidden',cursor:'pointer'}}>
+            <img src={`https://picsum.photos/seed/post${i}/200/200`} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ─── MESSAGES SCREEN ─────────────────────────────────────── */
+const MessagesScreen = ({openModal}) => {
+  const {t} = useLang();
+  return (
+  <div style={{flex:1,overflowY:'auto',paddingBottom:72}}>
+    <div style={{padding:'52px 20px 20px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <div style={{color:A.text,fontSize:30,fontWeight:800,letterSpacing:-1.2,fontFamily:A.fontDisplay}}>{t('messages')}</div>
+      <button style={{width:36,height:36,borderRadius:18,background:A.surface,border:`1px solid ${A.border}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <Ico n="add" s={18} c={A.text}/>
+      </button>
+    </div>
+    <div style={{padding:'0 20px',display:'flex',flexDirection:'column',gap:2}}>
+      {MESSAGES.map(m => (
+        <div key={m.id} onClick={()=>openModal('chat',m)} style={{display:'flex',alignItems:'center',gap:14,padding:'12px 0',cursor:'pointer',borderBottom:`1px solid ${A.borderLight}`}}>
+          <div style={{position:'relative',flexShrink:0}}>
+            <img src={m.img} style={{width:52,height:52,borderRadius:26,objectFit:'cover'}} alt=""/>
+            {m.unread>0 && <div style={{position:'absolute',bottom:0,right:0,width:18,height:18,borderRadius:9,background:A.primary,border:`2px solid ${A.bg}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <span style={{color:'#fff',fontSize:9,fontWeight:700}}>{m.unread}</span>
+            </div>}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
+              <span style={{color:A.text,fontSize:15,fontWeight:m.unread>0?700:600}}>{m.u}</span>
+              <span style={{color:A.textMut,fontSize:11}}>{m.time}</span>
+            </div>
+            <div style={{color:m.unread>0?A.textSec:A.textMut,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.msg}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+  );
+};
+
+/* ─── LOGIN SCREEN ────────────────────────────────────────── */
+const LoginScreen = ({onLogin, onRegister}) => {
+  const {t} = useLang();
+  const [email, setEmail] = useState('');
+  const [pass, setPass] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  return (
+    <div style={{flex:1,overflowY:'auto',background:A.bg,position:'relative'}}>
+      {/* Aurora bg */}
+      <div style={{position:'absolute',top:-60,left:-60,width:260,height:260,borderRadius:'50%',
+        background:'rgba(124,58,237,0.18)',filter:'blur(60px)',pointerEvents:'none'}}/>
+      <div style={{position:'absolute',top:80,right:-80,width:200,height:200,borderRadius:'50%',
+        background:'rgba(244,114,182,0.12)',filter:'blur(50px)',pointerEvents:'none'}}/>
+      <div style={{padding:'60px 24px 32px',position:'relative',zIndex:1}}>
+        {/* Logo */}
+        <div style={{textAlign:'center',marginBottom:36}}>
+          <div style={{display:'inline-flex',marginBottom:14,borderRadius:20,overflow:'hidden',
+            boxShadow:`0 0 30px ${A.primaryGlow}`,animation:'glow 2s ease-in-out infinite'}}>
+            <Grad colors={[A.primaryDeep,A.primary,A.accent]} style={{width:64,height:64,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Ico n="music" s={28} c="#fff"/>
+            </Grad>
+          </div>
+          <div style={{color:A.text,fontSize:32,fontWeight:800,letterSpacing:-1.5,marginBottom:7,fontFamily:A.fontDisplay}}>SocialBeats</div>
+          <div style={{color:A.textMut,fontSize:13,letterSpacing:0.2,fontWeight:400}}>{t('greet').replace(' ✦','')}{' ✦ 2026'}</div>
+        </div>
+
+        {/* Card */}
+        <div style={{background:A.card,border:`1px solid ${A.glassBorder}`,borderRadius:28,padding:24}}>
+          <div style={{color:A.text,fontSize:24,fontWeight:800,letterSpacing:-0.8,marginBottom:6,fontFamily:A.fontDisplay}}>{t('login')}</div>
+          <div style={{color:A.textMut,fontSize:13,marginBottom:24,lineHeight:1.65,fontWeight:400}}>{t('welcomeBack')}</div>
+
+          {/* Email */}
+          <div style={{marginBottom:16}}>
+            <div style={{color:A.textSec,fontSize:11,fontWeight:600,marginBottom:8,letterSpacing:0.5}}>{t('email').toUpperCase()}</div>
+            <div style={{display:'flex',alignItems:'center',background:A.inputBg,borderRadius:14,border:`1px solid ${A.inputBorder}`,padding:'0 14px',gap:10}}>
+              <Ico n="mail" s={17} c={A.textMut}/>
+              <input value={email} onChange={e=>setEmail(e.target.value)} placeholder={t('emailPh')}
+                style={{flex:1,background:'none',border:'none',outline:'none',color:A.text,fontSize:15,fontWeight:500,padding:'14px 0'}}/>
+            </div>
+          </div>
+
+          {/* Password */}
+          <div style={{marginBottom:20}}>
+            <div style={{color:A.textSec,fontSize:11,fontWeight:600,marginBottom:8,letterSpacing:0.5}}>{t('passwordLabel')}</div>
+            <div style={{display:'flex',alignItems:'center',background:A.inputBg,borderRadius:14,border:`1px solid ${A.inputBorder}`,padding:'0 14px',gap:10}}>
+              <Ico n="lock" s={17} c={A.textMut}/>
+              <input value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" type={showPass?'text':'password'}
+                style={{flex:1,background:'none',border:'none',outline:'none',color:A.text,fontSize:15,fontWeight:500,padding:'14px 0'}}/>
+              <button onClick={()=>setShowPass(p=>!p)} style={{background:'none',border:'none',cursor:'pointer',padding:4}}>
+                <Ico n="eye" s={17} c={A.textMut}/>
+              </button>
+            </div>
+          </div>
+
+          {/* Sign In button */}
+          <button onClick={onLogin}
+            style={{width:'100%',border:'none',borderRadius:16,padding:16,cursor:'pointer',
+              background:`linear-gradient(135deg,${A.primaryDeep},${A.primary})`,
+              color:'#fff',fontSize:16,fontWeight:700,letterSpacing:-0.2,
+              boxShadow:`0 6px 20px ${A.primaryGlow}`,fontFamily:"'Inter',system-ui,sans-serif"}}>
+            {t('loginBtn')}
+          </button>
+
+          {/* Divider */}
+          <div style={{display:'flex',alignItems:'center',gap:12,margin:'20px 0'}}>
+            <div style={{flex:1,height:1,background:A.border}}/>
+            <span style={{color:A.textMut,fontSize:12}}>{t('orWith')}</span>
+            <div style={{flex:1,height:1,background:A.border}}/>
+          </div>
+
+          {/* Google */}
+          <button onClick={onLogin} style={{width:'100%',border:`1px solid ${A.glassBorder}`,borderRadius:14,padding:14,cursor:'pointer',
+            background:A.inputBg,color:A.text,fontSize:15,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:10}}>
+            <span style={{fontWeight:800,fontSize:16,color:'#fff'}}>G</span>
+            {t('googleBtn')}
+          </button>
+
+          <div style={{textAlign:'center',marginTop:20}}>
+            <span style={{color:A.textMut,fontSize:13}}>{t('noAccount')} </span>
+            <span onClick={onRegister} style={{color:A.primary,fontWeight:700,cursor:'pointer',fontSize:13}}>{t('signUp')}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ─── SETTINGS SCREEN ─────────────────────────────────────── */
+const SettingsScreen = ({onNavigate, openModal, onLogout}) => {
+  const {t} = useLang();
+  const SETTING_PAGES = () => ({
+    account:   {title:t('sAccount'),  items:[{label:t('sUsername'),val:'musicfan2026'},{label:t('email'),val:'musicfan@example.com'},{label:t('sPhone'),val:'+90 555 123 4567'},{label:t('sChangePass'),val:'›'}]},
+    notifs:    {title:t('sNotifs'),   items:[{label:t('sPushNotifs'),toggle:true},{label:t('sEmailNotifs'),toggle:false},{label:t('sNewFollower'),toggle:true},{label:t('sLikes'),toggle:true},{label:t('messages'),toggle:true}]},
+    privacy:   {title:t('sPrivacy'), items:[{label:t('sPrivateAcc'),toggle:false},{label:t('sTwoFA'),toggle:true},{label:t('sSessions'),val:t('s3Devices')},{label:t('sDownloadData'),val:'›'}]},
+    musicq:    {title:t('sMusicQ'),  items:[{label:t('sStreamQ'),val:t('sStreamHigh')},{label:t('sDownloadQ'),val:t('sDownloadMax')},{label:t('sDataSave'),toggle:false},{label:t('sAutoQ'),toggle:true}]},
+    eq:        {title:t('sEq'),      items:[{label:t('sEq'),toggle:true},{label:t('sBassBoost'),toggle:true},{label:t('sNormalize'),toggle:false},{label:t('sNoisePrev'),toggle:false}]},
+    connected: {title:t('sConnected'),items:[{label:'Spotify',val:t('sConnectedVal')},{label:'Apple Music',val:t('sNotConnected')},{label:'YouTube Music',val:t('sNotConnected')},{label:'Last.fm',val:t('sConnectedVal')}]},
+    prefs:     {title:t('sPrefs'),   items:[{label:t('sDarkMode'),toggle:true},{label:t('sLangLabel'),val:'›',isDilRow:true},{label:t('sAnimations'),toggle:true},{label:t('sHaptic'),toggle:true}]},
+  });
+  const items = [
+    {icon:'user',  pageKey:'account',   label:t('sAccount'),   sub:t('sAccountSub')},
+    {icon:'bell',  pageKey:'notifs',    label:t('sNotifs'),    sub:t('sNotifSub')},
+    {icon:'lock',  pageKey:'privacy',   label:t('sPrivacy'),   sub:t('sPrivacySub')},
+    {icon:'sunny', pageKey:'prefs',     label:t('sPrefs'),     sub:t('sPrefsSub')},
+    {icon:'music', pageKey:'musicq',    label:t('sMusicQ'),    sub:t('sMusicQSub')},
+    {icon:'share', pageKey:'connected', label:t('sConnected'), sub:t('sConnSub')},
+    {icon:'cloud', pageKey:'prefs',     label:t('sPrivacy'),   sub:t('sPrivacySub')},
+  ];
+  return (
+    <div style={{flex:1,overflowY:'auto',paddingBottom:72}}>
+      <div style={{padding:'52px 20px 20px',display:'flex',alignItems:'center',gap:14}}>
+        <button onClick={()=>onNavigate('profile')} style={{background:A.surface,border:`1px solid ${A.border}`,borderRadius:18,width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+          <Ico n="back" s={18} c={A.textSec}/>
+        </button>
+        <div style={{color:A.text,fontSize:24,fontWeight:800,letterSpacing:-0.8,fontFamily:A.fontDisplay}}>{t('settings')}</div>
+      </div>
+
+      {/* Profile card */}
+      <div style={{margin:'0 20px 24px'}}>
+        <GlassCard style={{display:'flex',alignItems:'center',gap:14,padding:16}}>
+          <img src="https://i.pravatar.cc/200?u=me" style={{width:56,height:56,borderRadius:28,objectFit:'cover',border:`2px solid ${A.primary}`}} alt=""/>
+          <div style={{flex:1}}>
+            <div style={{color:A.text,fontSize:16,fontWeight:700}}>musicfan2026</div>
+            <div style={{color:A.textMut,fontSize:12,marginTop:2}}>musicfan@example.com</div>
+          </div>
+          <div style={{background:`linear-gradient(135deg,${A.primaryDeep},${A.primary})`,borderRadius:10,padding:'5px 12px'}}>
+            <span style={{color:'#fff',fontSize:11,fontWeight:700}}>PRO</span>
+          </div>
+        </GlassCard>
+      </div>
+
+      {/* Settings items */}
+      <div style={{padding:'0 20px',display:'flex',flexDirection:'column',gap:8}}>
+        {items.map((item,i) => (
+          <GlassCard key={i} style={{display:'flex',alignItems:'center',padding:16,gap:14}} onClick={()=>openModal('settingPage', SETTING_PAGES()[item.pageKey])}>
+            <div style={{width:40,height:40,borderRadius:12,background:A.primaryGlow,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Ico n={item.icon} s={19} c={A.primary}/>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{color:A.text,fontSize:15,fontWeight:600}}>{item.label}</div>
+              <div style={{color:A.textMut,fontSize:12,marginTop:2}}>{item.sub}</div>
+            </div>
+            <span style={{color:A.textMut,fontSize:18}}>›</span>
+          </GlassCard>
+        ))}
+      </div>
+
+      <div style={{padding:'24px 20px'}}>
+        <button onClick={onLogout} style={{width:'100%',background:'rgba(248,113,113,0.10)',border:`1px solid rgba(248,113,113,0.20)`,
+          borderRadius:14,padding:14,color:A.error,fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:"'Inter',system-ui,sans-serif"}}>
+          {t('logout')}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/* ─── LANGUAGES ───────────────────────────────────────────── */
+const LANGUAGES = [
+  {code:'tr',name:'Türkçe',flag:'🇹🇷'},{code:'en',name:'English',flag:'🇺🇸'},
+  {code:'de',name:'Deutsch',flag:'🇩🇪'},{code:'fr',name:'Français',flag:'🇫🇷'},
+  {code:'es',name:'Español',flag:'🇪🇸'},{code:'it',name:'Italiano',flag:'🇮🇹'},
+  {code:'pt',name:'Português',flag:'🇧🇷'},{code:'ru',name:'Русский',flag:'🇷🇺'},
+  {code:'ar',name:'العربية',flag:'🇸🇦'},{code:'zh',name:'中文',flag:'🇨🇳'},
+  {code:'ja',name:'日本語',flag:'🇯🇵'},{code:'ko',name:'한국어',flag:'🇰🇷'},
+  {code:'hi',name:'हिन्दी',flag:'🇮🇳'},{code:'bn',name:'বাংলা',flag:'🇧🇩'},
+  {code:'id',name:'Bahasa Indonesia',flag:'🇮🇩'},{code:'ms',name:'Bahasa Melayu',flag:'🇲🇾'},
+  {code:'th',name:'ภาษาไทย',flag:'🇹🇭'},{code:'vi',name:'Tiếng Việt',flag:'🇻🇳'},
+  {code:'nl',name:'Nederlands',flag:'🇳🇱'},{code:'pl',name:'Polski',flag:'🇵🇱'},
+  {code:'uk',name:'Українська',flag:'🇺🇦'},{code:'ur',name:'اردو',flag:'🇵🇰'},
+  {code:'ta',name:'தமிழ்',flag:'🇮🇳'},{code:'te',name:'తెలుగు',flag:'🇮🇳'},
+  {code:'ha',name:'Hausa',flag:'🇳🇬'},{code:'yo',name:'Yorùbá',flag:'🇳🇬'},
+  {code:'zu',name:'isiZulu',flag:'🇿🇦'},{code:'af',name:'Afrikaans',flag:'🇿🇦'},
+  {code:'fil',name:'Filipino',flag:'🇵🇭'},{code:'sw',name:'Kiswahili',flag:'🇰🇪'},
+  {code:'fa',name:'فارسی',flag:'🇮🇷'},{code:'ro',name:'Română',flag:'🇷🇴'},
+];
+
+/* ─── TRANSLATIONS (32 languages) ────────────────────────── */
+const TRANS = {
+  tr:{greet:'İyi akşamlar ✦',welcome:'Hoş geldin',featured:'Öne Çıkanlar',recents:'Son Dinlenenler',discover:'Keşfet',library:'Kütüphanem',messages:'Mesajlar',settings:'Ayarlar',searchMusic:'Şarkı, albüm, sanatçı ara…',searchUser:'Kullanıcı ara…',login:'Giriş Yap',register:'Kayıt Ol',nowPlaying:'Şimdi Çalıyor',seeAll:'Tümü →',email:'E-posta',password:'Şifre',name:'Ad Soyad',createStory:'Hikaye Oluştur',camera:'Kamera',gallery:'Galeri',storyText:'Metin',close:'Kapat',follow:'Takip Et',following:'Takip Ediliyor',editProfile:'Profili Düzenle',share:'Paylaş',stats:'İstatistikler',myStory:'Hikayen',addStory:'Hikaye ekle',playlistOf:'çalma listesi',tracksOf:'parça',welcomeBack:'Tekrar hoş geldin! Hesabına giriş yap.',sendMsg:'Gönder',typeMsg:'Mesaj yaz…',newMsg:'Yeni Mesaj',noResult:'Sonuç bulunamadı',
+    logout:'Çıkış Yap',passwordLabel:'ŞİFRE',loginBtn:'Giriş Yap',orWith:'veya şununla devam et',googleBtn:'Google ile devam et',noAccount:'Hesabın yok mu?',signUp:'Kayıt ol',forgotPass:'Şifremi unuttum?',rememberMe:'Beni hatırla',emailPh:'siz@ornek.com',
+    selectLang:'Dil Seçin',langSearch:'Dil ara...',notifTitle:'Bildirimler',
+    sAccount:'Hesap',sAccountSub:'Profil ve kişisel bilgiler',
+    sNotifs:'Bildirimler',sNotifSub:'Push, e-posta, uygulama içi',
+    sPrivacy:'Gizlilik ve Güvenlik',sPrivacySub:'2FA, oturumlar, veriler',
+    sMusicQ:'Müzik Kalitesi',sMusicQSub:'Yayın ve indirmeler',
+    sEq:'Ekolayzer',sEqSub:'Ses tercihleri',
+    sConnected:'Bağlı Uygulamalar',sConnSub:'Spotify, Apple Music…',
+    sPrefs:'Uygulama Tercihleri',sPrefsSub:'Tema, dil, görünüm',
+    sUsername:'Kullanıcı Adı',sPhone:'Telefon',sChangePass:'Şifreyi Değiştir',
+    sPushNotifs:'Anlık Bildirimler',sEmailNotifs:'E-posta Bildirimleri',sNewFollower:'Yeni Takipçi',sLikes:'Beğeniler',
+    sPrivateAcc:'Gizli Hesap',sTwoFA:'İki Faktörlü Doğrulama',sSessions:'Aktif Oturumlar',s3Devices:'3 cihaz',sDownloadData:'Veri İndir',
+    sStreamQ:'Yayın Kalitesi',sStreamHigh:'Yüksek (320kbps)',sDownloadQ:'İndirme Kalitesi',sDownloadMax:'En Yüksek',sDataSave:'Mobil Data Tasarrufu',sAutoQ:'Otomatik Kalite',
+    sBassBoost:'Bas Takviyesi',sNormalize:'Ses Normalleştirme',sNoisePrev:'Gürültü Önleme',
+    sConnectedVal:'Bağlı',sNotConnected:'Bağlı değil',
+    sDarkMode:'Karanlık Mod',sLangLabel:'Dil',sAnimations:'Animasyonlar',sHaptic:'Haptic Geri Bildirim',
+    regTitle:'Hesap Oluştur',regSub:'Müzik dünyasına katıl',regFullName:'AD SOYAD',regEmail:'E-POSTA',regPass:'ŞİFRE',regPassPh:'Min. 8 karakter',regBtn:'Kayıt Ol',regHaveAccount:'Zaten hesabın var mı?',regLogin:'Giriş Yap',regNamePh:'Ad Soyad',regEmailPh:'email@ornek.com',
+    modeMusic:'Müzik',modeUser:'Kullanıcı',followersLabel:'takipçi',followBtn:'Takip Et'},
+  en:{greet:'Good evening ✦',welcome:'Welcome',featured:'Featured',recents:'Recently Played',discover:'Discover',library:'My Library',messages:'Messages',settings:'Settings',searchMusic:'Search songs, albums, artists…',searchUser:'Search users…',login:'Sign In',register:'Sign Up',nowPlaying:'Now Playing',seeAll:'See All →',email:'Email',password:'Password',name:'Full Name',createStory:'Create Story',camera:'Camera',gallery:'Gallery',storyText:'Text',close:'Close',follow:'Follow',following:'Following',editProfile:'Edit Profile',share:'Share',stats:'Statistics',myStory:'Your Story',addStory:'Add story',playlistOf:'playlist',tracksOf:'tracks',welcomeBack:'Welcome back! Enter your details.',sendMsg:'Send',typeMsg:'Type a message…',newMsg:'New Message',noResult:'No results found',
+    logout:'Log Out',passwordLabel:'PASSWORD',loginBtn:'Sign In',orWith:'or continue with',googleBtn:'Continue with Google',noAccount:"Don't have an account?",signUp:'Sign up',forgotPass:'Forgot password?',rememberMe:'Remember me',emailPh:'you@example.com',
+    selectLang:'Select Language',langSearch:'Search language...',notifTitle:'Notifications',
+    sAccount:'Account',sAccountSub:'Profile and personal info',
+    sNotifs:'Notifications',sNotifSub:'Push, email, in-app',
+    sPrivacy:'Privacy & Security',sPrivacySub:'2FA, sessions, data',
+    sMusicQ:'Music Quality',sMusicQSub:'Streaming and downloads',
+    sEq:'Equalizer',sEqSub:'Audio preferences',
+    sConnected:'Connected Apps',sConnSub:'Spotify, Apple Music…',
+    sPrefs:'App Preferences',sPrefsSub:'Theme, language, appearance',
+    sUsername:'Username',sPhone:'Phone',sChangePass:'Change Password',
+    sPushNotifs:'Push Notifications',sEmailNotifs:'Email Notifications',sNewFollower:'New Follower',sLikes:'Likes',
+    sPrivateAcc:'Private Account',sTwoFA:'Two-Factor Auth',sSessions:'Active Sessions',s3Devices:'3 devices',sDownloadData:'Download Data',
+    sStreamQ:'Stream Quality',sStreamHigh:'High (320kbps)',sDownloadQ:'Download Quality',sDownloadMax:'Highest',sDataSave:'Mobile Data Saving',sAutoQ:'Auto Quality',
+    sBassBoost:'Bass Boost',sNormalize:'Sound Normalize',sNoisePrev:'Noise Prevention',
+    sConnectedVal:'Connected',sNotConnected:'Not connected',
+    sDarkMode:'Dark Mode',sLangLabel:'Language',sAnimations:'Animations',sHaptic:'Haptic Feedback',
+    regTitle:'Create Account',regSub:'Join the music world',regFullName:'FULL NAME',regEmail:'EMAIL',regPass:'PASSWORD',regPassPh:'Min. 8 characters',regBtn:'Sign Up',regHaveAccount:'Already have an account?',regLogin:'Sign In',regNamePh:'Full Name',regEmailPh:'email@example.com',
+    modeMusic:'Music',modeUser:'User',followersLabel:'followers',followBtn:'Follow'},
+  de:{greet:'Guten Abend ✦',welcome:'Willkommen',featured:'Empfohlen',recents:'Zuletzt gespielt',discover:'Entdecken',library:'Meine Bibliothek',messages:'Nachrichten',settings:'Einstellungen',searchMusic:'Songs, Alben, Künstler suchen…',searchUser:'Benutzer suchen…',login:'Anmelden',register:'Registrieren',nowPlaying:'Jetzt spielt',seeAll:'Alle →',email:'E-Mail',password:'Passwort',name:'Vollständiger Name',createStory:'Story erstellen',camera:'Kamera',gallery:'Galerie',storyText:'Text',close:'Schließen',follow:'Folgen',following:'Gefolgt',editProfile:'Profil bearbeiten',share:'Teilen',stats:'Statistiken',myStory:'Deine Story',addStory:'Story hinzufügen',playlistOf:'Playlist',tracksOf:'Titel',welcomeBack:'Willkommen zurück!',sendMsg:'Senden',typeMsg:'Nachricht schreiben…',newMsg:'Neue Nachricht',noResult:'Keine Ergebnisse'},
+  fr:{greet:'Bonsoir ✦',welcome:'Bienvenue',featured:'À la une',recents:'Joués récemment',discover:'Découvrir',library:'Ma bibliothèque',messages:'Messages',settings:'Paramètres',searchMusic:'Rechercher chansons, albums…',searchUser:'Rechercher des utilisateurs…',login:'Se connecter',register:"S'inscrire",nowPlaying:'En cours',seeAll:'Tout voir →',email:'E-mail',password:'Mot de passe',name:'Nom complet',createStory:'Créer une story',camera:'Appareil photo',gallery:'Galerie',storyText:'Texte',close:'Fermer',follow:'Suivre',following:'Abonné',editProfile:'Modifier le profil',share:'Partager',stats:'Statistiques',myStory:'Votre story',addStory:'Ajouter une story',playlistOf:'playlist',tracksOf:'pistes',welcomeBack:'Bon retour !',sendMsg:'Envoyer',typeMsg:'Écrire un message…',newMsg:'Nouveau message',noResult:'Aucun résultat'},
+  es:{greet:'Buenas noches ✦',welcome:'Bienvenido',featured:'Destacados',recents:'Reproducidos recientemente',discover:'Descubrir',library:'Mi biblioteca',messages:'Mensajes',settings:'Configuración',searchMusic:'Buscar canciones, álbumes…',searchUser:'Buscar usuarios…',login:'Iniciar sesión',register:'Registrarse',nowPlaying:'Reproduciendo ahora',seeAll:'Ver todo →',email:'Correo electrónico',password:'Contraseña',name:'Nombre completo',createStory:'Crear historia',camera:'Cámara',gallery:'Galería',storyText:'Texto',close:'Cerrar',follow:'Seguir',following:'Siguiendo',editProfile:'Editar perfil',share:'Compartir',stats:'Estadísticas',myStory:'Tu historia',addStory:'Añadir historia',playlistOf:'lista',tracksOf:'pistas',welcomeBack:'¡Bienvenido de vuelta!',sendMsg:'Enviar',typeMsg:'Escribe un mensaje…',newMsg:'Nuevo mensaje',noResult:'Sin resultados'},
+  it:{greet:'Buona sera ✦',welcome:'Benvenuto',featured:'In evidenza',recents:'Riprodotti di recente',discover:'Scopri',library:'La mia libreria',messages:'Messaggi',settings:'Impostazioni',searchMusic:'Cerca canzoni, album…',searchUser:'Cerca utenti…',login:'Accedi',register:'Registrati',nowPlaying:'In riproduzione',seeAll:'Vedi tutto →',email:'E-mail',password:'Password',name:'Nome completo',createStory:'Crea storia',camera:'Fotocamera',gallery:'Galleria',storyText:'Testo',close:'Chiudi',follow:'Segui',following:'Seguendo',editProfile:'Modifica profilo',share:'Condividi',stats:'Statistiche',myStory:'La tua storia',addStory:'Aggiungi storia',playlistOf:'playlist',tracksOf:'brani',welcomeBack:'Bentornato!',sendMsg:'Invia',typeMsg:'Scrivi un messaggio…',newMsg:'Nuovo messaggio',noResult:'Nessun risultato'},
+  pt:{greet:'Boa noite ✦',welcome:'Bem-vindo',featured:'Destaque',recents:'Reproduzidos recentemente',discover:'Descobrir',library:'Minha biblioteca',messages:'Mensagens',settings:'Configurações',searchMusic:'Pesquisar músicas, álbuns…',searchUser:'Pesquisar usuários…',login:'Entrar',register:'Registrar',nowPlaying:'Tocando agora',seeAll:'Ver tudo →',email:'E-mail',password:'Senha',name:'Nome completo',createStory:'Criar história',camera:'Câmera',gallery:'Galeria',storyText:'Texto',close:'Fechar',follow:'Seguir',following:'Seguindo',editProfile:'Editar perfil',share:'Compartilhar',stats:'Estatísticas',myStory:'Sua história',addStory:'Adicionar história',playlistOf:'playlist',tracksOf:'faixas',welcomeBack:'Bem-vindo de volta!',sendMsg:'Enviar',typeMsg:'Digite uma mensagem…',newMsg:'Nova mensagem',noResult:'Sem resultados'},
+  ru:{greet:'Добрый вечер ✦',welcome:'Добро пожаловать',featured:'Рекомендуемое',recents:'Недавно прослушанные',discover:'Открыть',library:'Моя библиотека',messages:'Сообщения',settings:'Настройки',searchMusic:'Поиск песен, альбомов…',searchUser:'Поиск пользователей…',login:'Войти',register:'Регистрация',nowPlaying:'Сейчас играет',seeAll:'Все →',email:'Эл. почта',password:'Пароль',name:'Полное имя',createStory:'Создать историю',camera:'Камера',gallery:'Галерея',storyText:'Текст',close:'Закрыть',follow:'Подписаться',following:'Подписан',editProfile:'Редактировать',share:'Поделиться',stats:'Статистика',myStory:'Ваша история',addStory:'Добавить историю',playlistOf:'плейлист',tracksOf:'треков',welcomeBack:'С возвращением!',sendMsg:'Отправить',typeMsg:'Написать сообщение…',newMsg:'Новое сообщение',noResult:'Нет результатов'},
+  ar:{greet:'مساء الخير ✦',welcome:'أهلاً بك',featured:'مميز',recents:'تم تشغيلها مؤخراً',discover:'اكتشف',library:'مكتبتي',messages:'الرسائل',settings:'الإعدادات',searchMusic:'ابحث عن أغاني، ألبومات…',searchUser:'ابحث عن مستخدمين…',login:'تسجيل الدخول',register:'إنشاء حساب',nowPlaying:'يعزف الآن',seeAll:'الكل →',email:'البريد الإلكتروني',password:'كلمة المرور',name:'الاسم الكامل',createStory:'إنشاء قصة',camera:'الكاميرا',gallery:'المعرض',storyText:'نص',close:'إغلاق',follow:'متابعة',following:'يتابع',editProfile:'تعديل الملف',share:'مشاركة',stats:'إحصائيات',myStory:'قصتك',addStory:'إضافة قصة',playlistOf:'قائمة تشغيل',tracksOf:'مسارات',welcomeBack:'مرحباً بعودتك!',sendMsg:'إرسال',typeMsg:'اكتب رسالة…',newMsg:'رسالة جديدة',noResult:'لا توجد نتائج'},
+  zh:{greet:'晚上好 ✦',welcome:'欢迎回来',featured:'精选',recents:'最近播放',discover:'发现',library:'我的音乐库',messages:'消息',settings:'设置',searchMusic:'搜索歌曲、专辑、艺术家…',searchUser:'搜索用户…',login:'登录',register:'注册',nowPlaying:'正在播放',seeAll:'查看全部 →',email:'电子邮件',password:'密码',name:'全名',createStory:'创建故事',camera:'相机',gallery:'相册',storyText:'文字',close:'关闭',follow:'关注',following:'已关注',editProfile:'编辑资料',share:'分享',stats:'统计',myStory:'你的故事',addStory:'添加故事',playlistOf:'播放列表',tracksOf:'首',welcomeBack:'欢迎回来！',sendMsg:'发送',typeMsg:'输入消息…',newMsg:'新消息',noResult:'无结果'},
+  ja:{greet:'こんばんは ✦',welcome:'おかえりなさい',featured:'おすすめ',recents:'最近再生した曲',discover:'発見',library:'ライブラリ',messages:'メッセージ',settings:'設定',searchMusic:'曲、アルバム、アーティストを検索…',searchUser:'ユーザーを検索…',login:'ログイン',register:'登録',nowPlaying:'再生中',seeAll:'すべて見る →',email:'メール',password:'パスワード',name:'フルネーム',createStory:'ストーリー作成',camera:'カメラ',gallery:'ギャラリー',storyText:'テキスト',close:'閉じる',follow:'フォロー',following:'フォロー中',editProfile:'プロフィール編集',share:'シェア',stats:'統計',myStory:'あなたのストーリー',addStory:'ストーリーを追加',playlistOf:'プレイリスト',tracksOf:'曲',welcomeBack:'おかえりなさい！',sendMsg:'送信',typeMsg:'メッセージを入力…',newMsg:'新しいメッセージ',noResult:'結果なし'},
+  ko:{greet:'안녕하세요 ✦',welcome:'다시 오신 걸 환영합니다',featured:'추천',recents:'최근 재생',discover:'탐색',library:'내 라이브러리',messages:'메시지',settings:'설정',searchMusic:'노래, 앨범, 아티스트 검색…',searchUser:'사용자 검색…',login:'로그인',register:'회원가입',nowPlaying:'지금 재생 중',seeAll:'모두 보기 →',email:'이메일',password:'비밀번호',name:'전체 이름',createStory:'스토리 만들기',camera:'카메라',gallery:'갤러리',storyText:'텍스트',close:'닫기',follow:'팔로우',following:'팔로잉',editProfile:'프로필 편집',share:'공유',stats:'통계',myStory:'내 스토리',addStory:'스토리 추가',playlistOf:'재생목록',tracksOf:'곡',welcomeBack:'다시 돌아오신 걸 환영합니다!',sendMsg:'전송',typeMsg:'메시지 입력…',newMsg:'새 메시지',noResult:'결과 없음'},
+  hi:{greet:'शुभ संध्या ✦',welcome:'स्वागत है',featured:'विशेष',recents:'हाल ही में चलाया',discover:'खोजें',library:'मेरी लाइब्रेरी',messages:'संदेश',settings:'सेटिंग्स',searchMusic:'गाने, एल्बम खोजें…',searchUser:'उपयोगकर्ता खोजें…',login:'लॉग इन',register:'रजिस्टर',nowPlaying:'अभी चल रहा है',seeAll:'सभी देखें →',email:'ईमेल',password:'पासवर्ड',name:'पूरा नाम',createStory:'स्टोरी बनाएं',camera:'कैमरा',gallery:'गैलरी',storyText:'टेक्स्ट',close:'बंद करें',follow:'फॉलो',following:'फॉलो कर रहे',editProfile:'प्रोफ़ाइल संपादित',share:'शेयर',stats:'आंकड़े',myStory:'आपकी स्टोरी',addStory:'स्टोरी जोड़ें',playlistOf:'प्लेलिस्ट',tracksOf:'ट्रैक',welcomeBack:'वापस स्वागत है!',sendMsg:'भेजें',typeMsg:'संदेश लिखें…',newMsg:'नया संदेश',noResult:'कोई परिणाम नहीं'},
+};
+// Remaining 19 languages fall back to English with native greeting
+['bn','id','ms','th','vi','nl','pl','uk','ur','ta','te','ha','yo','zu','af','fil','sw','fa','ro'].forEach(c=>{TRANS[c]={...TRANS.en};});
+TRANS.id={...TRANS.en,greet:'Selamat malam ✦',welcome:'Selamat datang',featured:'Unggulan',recents:'Baru diputar',discover:'Temukan',library:'Perpustakaan',messages:'Pesan',settings:'Pengaturan',login:'Masuk',register:'Daftar',nowPlaying:'Sedang diputar',follow:'Ikuti',following:'Mengikuti',searchMusic:'Cari lagu, album…',searchUser:'Cari pengguna…'};
+TRANS.nl={...TRANS.en,greet:'Goedenavond ✦',welcome:'Welkom terug',featured:'Aanbevolen',recents:'Recent afgespeeld',discover:'Ontdekken',library:'Mijn bibliotheek',messages:'Berichten',settings:'Instellingen',login:'Inloggen',register:'Registreren',nowPlaying:'Nu speelt',follow:'Volgen',following:'Volgend'};
+TRANS.pl={...TRANS.en,greet:'Dobry wieczór ✦',welcome:'Witamy',featured:'Polecane',recents:'Ostatnio odtwarzane',discover:'Odkryj',library:'Moja biblioteka',messages:'Wiadomości',settings:'Ustawienia',login:'Zaloguj się',register:'Zarejestruj się',nowPlaying:'Teraz gra',follow:'Obserwuj',following:'Obserwujesz'};
+TRANS.uk={...TRANS.en,greet:'Добрий вечір ✦',welcome:'Ласкаво просимо',featured:'Рекомендовано',recents:'Нещодавно відтворені',discover:'Відкрити',library:'Моя бібліотека',messages:'Повідомлення',settings:'Налаштування',login:'Увійти',register:'Зареєструватися',nowPlaying:'Зараз грає'};
+TRANS.ro={...TRANS.en,greet:'Bună seara ✦',welcome:'Bun venit',featured:'Recomandate',recents:'Redate recent',discover:'Descoperă',library:'Biblioteca mea',messages:'Mesaje',settings:'Setări',login:'Autentificare',register:'Înregistrare',nowPlaying:'Se redă acum'};
+TRANS.fa={...TRANS.en,greet:'عصر بخیر ✦',welcome:'خوش آمدید',featured:'ویژه',recents:'اخیراً پخش شده',discover:'کشف',library:'کتابخانه من',messages:'پیام‌ها',settings:'تنظیمات',login:'ورود',register:'ثبت‌نام',nowPlaying:'در حال پخش'};
+
+const LangContext = React.createContext({lang:'tr', setLang:()=>{}, t:k=>TRANS.tr[k]||k});
+const useLang = () => React.useContext(LangContext);
+
+/* ─── MAIN APP ────────────────────────────────────────────── */
+function App() {
+  const [tab, setTab]             = useState('home');
+  const [screen, setScreen]       = useState('login');
+  const [currentTrack, setCurrentTrack] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showPlayer, setShowPlayer]     = useState(false);
+  const [subScreen, setSubScreen] = useState(null);
+  const [queue, setQueue]         = useState(TRACKS);
+  const [queueIdx, setQueueIdx]   = useState(0);
+  const [modal, setModal]         = useState(null);
+  const [posMs, setPosMs]         = useState(0);
+  const [lang, setLang]           = useState('tr');
+  const TRACK_DUR_MS = 233000; // 3:53
+
+  // Real-time progress ticker
+  useEffect(() => {
+    if (!isPlaying || !currentTrack) return;
+    const iv = setInterval(() => {
+      setPosMs(p => {
+        if (p + 500 >= TRACK_DUR_MS) { playNext(); return 0; }
+        return p + 500;
+      });
+    }, 500);
+    return () => clearInterval(iv);
+  }, [isPlaying, currentTrack]);
+
+  // Reset progress on track change
+  useEffect(() => { setPosMs(0); }, [currentTrack]);
+
+  const progress = TRACK_DUR_MS > 0 ? posMs / TRACK_DUR_MS : 0;
+  const fmtTime = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;  };
+
+  const playTrack = useCallback((track, list) => {
+    const q = list || queue;
+    const idx = q.findIndex(t => t.id === track.id);
+    setQueue(q);
+    setQueueIdx(idx >= 0 ? idx : 0);
+    setCurrentTrack(track);
+    setIsPlaying(true);
+  }, [queue]);
+
+  const queueRef = useRef({queue, queueIdx});
+  useEffect(() => { queueRef.current = {queue, queueIdx}; }, [queue, queueIdx]);
+
+  const playNext = useCallback(() => {
+    const {queue:q, queueIdx:idx} = queueRef.current;
+    const ni = (idx + 1) % q.length;
+    setQueueIdx(ni); setCurrentTrack(q[ni]); setIsPlaying(true);
+  }, []);
+
+  const playPrev = useCallback(() => {
+    const pi = (queueIdx - 1 + queue.length) % queue.length;
+    setQueueIdx(pi);
+    setCurrentTrack(queue[pi]);
+    setIsPlaying(true);
+  }, [queue, queueIdx]);
+
+  const navigate = useCallback(to => {
+    if (to === 'search')        { setTab('search'); setSubScreen(null); }
+    else if (to === 'profile')  { setTab('profile'); setSubScreen(null); }
+    else if (to === 'settings') setSubScreen('settings');
+    else if (to === 'messages') setSubScreen('messages');
+    else setSubScreen(null);
+  }, []);
+
+  const openModal = useCallback((type, data) => setModal({type, data}), []);
+  const closeModal = useCallback(() => setModal(null), []);
+
+  const renderTabContent = () => {
+    if (subScreen === 'settings') return <SettingsScreen onNavigate={navigate} openModal={openModal} onLogout={()=>setScreen('login')}/>;
+    if (subScreen === 'messages') return <MessagesScreen openModal={openModal}/>;
+    switch(tab) {
+      case 'home':    return <DashboardScreen onNavigate={navigate} onPlayTrack={t=>playTrack(t,TRACKS)} currentTrack={currentTrack} openModal={openModal}/>;
+      case 'library': return <LibraryScreen onPlayTrack={t=>playTrack(t,TRACKS)} openModal={openModal}/>;
+      case 'search':  return <SearchScreen onPlayTrack={t=>playTrack(t,TRACKS)} openModal={openModal}/>;
+      case 'ar':      return (
+        <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',paddingBottom:72}}>
+          <div style={{fontSize:48,marginBottom:16,animation:'float 2s ease-in-out infinite'}}>🕶️</div>
+          <div style={{color:A.text,fontSize:20,fontWeight:800,marginBottom:8,letterSpacing:-0.5}}>AR Müzik</div>
+          <div style={{color:A.textMut,fontSize:14,textAlign:'center',padding:'0 40px',lineHeight:1.6}}>Dünyayı kameraya al ve müziği AR ile deneyimle</div>
+        </div>
+      );
+      case 'rooms':   return (
+        <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',paddingBottom:72}}>
+          <div style={{fontSize:48,marginBottom:16,animation:'pulse 1.5s ease-in-out infinite'}}>📻</div>
+          <div style={{color:A.text,fontSize:20,fontWeight:800,marginBottom:8,letterSpacing:-0.5}}>Dinleme Odaları</div>
+          <div style={{color:A.textMut,fontSize:14,textAlign:'center',padding:'0 40px',lineHeight:1.6}}>Gerçek zamanlı olarak arkadaşlarınla bir odaya katıl</div>
+        </div>
+      );
+      case 'profile': return <ProfileScreen onNavigate={navigate} openModal={openModal} onLogout={()=>setScreen('login')}/>;
+      default: return null;
+    }
+  };
+
+  const t = k => (TRANS[lang]||TRANS.en)[k] || TRANS.en[k] || TRANS.tr[k] || k;
+  const langCtx = {lang, setLang, t};
+
+  if (screen === 'login') {
+    return (
+      <LangContext.Provider value={langCtx}>
+        <PhoneFrame>
+          <LoginScreen onLogin={()=>setScreen('app')} onRegister={()=>setScreen('register')}/>
+        </PhoneFrame>
+      </LangContext.Provider>
+    );
+  }
+  if (screen === 'register') {
+    return (
+      <LangContext.Provider value={langCtx}>
+        <PhoneFrame>
+          <RegisterScreen onBack={()=>setScreen('login')} onRegister={()=>setScreen('app')}/>
+        </PhoneFrame>
+      </LangContext.Provider>
+    );
+  }
+
+  return (
+    <LangContext.Provider value={langCtx}>
+    <PhoneFrame>
+      {/* Content */}
+      <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',background:A.bg}}>
+        <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column',position:'relative'}}>
+          {renderTabContent()}
+        </div>
+        {/* Mini Player */}
+        {currentTrack && !showPlayer && (
+          <MiniPlayer
+            track={currentTrack}
+            isPlaying={isPlaying}
+            progress={progress}
+            posMs={posMs}
+            durMs={TRACK_DUR_MS}
+            fmtTime={fmtTime}
+            onToggle={()=>setIsPlaying(p=>!p)}
+            onClose={()=>{setCurrentTrack(null);setIsPlaying(false);}}
+            onExpand={()=>setShowPlayer(true)}
+            onPrev={playPrev}
+            onNext={playNext}
+          />
+        )}
+        {/* Full Player */}
+        {showPlayer && currentTrack && (
+          <FullPlayerScreen
+            track={currentTrack}
+            isPlaying={isPlaying}
+            progress={progress}
+            posMs={posMs}
+            durMs={TRACK_DUR_MS}
+            fmtTime={fmtTime}
+            onToggle={()=>setIsPlaying(p=>!p)}
+            onClose={()=>setShowPlayer(false)}
+            onPrev={playPrev}
+            onNext={playNext}
+            onShare={()=>openModal('share',currentTrack)}
+          />
+        )}
+        <TabBar active={tab} onChange={t=>{setTab(t);setSubScreen(null);}}/>
+        {/* Global Modal Overlay */}
+        {modal && <ModalSystem modal={modal} onClose={closeModal} onPlayTrack={t=>playTrack(t,TRACKS)}/>}
+      </div>
+    </PhoneFrame>
+    </LangContext.Provider>
+  );
+}
+
+/* ─── PHONE FRAME ─────────────────────────────────────────── */
+function PhoneFrame({children}) {
+  const [scale, setScale] = useState(() =>
+    Math.min(1, (window.innerHeight - 60) / 852, (window.innerWidth - 60) / 393)
+  );
+  useEffect(() => {
+    const update = () => setScale(Math.min(1, (window.innerHeight - 60) / 852, (window.innerWidth - 60) / 393));
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+  return (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',width:'100vw',height:'100vh',
+      background:'radial-gradient(ellipse at 30% 40%, rgba(124,58,237,0.15) 0%, transparent 55%), radial-gradient(ellipse at 70% 70%, rgba(244,114,182,0.10) 0%, transparent 55%), #030308'}}>
+
+      {/* Ambient orbs */}
+      <div style={{position:'fixed',top:'10%',left:'5%',width:350,height:350,borderRadius:'50%',
+        background:'rgba(124,58,237,0.08)',filter:'blur(100px)',pointerEvents:'none',animation:'aurora 8s ease-in-out infinite'}}/>
+      <div style={{position:'fixed',bottom:'15%',right:'8%',width:280,height:280,borderRadius:'50%',
+        background:'rgba(244,114,182,0.06)',filter:'blur(80px)',pointerEvents:'none',animation:'aurora2 10s ease-in-out infinite'}}/>
+
+      {/* Phone device positioning */}
+      <div style={{
+        position:'relative',width:393,height:852,
+        background:'#0a0a12',borderRadius:54,
+        boxShadow:'0 0 0 1.5px rgba(255,255,255,0.12), 0 0 0 10px #1a1a22, 0 0 0 11px rgba(255,255,255,0.06), 0 40px 120px rgba(0,0,0,0.8), 0 0 80px rgba(124,58,237,0.15)',
+        overflow:'hidden',flexShrink:0,
+        transform:`scale(${scale})`,transformOrigin:'center center',
+        zIndex:10
+      }}>
+
+        {/* Screen content */}
+        <div style={{position:'absolute',inset:0,overflow:'hidden',borderRadius:48,background:A.bg}}>
+          {children}
+        </div>
+
+        {/* Status bar */}
+        <div style={{position:'absolute',top:0,left:0,right:0,height:50,zIndex:100,
+          display:'flex',alignItems:'flex-start',justifyContent:'space-between',
+          padding:'14px 28px 0',pointerEvents:'none',
+          background:'linear-gradient(to bottom,rgba(8,8,15,0.95) 60%,transparent)'}}>
+          <span style={{color:'rgba(255,255,255,0.9)',fontSize:14,fontWeight:700,letterSpacing:0.2}}>9:41</span>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <div style={{display:'flex',gap:1.5,alignItems:'flex-end'}}>
+              {[3,5,7,9].map((h,i)=><div key={i} style={{width:3,height:h,background:'rgba(255,255,255,0.9)',borderRadius:1}}/>)}
+            </div>
+            <svg width="15" height="11" viewBox="0 0 15 11" fill="rgba(255,255,255,0.9)"><path d="M7.5 2.5C9.5 2.5 11.3 3.3 12.6 4.6L14 3.2C12.3 1.5 9.9.5 7.5.5s-4.8 1-6.5 2.7L2.4 4.6C3.7 3.3 5.5 2.5 7.5 2.5zm0 3.5c1.1 0 2.1.4 2.8 1.1L11.7 5.7C10.6 4.6 9.1 4 7.5 4S4.4 4.6 3.3 5.7l1.4 1.4C5.4 6.4 6.4 6 7.5 6zm0 3.5c.6 0 1.1.2 1.5.6L7.5 11.5 6 10.1c.4-.4.9-.6 1.5-.6z"/></svg>
+            <div style={{width:24,height:11,borderRadius:3,border:'1.5px solid rgba(255,255,255,0.6)',position:'relative',display:'flex',alignItems:'center',padding:'0 2px'}}>
+              <div style={{width:'75%',height:7,background:'rgba(255,255,255,0.9)',borderRadius:2}}/>
+              <div style={{position:'absolute',right:-4,top:'50%',transform:'translateY(-50%)',width:3,height:6,background:'rgba(255,255,255,0.5)',borderRadius:'0 2px 2px 0'}}/>
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic island */}
+        <div style={{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',
+          width:126,height:34,background:'#000',borderRadius:20,zIndex:101,
+          boxShadow:'0 0 0 1px rgba(255,255,255,0.06)'}}/>
+
+        {/* Home indicator */}
+        <div style={{position:'absolute',bottom:8,left:'50%',transform:'translateX(-50%)',
+          width:120,height:4,background:'rgba(255,255,255,0.25)',borderRadius:2,zIndex:101}}/>
+
+        {/* Side buttons */}
+        <div style={{position:'absolute',top:120,right:-4,width:4,height:70,background:'#1a1a22',borderRadius:'0 4px 4px 0',boxShadow:'inset -2px 0 4px rgba(0,0,0,0.5)'}}/>
+        <div style={{position:'absolute',top:100,left:-4,width:4,height:38,background:'#1a1a22',borderRadius:'4px 0 0 4px'}}/>
+        <div style={{position:'absolute',top:148,left:-4,width:4,height:60,background:'#1a1a22',borderRadius:'4px 0 0 4px'}}/>
+        <div style={{position:'absolute',top:218,left:-4,width:4,height:60,background:'#1a1a22',borderRadius:'4px 0 0 4px'}}/>
+      </div>
+
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

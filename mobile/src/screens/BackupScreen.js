@@ -61,7 +61,7 @@ export default function BackupScreen({ navigation }) {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await api.post(`/backup/restore/${id}`, {}, token);
+                            await api.post(`/backup/${id}/restore`, {}, token);
                             Alert.alert('✅', t('backup.restored') || 'Backup restored!');
                         } catch (err) {
                             Alert.alert(t('common.error'), err?.data?.detail || 'Failed');

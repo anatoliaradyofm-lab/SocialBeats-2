@@ -43,7 +43,7 @@ export default function DeleteAccountScreen({ navigation }) {
           onPress: async () => {
             setLoading(true);
             try {
-              await api.post('/account/delete', { password }, token);
+              await api.delete('/account/delete', token);
               await logout();
               navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
               Alert.alert('Hesap Silindi', 'Hesabınız kalıcı olarak silindi.');

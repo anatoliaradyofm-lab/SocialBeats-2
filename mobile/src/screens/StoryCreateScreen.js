@@ -1,166 +1,230 @@
 /**
- * StoryCreateScreen - Hikaye oluşturma
- * Fotoğraf/video, galeri, yazı, anket, sticker (ücretsiz açık kaynak)
+ * StoryCreateScreen — Instagram tarzı tam ekran hikaye oluşturucu
+ *
+ * Aşama 1 — CAPTURE: Kamera / galeri / metin modu
+ * Aşama 2 — EDIT:    Tam ekran medya + overlay araçlar, filtreler, paylaş
  */
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, TextInput, Alert, ActivityIndicator,
-  Modal, FlatList,
+  View, Text, StyleSheet, TouchableOpacity, Image,
+  TextInput, Alert, ActivityIndicator, Modal, FlatList,
+  Dimensions, ScrollView, Pressable, Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import StoryCamera from '../components/story/StoryCamera';
-import { useTheme } from '../contexts/ThemeContext';
 
-const FILTERS = ['normal', 'vintage', 'sepia', 'noir', 'warm', 'cool', 'dramatic', 'fade', 'chrome', 'prozac', 'transfer', 'tone'];
-const BG_COLORS = ['#8B5CF6', '#EC4899', '#06B6D4', '#10B981', '#F59E0B', '#EF4444'];
+const { width: SW, height: SH } = Dimensions.get('window');
 
+// Arka plan gradyanları (Text modunda)
+const BG_GRADIENTS = [
+  ['#7C3AED', '#4C1D95'],
+  ['#EC4899', '#9D174D'],
+  ['#06B6D4', '#0E7490'],
+  ['#10B981', '#065F46'],
+  ['#F59E0B', '#92400E'],
+  ['#EF4444', '#991B1B'],
+  ['#1E1B4B', '#312E81'],
+  ['#111827', '#374151'],
+];
+
+// Filtre tanımlamaları
+const FILTERS = [
+  { id: 'normal',   label: 'Normal',   tint: null },
+  { id: 'warm',     label: 'Sıcak',    tint: 'rgba(255,160,50,0.25)' },
+  { id: 'cool',     label: 'Soğuk',    tint: 'rgba(50,120,255,0.25)' },
+  { id: 'vintage',  label: 'Vintage',  tint: 'rgba(180,130,70,0.35)' },
+  { id: 'noir',     label: 'Noir',     tint: 'rgba(0,0,0,0.55)' },
+  { id: 'dramatic', label: 'Dramatik', tint: 'rgba(80,0,0,0.3)' },
+  { id: 'fade',     label: 'Fade',     tint: 'rgba(255,255,255,0.25)' },
+];
+
+// Sticker kategorileri
+const STICKER_ACTIONS = [
+  { id: 'poll',      icon: 'bar-chart',       label: 'Anket'     },
+  { id: 'music',     icon: 'musical-notes',   label: 'Müzik'     },
+  { id: 'location',  icon: 'location',        label: 'Konum'     },
+  { id: 'mention',   icon: 'at',              label: 'Kişi etiket' },
+  { id: 'link',      icon: 'link',            label: 'Bağlantı'  },
+  { id: 'countdown', icon: 'time',            label: 'Geri sayım'},
+];
+
+// ── Yardımcı: Filtre Thumbnail ────────────────────────────────────────────────
+function FilterThumb({ filter, selected, mediaUri, bgGradient, onPress }) {
+  return (
+    <TouchableOpacity style={[st.filterThumb, selected && st.filterThumbSelected]} onPress={onPress}>
+      <View style={st.filterThumbInner}>
+        {mediaUri ? (
+          <Image source={{ uri: mediaUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        ) : (
+          <LinearGradient colors={bgGradient} style={StyleSheet.absoluteFill} />
+        )}
+        {filter.tint && <View style={[StyleSheet.absoluteFill, { backgroundColor: filter.tint }]} />}
+      </View>
+      <Text style={[st.filterLabel, selected && st.filterLabelSelected]}>{filter.label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+// ── Ana ekran ────────────────────────────────────────────────────────────────
 export default function StoryCreateScreen({ navigation }) {
-  const { colors } = useTheme();
-  const styles = createStyles(colors);
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
+
+  /* ── Durum ── */
+  const [phase, setPhase] = useState('capture');     // 'capture' | 'edit'
+  const [captureMode, setCaptureMode] = useState('camera'); // 'camera' | 'text'
+  const [showCamera, setShowCamera] = useState(false);
   const [mediaUri, setMediaUri] = useState(null);
-  const [text, setText] = useState('');
+  const [mediaIsVideo, setMediaIsVideo] = useState(false);
+  const [bgGradient, setBgGradient] = useState(BG_GRADIENTS[0]);
   const [selectedFilter, setSelectedFilter] = useState('normal');
-  const [backgroundColor, setBackgroundColor] = useState('#8B5CF6');
-  const [pollQuestion, setPollQuestion] = useState('');
-  const [pollOptions, setPollOptions] = useState(['', '']);
-  const [storyType, setStoryType] = useState('photo');
   const [uploading, setUploading] = useState(false);
   const [closeFriendsOnly, setCloseFriendsOnly] = useState(false);
-  const [selectedMusic, setSelectedMusic] = useState(null);
-  const [showMusicPicker, setShowMusicPicker] = useState(false);
-  const [musicSearch, setMusicSearch] = useState('');
-  const [musicResults, setMusicResults] = useState([]);
-  const [musicLoading, setMusicLoading] = useState(false);
+
+  /* Overlay araçlar */
+  const [overlayText, setOverlayText] = useState('');
+  const [showTextInput, setShowTextInput] = useState(false);
+  const [textAlign, setTextAlign] = useState('center');
+
+  /* Sticker sheet */
+  const [showStickerSheet, setShowStickerSheet] = useState(false);
+
+  /* Sticker değerleri */
   const [locationSticker, setLocationSticker] = useState(null);
   const [mentionSticker, setMentionSticker] = useState(null);
-  const [showMentionSearch, setShowMentionSearch] = useState(false);
-  const [mentionQuery, setMentionQuery] = useState('');
-  const [mentionResults, setMentionResults] = useState([]);
-  const [mentionLoading, setMentionLoading] = useState(false);
   const [linkSticker, setLinkSticker] = useState('');
-  const [showLinkInput, setShowLinkInput] = useState(false);
-  const [showCamera, setShowCamera] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [showPoll, setShowPoll] = useState(false);
+  const [selectedMusic, setSelectedMusic] = useState(null);
   const [countdownTitle, setCountdownTitle] = useState('');
   const [countdownEnd, setCountdownEnd] = useState('');
   const [showCountdown, setShowCountdown] = useState(false);
 
+  /* Modallar */
+  const [activeModal, setActiveModal] = useState(null); // 'music'|'mention'|'link'|'poll'|'countdown'
+  const [musicSearch, setMusicSearch] = useState('');
+  const [musicResults, setMusicResults] = useState([]);
+  const [musicLoading, setMusicLoading] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionResults, setMentionResults] = useState([]);
+  const [mentionLoading, setMentionLoading] = useState(false);
+
+  /* ── Müzik arama ── */
   const searchMusic = useCallback(async (q) => {
     if (!q?.trim()) { setMusicResults([]); return; }
     setMusicLoading(true);
     try {
       const res = await api.get(`/music/search/${encodeURIComponent(q.trim())}`, token);
-      const items = res?.results || res?.songs || (Array.isArray(res) ? res : []);
-      setMusicResults(items);
-    } catch {
-      setMusicResults([]);
-    } finally {
-      setMusicLoading(false);
-    }
+      setMusicResults(res?.results || res?.songs || (Array.isArray(res) ? res : []));
+    } catch { setMusicResults([]); }
+    setMusicLoading(false);
   }, [token]);
 
   useEffect(() => {
-    const t = setTimeout(() => searchMusic(musicSearch), 400);
-    return () => clearTimeout(t);
-  }, [musicSearch, searchMusic]);
+    const id = setTimeout(() => searchMusic(musicSearch), 400);
+    return () => clearTimeout(id);
+  }, [musicSearch]);
 
+  /* ── Kullanıcı arama ── */
   const searchMentions = useCallback(async (q) => {
-    if (!q?.trim() || !token) { setMentionResults([]); return; }
+    if (!q?.trim()) { setMentionResults([]); return; }
     setMentionLoading(true);
     try {
-      const params = new URLSearchParams({ q: q.trim(), limit: 15 });
-      const res = await api.get(`/search?${params}`, token);
+      const res = await api.get(`/search?q=${encodeURIComponent(q.trim())}&limit=15`, token);
       setMentionResults(res?.users || []);
-    } catch {
-      setMentionResults([]);
-    } finally {
-      setMentionLoading(false);
-    }
+    } catch { setMentionResults([]); }
+    setMentionLoading(false);
   }, [token]);
 
   useEffect(() => {
-    const t = setTimeout(() => searchMentions(mentionQuery), 400);
-    return () => clearTimeout(t);
-  }, [mentionQuery, searchMentions]);
+    const id = setTimeout(() => searchMentions(mentionQuery), 400);
+    return () => clearTimeout(id);
+  }, [mentionQuery]);
 
-  const pickMedia = async (fromCamera = false) => {
+  /* ── Galeri ── */
+  const openGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted' && !fromCamera) {
+    if (status !== 'granted') {
       Alert.alert(t('common.permissionRequired'), t('common.galleryPermission'));
       return;
     }
-    if (fromCamera) {
-      const camStatus = await ImagePicker.requestCameraPermissionsAsync();
-      if (camStatus !== 'granted') {
-        Alert.alert(t('common.permissionRequired'), t('common.cameraPermission'));
-        return;
-      }
-    }
     try {
-      const result = fromCamera
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, allowsEditing: true, quality: 0.8 })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, allowsEditing: true, quality: 0.8 });
-      if (!result.canceled) {
-        setMediaUri(result.assets[0].uri);
-        setStoryType(result.assets[0].type?.startsWith('video') ? 'video' : 'photo');
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: true,
+        quality: 0.9,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        const asset = result.assets[0];
+        setMediaUri(asset.uri);
+        setMediaIsVideo(asset.type?.startsWith('video') || false);
+        setPhase('edit');
       }
     } catch (err) {
-      Alert.alert(t('common.error'), err.message || t('stories.selectMediaFailed'));
+      Alert.alert(t('common.error'), err.message);
     }
   };
 
-  const addPollOption = () => setPollOptions((p) => [...p, '']);
-  const setPollOpt = (i, v) => setPollOptions((p) => { const n = [...p]; n[i] = v; return n; });
+  /* ── Konum ── */
+  const addLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') { setLocationSticker('Konum'); return; }
+      const loc = await Location.getCurrentPositionAsync({});
+      const [rev] = await Location.reverseGeocodeAsync(loc.coords);
+      setLocationSticker(rev ? `${rev.city || ''}, ${rev.country || ''}`.trim() || 'Konum' : 'Konum');
+    } catch { setLocationSticker('Konum'); }
+  };
 
+  /* ── Sticker aksiyonu ── */
+  const handleStickerAction = (id) => {
+    setShowStickerSheet(false);
+    if (id === 'music')     { setActiveModal('music'); return; }
+    if (id === 'mention')   { setActiveModal('mention'); return; }
+    if (id === 'link')      { setActiveModal('link'); return; }
+    if (id === 'poll')      { setActiveModal('poll'); setShowPoll(true); return; }
+    if (id === 'countdown') { setActiveModal('countdown'); return; }
+    if (id === 'location')  { addLocation(); }
+  };
+
+  /* ── Paylaş ── */
   const handleSubmit = async () => {
-    if (storyType === 'poll') {
-      if (!pollQuestion.trim()) {
-        Alert.alert(t('common.warning'), t('stories.enterPollQuestion'));
-        return;
-      }
-      const opts = pollOptions.filter(Boolean);
-      if (opts.length < 2) {
-        Alert.alert(t('common.warning'), t('stories.minPollOptions'));
-        return;
-      }
-    } else if (!mediaUri && !text.trim()) {
-      Alert.alert(t('common.warning'), t('stories.addMediaOrText'));
+    if (phase !== 'edit' && captureMode !== 'text') return;
+    if (captureMode === 'text' && !overlayText.trim()) {
+      Alert.alert(t('common.warning'), 'Bir şeyler yaz.');
       return;
+    }
+    if (showPoll) {
+      if (!pollQuestion.trim()) { Alert.alert(t('common.warning'), t('stories.enterPollQuestion')); return; }
+      if (pollOptions.filter(Boolean).length < 2) { Alert.alert(t('common.warning'), t('stories.minPollOptions')); return; }
     }
 
     setUploading(true);
     try {
       let mediaUrl = null;
       if (mediaUri) {
-        const isVideo = mediaUri?.includes('.mp4') || mediaUri?.includes('.mov');
-        mediaUrl = await api.uploadFile(mediaUri, token, 'story', isVideo ? 'video/mp4' : 'image/jpeg');
+        mediaUrl = await api.uploadFile(mediaUri, token, 'story', mediaIsVideo ? 'video/mp4' : 'image/jpeg');
       }
-
       const payload = {
-        story_type: storyType,
-        text: text.trim() || null,
+        story_type: showPoll ? 'poll' : mediaIsVideo ? 'video' : (mediaUri ? 'photo' : 'text'),
+        text: overlayText.trim() || null,
         media_url: mediaUrl,
-        media_type: storyType === 'video' ? 'video' : 'photo',
-        background_color: backgroundColor,
+        media_type: mediaIsVideo ? 'video' : 'photo',
+        background_color: bgGradient[0],
         filter: selectedFilter,
-        duration: storyType === 'video' ? 60 : 30,
+        duration: mediaIsVideo ? 60 : 30,
         audience: closeFriendsOnly ? 'close_friends' : 'all',
-        ...(storyType === 'poll' && {
-          poll_question: pollQuestion.trim(),
-          poll_options: pollOptions.filter(Boolean),
-        }),
-        ...(selectedMusic && {
-          music_track_id: selectedMusic.id || selectedMusic.video_id || selectedMusic.song_id || selectedMusic.youtube_id,
-          music_start_time: 0,
-        }),
+        ...(showPoll && { poll_question: pollQuestion.trim(), poll_options: pollOptions.filter(Boolean) }),
+        ...(selectedMusic && { music_track_id: selectedMusic.id || selectedMusic.video_id, music_start_time: 0 }),
         ...(locationSticker && { location_name: locationSticker }),
         ...(mentionSticker && { mention_username: mentionSticker }),
         ...(linkSticker && { link_url: linkSticker }),
@@ -175,425 +239,553 @@ export default function StoryCreateScreen({ navigation }) {
     }
   };
 
-  return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.cancelText}>{t('stories.cancel')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>{t('stories.createStory')}</Text>
-        <TouchableOpacity
-          style={[styles.postBtn, uploading && styles.btnDisabled]}
-          onPress={handleSubmit}
-          disabled={uploading}
-        >
-          {uploading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.postBtnText}>{t('stories.share')}</Text>}
-        </TouchableOpacity>
-      </View>
+  const currentFilter = FILTERS.find(f => f.id === selectedFilter) || FILTERS[0];
 
-      <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
-        <View style={styles.mediaSection}>
-          <TouchableOpacity style={styles.mediaBtn} onPress={() => pickMedia(false)}>
-            <Ionicons name="images-outline" size={28} color="#8B5CF6" />
-            <Text style={styles.mediaBtnText}>{t('stories.gallery')}</Text>
+  /* ════════════════════════════════════════════════════════════
+     AŞAMA 1 — CAPTURE
+  ════════════════════════════════════════════════════════════ */
+  if (phase === 'capture') {
+    return (
+      <View style={st.captureRoot}>
+        {/* Arka plan */}
+        {captureMode === 'text' ? (
+          <LinearGradient colors={bgGradient} style={StyleSheet.absoluteFill} />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
+        )}
+
+        {/* Üst bar */}
+        <View style={[st.captureTopBar, { paddingTop: insets.top + 8 }]}>
+          <TouchableOpacity style={st.captureIconBtn} onPress={() => navigation.goBack()}>
+            <Ionicons name="close" size={28} color="#fff" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.mediaBtn} onPress={() => setShowCamera(true)}>
-            <Ionicons name="camera-outline" size={28} color="#8B5CF6" />
-            <Text style={styles.mediaBtnText}>{t('stories.camera')}</Text>
-          </TouchableOpacity>
+
+          {/* Mod seçici */}
+          <View style={st.modeRow}>
+            {['camera', 'text'].map(m => (
+              <TouchableOpacity key={m} style={[st.modeTab, captureMode === m && st.modeTabActive]} onPress={() => setCaptureMode(m)}>
+                <Text style={[st.modeTabText, captureMode === m && st.modeTabTextActive]}>
+                  {m === 'camera' ? 'Kamera' : 'Metin'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={{ width: 44 }} />
         </View>
 
-        {(mediaUri || locationSticker || mentionSticker || linkSticker) && (
-          <View style={styles.preview}>
-            {mediaUri ? (
-              <Image source={{ uri: mediaUri }} style={styles.previewImg} resizeMode="cover" />
-            ) : (
-              <View style={[styles.previewPlaceholder, { backgroundColor }]} />
-            )}
-            {selectedMusic && (
-              <View style={styles.musicOverlay}>
-                <Ionicons name="musical-notes" size={20} color="#fff" />
-                <Text style={styles.musicOverlayText} numberOfLines={1}>
-                  {selectedMusic.title || selectedMusic.name || ''} — {selectedMusic.artist || selectedMusic.uploader || selectedMusic.channel || ''}
-                </Text>
-              </View>
-            )}
-            {locationSticker && (
-              <View style={[styles.stickerOverlay, styles.stickerOverlayTopLeft]}>
-                <Ionicons name="location" size={16} color="#fff" />
-                <Text style={styles.stickerOverlayText}>{locationSticker}</Text>
-              </View>
-            )}
-            {mentionSticker && (
-              <View style={[styles.stickerOverlay, styles.stickerOverlayTopRight]}>
-                <Text style={styles.stickerOverlayText}>@{mentionSticker}</Text>
-              </View>
-            )}
-            {linkSticker && (
-              <View style={[styles.stickerOverlay, styles.stickerOverlayBottomRight]}>
-                <Ionicons name="link" size={16} color="#fff" />
-                <Text style={styles.stickerOverlayText} numberOfLines={1}>{linkSticker}</Text>
-              </View>
-            )}
+        {/* Metin modu — arka plan rengi seçici */}
+        {captureMode === 'text' && (
+          <>
+            <TouchableOpacity style={st.textModeCenter} onPress={() => setShowTextInput(true)} activeOpacity={0.85}>
+              {overlayText ? (
+                <View style={[st.textOverlayBubble, { alignSelf: 'center' }]}>
+                  <Text style={[st.textOverlayValue, { textAlign: textAlign }]}>{overlayText}</Text>
+                </View>
+              ) : (
+                <View style={st.textTapHint}>
+                  <Text style={st.textTapHintText}>Yazmak için dokun</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <View style={st.bgColorStrip}>
+              {BG_GRADIENTS.map((g, i) => (
+                <TouchableOpacity key={i} onPress={() => setBgGradient(g)}>
+                  <LinearGradient colors={g} style={[st.bgColorDot, bgGradient === g && st.bgColorDotSelected]} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+
+        {/* Kamera modu içerik alanı */}
+        {captureMode === 'camera' && (
+          <View style={st.cameraPlaceholder}>
+            <Ionicons name="camera" size={56} color="rgba(255,255,255,0.15)" />
           </View>
         )}
 
-        <Text style={styles.label}>{t('stories.addText')}</Text>
-        <TextInput
-          style={styles.input}
-          placeholder={t('stories.textPlaceholder')}
-          placeholderTextColor="#6B7280"
-          value={text}
-          onChangeText={setText}
-          multiline
-        />
+        {/* Alt kontroller */}
+        <View style={[st.captureBottomBar, { paddingBottom: insets.bottom + 16 }]}>
+          {/* Galeri */}
+          <TouchableOpacity style={st.galleryBtn} onPress={openGallery}>
+            <Ionicons name="images-outline" size={26} color="#fff" />
+            <Text style={st.galleryBtnText}>Galeri</Text>
+          </TouchableOpacity>
 
-        <Text style={styles.label}>{t('stories.backgroundColor')}</Text>
-        <View style={styles.colorRow}>
-          {BG_COLORS.map((c) => (
+          {/* Kamera / İleri butonu */}
+          {captureMode === 'camera' ? (
+            <TouchableOpacity style={st.captureBtn} onPress={() => setShowCamera(true)}>
+              <View style={st.captureBtnInner} />
+            </TouchableOpacity>
+          ) : (
             <TouchableOpacity
-              key={c}
-              style={[styles.colorBtn, { backgroundColor: c }, backgroundColor === c && styles.colorBtnSelected]}
-              onPress={() => setBackgroundColor(c)}
-            />
-          ))}
+              style={[st.textNextBtn, !overlayText.trim() && { opacity: 0.4 }]}
+              onPress={() => overlayText.trim() && setPhase('edit')}
+              disabled={!overlayText.trim()}
+            >
+              <Ionicons name="arrow-forward" size={26} color="#fff" />
+            </TouchableOpacity>
+          )}
+
+          {/* Flip kamera (kamera modunda) */}
+          {captureMode === 'camera' ? (
+            <TouchableOpacity style={st.flipBtn}>
+              <Ionicons name="camera-reverse-outline" size={26} color="#fff" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={st.flipBtn} onPress={() => {
+              const i = BG_GRADIENTS.indexOf(bgGradient);
+              setBgGradient(BG_GRADIENTS[(i + 1) % BG_GRADIENTS.length]);
+            }}>
+              <Ionicons name="color-palette-outline" size={26} color="#fff" />
+            </TouchableOpacity>
+          )}
         </View>
 
-        <Text style={styles.label}>{t('stories.filter')}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-          {FILTERS.map((f) => (
-            <TouchableOpacity
-              key={f}
-              style={[styles.filterChip, selectedFilter === f && styles.filterChipSelected]}
-              onPress={() => setSelectedFilter(f)}
-            >
-              <Text style={styles.filterText}>{f}</Text>
-            </TouchableOpacity>
+        {/* StoryCamera modal */}
+        {showCamera && (
+          <Modal visible animationType="slide" onRequestClose={() => setShowCamera(false)}>
+            <StoryCamera
+              visible={showCamera}
+              onCapture={(uri) => {
+                setMediaUri(uri);
+                setMediaIsVideo(uri?.includes('.mp4') || uri?.includes('.mov'));
+                setShowCamera(false);
+                setPhase('edit');
+              }}
+              onClose={() => setShowCamera(false)}
+            />
+          </Modal>
+        )}
+
+        {/* Metin giriş modalı */}
+        {showTextInput && (
+          <Modal transparent visible animationType="fade" onRequestClose={() => setShowTextInput(false)}>
+            <View style={st.textModal}>
+              <LinearGradient colors={bgGradient} style={StyleSheet.absoluteFill} />
+              <View style={[st.textModalTop, { paddingTop: insets.top + 8 }]}>
+                <TouchableOpacity onPress={() => setShowTextInput(false)}>
+                  <Ionicons name="close" size={28} color="#fff" />
+                </TouchableOpacity>
+                {/* Hizalama */}
+                <TouchableOpacity onPress={() => setTextAlign(a => a === 'center' ? 'left' : a === 'left' ? 'right' : 'center')} style={st.textAlignBtn}>
+                  <Ionicons name={textAlign === 'center' ? 'text' : textAlign === 'left' ? 'reorder-four-outline' : 'reorder-three-outline'} size={22} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity style={st.textDoneBtn} onPress={() => setShowTextInput(false)}>
+                  <Text style={st.textDoneBtnText}>Bitti</Text>
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={[st.fullTextInput, { textAlign }]}
+                placeholder="Bir şey yaz..."
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                value={overlayText}
+                onChangeText={setOverlayText}
+                multiline
+                autoFocus
+                maxLength={200}
+              />
+            </View>
+          </Modal>
+        )}
+      </View>
+    );
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     AŞAMA 2 — EDIT
+  ════════════════════════════════════════════════════════════ */
+  return (
+    <View style={st.editRoot}>
+      {/* Tam ekran medya / arka plan */}
+      {mediaUri ? (
+        <Image source={{ uri: mediaUri }} style={st.editBg} resizeMode="cover" />
+      ) : (
+        <LinearGradient colors={bgGradient} style={st.editBg} />
+      )}
+
+      {/* Filtre tinti */}
+      {currentFilter.tint && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: currentFilter.tint }]} />
+      )}
+
+      {/* Overlay metin */}
+      {overlayText ? (
+        <TouchableOpacity style={st.overlayTextWrap} onPress={() => setShowTextInput(true)} activeOpacity={0.8}>
+          <View style={st.textOverlayBubble}>
+            <Text style={[st.textOverlayValue, { textAlign }]}>{overlayText}</Text>
+          </View>
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Sticker overlay'leri */}
+      {locationSticker && (
+        <TouchableOpacity style={st.stickerChipTopLeft} onPress={() => setLocationSticker(null)}>
+          <Ionicons name="location" size={13} color="#fff" />
+          <Text style={st.stickerChipText}>{locationSticker}</Text>
+        </TouchableOpacity>
+      )}
+      {mentionSticker && (
+        <TouchableOpacity style={st.stickerChipTopCenter} onPress={() => setMentionSticker(null)}>
+          <Text style={st.stickerChipText}>@{mentionSticker}</Text>
+        </TouchableOpacity>
+      )}
+      {selectedMusic && (
+        <TouchableOpacity style={st.musicChip} onPress={() => setSelectedMusic(null)}>
+          <Ionicons name="musical-notes" size={13} color="#fff" />
+          <Text style={st.musicChipText} numberOfLines={1}>
+            {selectedMusic.title || selectedMusic.name}
+          </Text>
+        </TouchableOpacity>
+      )}
+      {linkSticker ? (
+        <TouchableOpacity style={st.stickerChipBottom} onPress={() => setLinkSticker('')}>
+          <Ionicons name="link" size={13} color="#fff" />
+          <Text style={st.stickerChipText} numberOfLines={1}>{linkSticker}</Text>
+        </TouchableOpacity>
+      ) : null}
+      {showPoll && pollQuestion ? (
+        <View style={st.pollPreview}>
+          <Text style={st.pollPreviewQ}>{pollQuestion}</Text>
+          {pollOptions.filter(Boolean).map((o, i) => (
+            <View key={i} style={st.pollPreviewOpt}><Text style={st.pollPreviewOptText}>{o}</Text></View>
+          ))}
+        </View>
+      ) : null}
+
+      {/* ── ÜST BAR ── */}
+      <View style={[st.editTopBar, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity style={st.editIconBtn} onPress={() => { setMediaUri(null); setPhase('capture'); }}>
+          <Ionicons name="chevron-back" size={26} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }} />
+        {/* Sağ araçlar */}
+        <View style={st.rightTools}>
+          <TouchableOpacity style={st.editToolBtn} onPress={() => setShowTextInput(true)}>
+            <Text style={st.textToolIcon}>Aa</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={st.editToolBtn} onPress={() => setShowStickerSheet(true)}>
+            <Ionicons name="happy-outline" size={24} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity style={st.editToolBtn} onPress={() => setActiveModal('music')}>
+            <Ionicons name="musical-notes-outline" size={24} color={selectedMusic ? '#A78BFA' : '#fff'} />
+          </TouchableOpacity>
+          <TouchableOpacity style={st.editToolBtn} onPress={() => setActiveModal('link')}>
+            <Ionicons name="link-outline" size={24} color={linkSticker ? '#A78BFA' : '#fff'} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* ── ALT: Filtreler + Paylaş ── */}
+      <View style={[st.editBottom, { paddingBottom: insets.bottom + 8 }]}>
+        {/* Filtre şeridi */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.filterStrip} contentContainerStyle={st.filterStripContent}>
+          {FILTERS.map(f => (
+            <FilterThumb
+              key={f.id}
+              filter={f}
+              selected={selectedFilter === f.id}
+              mediaUri={mediaUri}
+              bgGradient={bgGradient}
+              onPress={() => setSelectedFilter(f.id)}
+            />
           ))}
         </ScrollView>
 
-        <TouchableOpacity style={styles.typeBtn} onPress={() => setShowMusicPicker(true)}>
-          <Ionicons name="musical-notes-outline" size={24} color={selectedMusic ? '#8B5CF6' : '#fff'} />
-          <Text style={styles.typeBtnText}>{t('stories.music')}{selectedMusic ? ` — ${(selectedMusic.title || selectedMusic.name || '').slice(0, 22)}` : ''}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.typeBtn} onPress={() => setCloseFriendsOnly(!closeFriendsOnly)}>
-          <Ionicons name={closeFriendsOnly ? 'people' : 'people-outline'} size={24} color="#8B5CF6" />
-          <Text style={styles.typeBtnText}>
-            {closeFriendsOnly ? t('stories.closeFriendsOnlyOn') : t('stories.closeFriendsOnly')}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.typeBtn} onPress={() => setStoryType(storyType === 'poll' ? 'photo' : 'poll')}>
-          <Ionicons name="bar-chart-outline" size={24} color="#8B5CF6" />
-          <Text style={styles.typeBtnText}>{storyType === 'poll' ? t('stories.removePoll') : t('stories.addPoll')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.typeBtn} onPress={() => setShowCountdown(!showCountdown)}>
-          <Ionicons name="time-outline" size={24} color={showCountdown ? '#8B5CF6' : '#fff'} />
-          <Text style={styles.typeBtnText}>{showCountdown ? t('stories.countdownOn') || 'Geri sayım' : t('stories.countdown') || 'Geri sayım ekle'}</Text>
-        </TouchableOpacity>
-        {showCountdown && (
-          <>
-            <TextInput style={styles.input} placeholder="Başlık" placeholderTextColor="#6B7280" value={countdownTitle} onChangeText={setCountdownTitle} />
-            <TextInput style={styles.input} placeholder="Bitiş (YYYY-MM-DDTHH:mm)" placeholderTextColor="#6B7280" value={countdownEnd} onChangeText={setCountdownEnd} />
-          </>
-        )}
-
-        <Text style={styles.label}>{t('stories.stickers')}</Text>
-        <View style={styles.stickerToolbar}>
+        {/* Paylaş satırı */}
+        <View style={st.shareRow}>
+          {/* Yakın arkadaşlar */}
           <TouchableOpacity
-            style={styles.toolBtn}
-            onPress={async () => {
-              try {
-                const { status } = await Location.requestForegroundPermissionsAsync();
-                if (status !== 'granted') {
-                  Alert.alert(t('common.permissionRequired'), t('common.locationPermission'));
-                  return;
-                }
-                const loc = await Location.getCurrentPositionAsync({});
-                const [rev] = await Location.reverseGeocodeAsync(loc.coords);
-                setLocationSticker(rev ? `${rev.city || ''}, ${rev.country || ''}`.trim() || 'Location' : 'Location');
-              } catch {
-                setLocationSticker('Location');
-              }
-            }}
+            style={[st.closeFriendsBtn, closeFriendsOnly && st.closeFriendsBtnActive]}
+            onPress={() => setCloseFriendsOnly(v => !v)}
           >
-            <Ionicons name="location-outline" size={24} color={locationSticker ? '#8B5CF6' : '#fff'} />
-            <Text style={styles.toolLabel}>{t('createPost.location')}</Text>
+            <Ionicons name={closeFriendsOnly ? 'star' : 'star-outline'} size={18} color={closeFriendsOnly ? '#10B981' : '#fff'} />
+            <Text style={[st.closeFriendsTxt, closeFriendsOnly && { color: '#10B981' }]}>
+              {closeFriendsOnly ? 'Yakın Arkadaşlar' : 'Herkese'}
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.toolBtn} onPress={() => setShowMentionSearch(true)}>
-            <Ionicons name="at-outline" size={24} color={mentionSticker ? '#8B5CF6' : '#fff'} />
-            <Text style={styles.toolLabel}>{t('stories.mention')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.toolBtn} onPress={() => setShowLinkInput(true)}>
-            <Ionicons name="link-outline" size={24} color={linkSticker ? '#8B5CF6' : '#fff'} />
-            <Text style={styles.toolLabel}>{t('stories.link')}</Text>
+
+          {/* Hikayene Ekle */}
+          <TouchableOpacity
+            style={[st.shareBtn, uploading && { opacity: 0.6 }]}
+            onPress={handleSubmit}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Text style={st.shareBtnText}>Hikayene Ekle</Text>
+                <Ionicons name="chevron-forward" size={18} color="#fff" />
+              </>
+            )}
           </TouchableOpacity>
         </View>
-        {(locationSticker || mentionSticker || linkSticker) && (
-          <View style={styles.stickerClearRow}>
-            {locationSticker && (
-              <TouchableOpacity onPress={() => setLocationSticker(null)} style={styles.stickerClear}>
-                <Text style={styles.stickerClearText}>📍 {locationSticker}</Text>
-                <Ionicons name="close-circle" size={18} color="#EF4444" />
-              </TouchableOpacity>
-            )}
-            {mentionSticker && (
-              <TouchableOpacity onPress={() => setMentionSticker(null)} style={styles.stickerClear}>
-                <Text style={styles.stickerClearText}>@{mentionSticker}</Text>
-                <Ionicons name="close-circle" size={18} color="#EF4444" />
-              </TouchableOpacity>
-            )}
-            {linkSticker && (
-              <TouchableOpacity onPress={() => { setLinkSticker(''); setShowLinkInput(false); }} style={styles.stickerClear}>
-                <Text style={styles.stickerClearText} numberOfLines={1}>🔗 {linkSticker}</Text>
-                <Ionicons name="close-circle" size={18} color="#EF4444" />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+      </View>
 
-        {storyType === 'poll' && (
-          <>
+      {/* ── Metin girişi (edit fazında da) ── */}
+      {showTextInput && (
+        <Modal transparent visible animationType="fade" onRequestClose={() => setShowTextInput(false)}>
+          <View style={st.textModal}>
+            {mediaUri
+              ? <Image source={{ uri: mediaUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              : <LinearGradient colors={bgGradient} style={StyleSheet.absoluteFill} />
+            }
+            {currentFilter.tint && <View style={[StyleSheet.absoluteFill, { backgroundColor: currentFilter.tint }]} />}
+            <View style={[st.textModalTop, { paddingTop: insets.top + 8 }]}>
+              <TouchableOpacity onPress={() => setShowTextInput(false)}>
+                <Ionicons name="close" size={28} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setTextAlign(a => a === 'center' ? 'left' : a === 'left' ? 'right' : 'center')} style={st.textAlignBtn}>
+                <Ionicons name="reorder-four-outline" size={22} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity style={st.textDoneBtn} onPress={() => setShowTextInput(false)}>
+                <Text style={st.textDoneBtnText}>Bitti</Text>
+              </TouchableOpacity>
+            </View>
             <TextInput
-              style={styles.input}
-              placeholder={t('stories.pollQuestion')}
-              placeholderTextColor="#6B7280"
-              value={pollQuestion}
-              onChangeText={setPollQuestion}
+              style={[st.fullTextInput, { textAlign }]}
+              placeholder="Bir şey yaz..."
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              value={overlayText}
+              onChangeText={setOverlayText}
+              multiline
+              autoFocus
+              maxLength={200}
             />
-            {pollOptions.map((opt, i) => (
-              <TextInput
-                key={i}
-                style={styles.input}
-                placeholder={t('stories.optionPlaceholder', { number: i + 1 })}
-                placeholderTextColor="#6B7280"
-                value={opt}
-                onChangeText={(v) => setPollOpt(i, v)}
+          </View>
+        </Modal>
+      )}
+
+      {/* ── Sticker Sheet ── */}
+      <Modal transparent visible={showStickerSheet} animationType="slide" onRequestClose={() => setShowStickerSheet(false)}>
+        <Pressable style={st.sheetOverlay} onPress={() => setShowStickerSheet(false)}>
+          <View style={[st.stickerSheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={st.sheetHandle} />
+            <Text style={st.sheetTitle}>Sticker Ekle</Text>
+            <View style={st.stickerGrid}>
+              {STICKER_ACTIONS.map(s => (
+                <TouchableOpacity key={s.id} style={st.stickerGridItem} onPress={() => handleStickerAction(s.id)}>
+                  <View style={st.stickerGridIcon}>
+                    <Ionicons name={s.icon} size={26} color="#A78BFA" />
+                  </View>
+                  <Text style={st.stickerGridLabel}>{s.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Müzik modal ── */}
+      <Modal transparent visible={activeModal === 'music'} animationType="slide" onRequestClose={() => setActiveModal(null)}>
+        <Pressable style={st.sheetOverlay} onPress={() => setActiveModal(null)}>
+          <View style={[st.bottomSheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={st.sheetHandle} />
+            <Text style={st.sheetTitle}>Müzik Ekle</Text>
+            <TextInput style={st.searchInput} placeholder="Şarkı ara..." placeholderTextColor="#6B7280" value={musicSearch} onChangeText={setMusicSearch} autoFocus />
+            {musicLoading ? <ActivityIndicator size="small" color="#A78BFA" style={{ marginVertical: 20 }} /> : (
+              <FlatList
+                data={musicResults}
+                keyExtractor={(item, i) => item.id || item.video_id || String(i)}
+                style={{ maxHeight: 260 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={st.resultRow} onPress={() => { setSelectedMusic(item); setActiveModal(null); setMusicSearch(''); setMusicResults([]); }}>
+                    <Ionicons name="musical-notes" size={22} color="#A78BFA" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={st.resultTitle} numberOfLines={1}>{item.title || item.name}</Text>
+                      <Text style={st.resultSub} numberOfLines={1}>{item.artist || item.uploader || ''}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={musicSearch.trim() ? <Text style={st.emptyTxt}>Sonuç bulunamadı</Text> : null}
               />
-            ))}
-            <TouchableOpacity onPress={addPollOption} style={styles.addOptBtn}>
-              <Text style={styles.addOptText}>{t('stories.addOption')}</Text>
+            )}
+            <TouchableOpacity style={st.doneBtn} onPress={() => { setActiveModal(null); setMusicSearch(''); setMusicResults([]); }}>
+              <Text style={st.doneBtnTxt}>Bitti</Text>
             </TouchableOpacity>
-          </>
-        )}
-      </ScrollView>
-
-      {showMusicPicker && (
-        <Modal transparent visible animationType="slide">
-          <View style={styles.musicPickerOverlay}>
-            <View style={[styles.musicPickerPanel, { paddingBottom: insets.bottom + 24 }]}>
-              <Text style={styles.musicPickerTitle}>{t('stories.addMusic')}</Text>
-              <TextInput
-                style={styles.musicSearchInput}
-                placeholder={t('search.searchPlaceholder')}
-                placeholderTextColor="#6B7280"
-                value={musicSearch}
-                onChangeText={setMusicSearch}
-                autoFocus
-              />
-              {musicLoading ? (
-                <ActivityIndicator size="small" color="#8B5CF6" style={{ marginVertical: 16 }} />
-              ) : (
-                <FlatList
-                  data={musicResults}
-                  keyExtractor={(item, i) => item.video_id || item.id || String(i)}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={styles.musicResultRow}
-                      onPress={() => {
-                        setSelectedMusic(item);
-                        setShowMusicPicker(false);
-                        setMusicSearch('');
-                        setMusicResults([]);
-                      }}
-                    >
-                      <Ionicons name="musical-notes" size={24} color="#8B5CF6" />
-                      <View style={styles.musicResultInfo}>
-                        <Text style={styles.musicResultTitle} numberOfLines={1}>{item.title || item.name || ''}</Text>
-                        <Text style={styles.musicResultArtist} numberOfLines={1}>{item.artist || item.uploader || item.channel || ''}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  )}
-                  style={styles.musicResultsList}
-                  ListEmptyComponent={musicSearch.trim() ? <Text style={styles.musicEmpty}>{t('common.noResults')}</Text> : null}
-                />
-              )}
-              <TouchableOpacity style={styles.musicPickerClose} onPress={() => { setShowMusicPicker(false); setMusicSearch(''); setMusicResults([]); }}>
-                <Text style={styles.musicPickerCloseText}>{t('common.done')}</Text>
-              </TouchableOpacity>
-            </View>
           </View>
-        </Modal>
-      )}
+        </Pressable>
+      </Modal>
 
-      {showMentionSearch && (
-        <Modal transparent visible animationType="slide">
-          <View style={styles.musicPickerOverlay}>
-            <View style={[styles.musicPickerPanel, { paddingBottom: insets.bottom + 24 }]}>
-              <Text style={styles.musicPickerTitle}>{t('stories.mention')}</Text>
-              <TextInput
-                style={styles.musicSearchInput}
-                placeholder={t('search.searchPlaceholder')}
-                placeholderTextColor="#6B7280"
-                value={mentionQuery}
-                onChangeText={setMentionQuery}
-                autoFocus
+      {/* ── Mention modal ── */}
+      <Modal transparent visible={activeModal === 'mention'} animationType="slide" onRequestClose={() => setActiveModal(null)}>
+        <Pressable style={st.sheetOverlay} onPress={() => setActiveModal(null)}>
+          <View style={[st.bottomSheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={st.sheetHandle} />
+            <Text style={st.sheetTitle}>Kişi Etiketle</Text>
+            <TextInput style={st.searchInput} placeholder="Kullanıcı adı ara..." placeholderTextColor="#6B7280" value={mentionQuery} onChangeText={setMentionQuery} autoFocus />
+            {mentionLoading ? <ActivityIndicator size="small" color="#A78BFA" style={{ marginVertical: 20 }} /> : (
+              <FlatList
+                data={mentionResults}
+                keyExtractor={(item, i) => item.id || item.username || String(i)}
+                style={{ maxHeight: 260 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={st.resultRow} onPress={() => { setMentionSticker(item.username); setActiveModal(null); setMentionQuery(''); setMentionResults([]); }}>
+                    <View style={st.mentionAvatar}><Ionicons name="person" size={18} color="#A78BFA" /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={st.resultTitle}>@{item.username || item.display_name}</Text>
+                      <Text style={st.resultSub}>{item.display_name || ''}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={mentionQuery.trim() ? <Text style={st.emptyTxt}>Kullanıcı bulunamadı</Text> : null}
               />
-              {mentionLoading ? (
-                <ActivityIndicator size="small" color="#8B5CF6" style={{ marginVertical: 16 }} />
-              ) : (
-                <FlatList
-                  data={mentionResults}
-                  keyExtractor={(item) => item.id || item.username || String(Math.random())}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={styles.musicResultRow}
-                      onPress={() => {
-                        setMentionSticker(item.username || item.display_name || '');
-                        setShowMentionSearch(false);
-                        setMentionQuery('');
-                        setMentionResults([]);
-                      }}
-                    >
-                      <View style={styles.musicResultInfo}>
-                        <Text style={styles.musicResultTitle}>@{item.username || item.display_name || ''}</Text>
-                        <Text style={styles.musicResultArtist} numberOfLines={1}>{item.display_name || item.username || ''}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  )}
-                  style={styles.musicResultsList}
-                  ListEmptyComponent={mentionQuery.trim() ? <Text style={styles.musicEmpty}>{t('common.noResults')}</Text> : null}
-                />
-              )}
-              <TouchableOpacity style={styles.musicPickerClose} onPress={() => { setShowMentionSearch(false); setMentionQuery(''); setMentionResults([]); }}>
-                <Text style={styles.musicPickerCloseText}>{t('common.done')}</Text>
-              </TouchableOpacity>
-            </View>
+            )}
+            <TouchableOpacity style={st.doneBtn} onPress={() => { setActiveModal(null); setMentionQuery(''); setMentionResults([]); }}>
+              <Text style={st.doneBtnTxt}>Bitti</Text>
+            </TouchableOpacity>
           </View>
-        </Modal>
-      )}
+        </Pressable>
+      </Modal>
 
-      {showCamera && (
-        <Modal visible animationType="slide" onRequestClose={() => setShowCamera(false)}>
-          <StoryCamera
-            visible={showCamera}
-            onCapture={(uri) => {
-              setMediaUri(uri);
-              setStoryType(uri?.includes('.mp4') || uri?.includes('.mov') ? 'video' : 'photo');
-              setShowCamera(false);
-            }}
-            onClose={() => setShowCamera(false)}
-          />
-        </Modal>
-      )}
-
-      {showLinkInput && (
-        <Modal transparent visible animationType="slide">
-          <View style={styles.musicPickerOverlay}>
-            <View style={[styles.musicPickerPanel, { paddingBottom: insets.bottom + 24 }]}>
-              <Text style={styles.musicPickerTitle}>{t('stories.link')}</Text>
-              <TextInput
-                style={styles.musicSearchInput}
-                placeholder="https://"
-                placeholderTextColor="#6B7280"
-                value={linkSticker}
-                onChangeText={setLinkSticker}
-                autoFocus
-                autoCapitalize="none"
-                keyboardType="url"
-              />
-              <TouchableOpacity
-                style={styles.musicPickerClose}
-                onPress={() => {
-                  if (linkSticker.trim()) setShowLinkInput(false);
-                  else setShowLinkInput(false);
-                }}
-              >
-                <Text style={styles.musicPickerCloseText}>{t('common.done')}</Text>
-              </TouchableOpacity>
-            </View>
+      {/* ── Bağlantı modal ── */}
+      <Modal transparent visible={activeModal === 'link'} animationType="slide" onRequestClose={() => setActiveModal(null)}>
+        <Pressable style={st.sheetOverlay} onPress={() => setActiveModal(null)}>
+          <View style={[st.bottomSheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={st.sheetHandle} />
+            <Text style={st.sheetTitle}>Bağlantı Ekle</Text>
+            <TextInput style={st.searchInput} placeholder="https://" placeholderTextColor="#6B7280" value={linkSticker} onChangeText={setLinkSticker} autoFocus autoCapitalize="none" keyboardType="url" />
+            <TouchableOpacity style={st.doneBtn} onPress={() => setActiveModal(null)}>
+              <Text style={st.doneBtnTxt}>Ekle</Text>
+            </TouchableOpacity>
           </View>
-        </Modal>
-      )}
+        </Pressable>
+      </Modal>
+
+      {/* ── Anket modal ── */}
+      <Modal transparent visible={activeModal === 'poll'} animationType="slide" onRequestClose={() => setActiveModal(null)}>
+        <Pressable style={st.sheetOverlay} onPress={() => setActiveModal(null)}>
+          <View style={[st.bottomSheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={st.sheetHandle} />
+            <Text style={st.sheetTitle}>Anket</Text>
+            <TextInput style={st.searchInput} placeholder="Sorunuzu yazın..." placeholderTextColor="#6B7280" value={pollQuestion} onChangeText={setPollQuestion} autoFocus />
+            {pollOptions.map((opt, i) => (
+              <TextInput key={i} style={[st.searchInput, { marginTop: 8 }]} placeholder={`Seçenek ${i + 1}`} placeholderTextColor="#6B7280" value={opt}
+                onChangeText={v => { const n = [...pollOptions]; n[i] = v; setPollOptions(n); }} />
+            ))}
+            {pollOptions.length < 4 && (
+              <TouchableOpacity onPress={() => setPollOptions(p => [...p, ''])} style={st.addOptBtn}>
+                <Ionicons name="add-circle-outline" size={18} color="#A78BFA" />
+                <Text style={st.addOptTxt}>Seçenek ekle</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={st.doneBtn} onPress={() => setActiveModal(null)}>
+              <Text style={st.doneBtnTxt}>Tamam</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Geri sayım modal ── */}
+      <Modal transparent visible={activeModal === 'countdown'} animationType="slide" onRequestClose={() => setActiveModal(null)}>
+        <Pressable style={st.sheetOverlay} onPress={() => setActiveModal(null)}>
+          <View style={[st.bottomSheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={st.sheetHandle} />
+            <Text style={st.sheetTitle}>Geri Sayım</Text>
+            <TextInput style={st.searchInput} placeholder="Başlık (opsiyonel)" placeholderTextColor="#6B7280" value={countdownTitle} onChangeText={setCountdownTitle} autoFocus />
+            <TextInput style={[st.searchInput, { marginTop: 8 }]} placeholder="Bitiş: YYYY-MM-DDTHH:mm" placeholderTextColor="#6B7280" value={countdownEnd} onChangeText={setCountdownEnd} />
+            <TouchableOpacity style={st.doneBtn} onPress={() => { setShowCountdown(!!countdownEnd); setActiveModal(null); }}>
+              <Text style={st.doneBtnTxt}>Ekle</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
-const createStyles = (colors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1F2937',
-  },
-  cancelText: { color: colors.accent, fontSize: 16 },
-  title: { fontSize: 18, fontWeight: '700', color: colors.text },
-  postBtn: { backgroundColor: '#8B5CF6', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
-  postBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  btnDisabled: { opacity: 0.7 },
-  scroll: { flex: 1 },
-  content: { padding: 20 },
-  mediaSection: { flexDirection: 'row', gap: 16, marginBottom: 20 },
-  mediaBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 16, backgroundColor: '#1F2937', borderRadius: 12 },
-  mediaBtnText: { color: '#9CA3AF', fontSize: 14 },
-  preview: { width: '100%', height: 240, borderRadius: 12, overflow: 'hidden', marginBottom: 20 },
-  previewImg: { width: '100%', height: '100%' },
-  label: { fontSize: 14, color: '#9CA3AF', marginBottom: 8 },
-  input: {
-    backgroundColor: '#1F2937',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: colors.text,
-    marginBottom: 16,
-  },
-  colorRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  colorBtn: { width: 40, height: 40, borderRadius: 20 },
-  colorBtnSelected: { borderWidth: 3, borderColor: '#fff' },
-  filterRow: { marginBottom: 16 },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: '#1F2937',
-    borderRadius: 20,
-    marginRight: 8,
-  },
-  filterChipSelected: { backgroundColor: '#8B5CF6' },
-  filterText: { color: colors.text, fontSize: 14 },
-  typeBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 16, backgroundColor: '#1F2937', borderRadius: 12, marginBottom: 16 },
-  typeBtnText: { color: colors.accent, fontSize: 14 },
-  addOptBtn: { padding: 12 },
-  addOptText: { color: colors.accent, fontSize: 14 },
-  musicOverlay: { position: 'absolute', bottom: 16, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12 },
-  musicOverlayText: { color: colors.text, fontSize: 13, flex: 1 },
-  musicPickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  musicPickerPanel: { backgroundColor: '#1F2937', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20 },
-  musicPickerTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 16 },
-  musicSearchInput: { backgroundColor: '#374151', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: colors.text, marginBottom: 16 },
-  musicResultsList: { maxHeight: 240, marginBottom: 16 },
-  musicResultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 4, gap: 12, borderBottomWidth: 1, borderBottomColor: '#374151' },
-  musicResultInfo: { flex: 1, minWidth: 0 },
-  musicResultTitle: { fontSize: 15, color: colors.text, fontWeight: '500' },
-  musicResultArtist: { fontSize: 13, color: '#9CA3AF', marginTop: 2 },
-  musicEmpty: { color: '#9CA3AF', textAlign: 'center', paddingVertical: 24 },
-  musicPickerClose: { backgroundColor: '#8B5CF6', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  musicPickerCloseText: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  stickerToolbar: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  toolBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 12, backgroundColor: '#1F2937', borderRadius: 12 },
-  toolLabel: { color: '#9CA3AF', fontSize: 13 },
-  stickerClearRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  stickerClear: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#1E1B4B', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
-  stickerClearText: { color: colors.text, fontSize: 13 },
-  stickerOverlay: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
-  stickerOverlayTopLeft: { top: 12, left: 12 },
-  stickerOverlayTopRight: { top: 12, right: 12 },
-  stickerOverlayBottomRight: { bottom: 16, right: 16 },
-  stickerOverlayText: { color: colors.text, fontSize: 13 },
-  previewPlaceholder: { width: '100%', height: '100%' },
+/* ── Stiller ─────────────────────────────────────────────────────────────── */
+const st = StyleSheet.create({
+  // CAPTURE
+  captureRoot:         { flex: 1, backgroundColor: '#000' },
+  captureTopBar:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, zIndex: 10 },
+  captureIconBtn:      { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  modeRow:             { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 4 },
+  modeTab:             { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
+  modeTabActive:       { backgroundColor: 'rgba(255,255,255,0.18)' },
+  modeTabText:         { color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: '600' },
+  modeTabTextActive:   { color: '#fff' },
+  cameraPlaceholder:   { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  textModeCenter:      { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  textTapHint:         { borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)', borderRadius: 16, paddingVertical: 16, paddingHorizontal: 32, borderStyle: 'dashed' },
+  textTapHintText:     { color: 'rgba(255,255,255,0.5)', fontSize: 16 },
+  bgColorStrip:        { flexDirection: 'row', justifyContent: 'center', gap: 10, paddingVertical: 16 },
+  bgColorDot:          { width: 30, height: 30, borderRadius: 15 },
+  bgColorDotSelected:  { width: 34, height: 34, borderRadius: 17, borderWidth: 3, borderColor: '#fff' },
+  captureBottomBar:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 32, paddingTop: 16 },
+  galleryBtn:          { alignItems: 'center', gap: 4, width: 60 },
+  galleryBtnText:      { color: '#fff', fontSize: 11, fontWeight: '500' },
+  captureBtn:          { width: 80, height: 80, borderRadius: 40, borderWidth: 4, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  captureBtnInner:     { width: 62, height: 62, borderRadius: 31, backgroundColor: '#fff' },
+  textNextBtn:         { width: 80, height: 80, borderRadius: 40, backgroundColor: '#A78BFA', alignItems: 'center', justifyContent: 'center' },
+  flipBtn:             { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+
+  // EDIT
+  editRoot:            { flex: 1, backgroundColor: '#000' },
+  editBg:              { ...StyleSheet.absoluteFillObject },
+  editTopBar:          { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 12, paddingBottom: 12, zIndex: 10 },
+  editIconBtn:         { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  rightTools:          { gap: 10, alignItems: 'center' },
+  editToolBtn:         { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+  textToolIcon:        { color: '#fff', fontSize: 16, fontWeight: '800' },
+  editBottom:          { position: 'absolute', bottom: 0, left: 0, right: 0 },
+  filterStrip:         { paddingBottom: 12 },
+  filterStripContent:  { paddingHorizontal: 12, gap: 10 },
+  filterThumb:         { alignItems: 'center', gap: 5 },
+  filterThumbSelected: {},
+  filterThumbInner:    { width: 56, height: 80, borderRadius: 10, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
+  filterLabel:         { color: 'rgba(255,255,255,0.5)', fontSize: 11 },
+  filterLabelSelected: { color: '#fff', fontWeight: '700' },
+  shareRow:            { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10 },
+  closeFriendsBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'rgba(0,0,0,0.4)' },
+  closeFriendsBtnActive:{ borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.1)' },
+  closeFriendsTxt:     { color: '#fff', fontSize: 13, fontWeight: '600' },
+  shareBtn:            { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#A78BFA', borderRadius: 24, paddingVertical: 14 },
+  shareBtnText:        { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  // Overlay sticker'lar
+  overlayTextWrap:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  textOverlayBubble:   { backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, maxWidth: SW - 40 },
+  textOverlayValue:    { color: '#fff', fontSize: 22, fontWeight: '700' },
+  stickerChipTopLeft:  { position: 'absolute', top: 120, left: 16, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
+  stickerChipTopCenter:{ position: 'absolute', top: 160, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
+  stickerChipBottom:   { position: 'absolute', bottom: 220, left: 16, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
+  stickerChipText:     { color: '#fff', fontSize: 13, fontWeight: '600' },
+  musicChip:           { position: 'absolute', bottom: 260, left: 16, right: 80, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20 },
+  musicChipText:       { flex: 1, color: '#fff', fontSize: 13 },
+  pollPreview:         { position: 'absolute', bottom: 220, left: 16, right: 16, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  pollPreviewQ:        { color: '#fff', fontSize: 15, fontWeight: '700', marginBottom: 10 },
+  pollPreviewOpt:      { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, paddingVertical: 9, paddingHorizontal: 14, marginBottom: 6 },
+  pollPreviewOptText:  { color: '#fff', fontSize: 14 },
+
+  // Metin modalı
+  textModal:           { flex: 1 },
+  textModalTop:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 12, zIndex: 10 },
+  textAlignBtn:        { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  textDoneBtn:         { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
+  textDoneBtnText:     { color: '#fff', fontSize: 15, fontWeight: '700' },
+  fullTextInput:       { flex: 1, color: '#fff', fontSize: 26, fontWeight: '700', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4, paddingHorizontal: 24, paddingVertical: 20 },
+
+  // Sheet / modal ortak
+  sheetOverlay:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  stickerSheet:        { backgroundColor: '#1a1a2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  bottomSheet:         { backgroundColor: '#1a1a2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  sheetHandle:         { width: 40, height: 4, borderRadius: 2, backgroundColor: '#374151', alignSelf: 'center', marginBottom: 16 },
+  sheetTitle:          { color: '#fff', fontSize: 17, fontWeight: '700', marginBottom: 16 },
+  stickerGrid:         { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  stickerGridItem:     { width: (SW - 40 - 48) / 3, alignItems: 'center', gap: 8 },
+  stickerGridIcon:     { width: 60, height: 60, borderRadius: 18, backgroundColor: 'rgba(167,139,250,0.12)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(167,139,250,0.2)' },
+  stickerGridLabel:    { color: '#9CA3AF', fontSize: 12, textAlign: 'center' },
+  searchInput:         { backgroundColor: '#374151', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 13, fontSize: 15, color: '#fff', marginBottom: 4 },
+  resultRow:           { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#374151' },
+  resultTitle:         { color: '#fff', fontSize: 15, fontWeight: '500' },
+  resultSub:           { color: '#9CA3AF', fontSize: 13 },
+  mentionAvatar:       { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(167,139,250,0.15)', alignItems: 'center', justifyContent: 'center' },
+  emptyTxt:            { color: '#6B7280', textAlign: 'center', paddingVertical: 24, fontSize: 14 },
+  doneBtn:             { backgroundColor: '#A78BFA', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
+  doneBtnTxt:          { color: '#fff', fontSize: 16, fontWeight: '700' },
+  addOptBtn:           { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10 },
+  addOptTxt:           { color: '#A78BFA', fontSize: 14 },
 });

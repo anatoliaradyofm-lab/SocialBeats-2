@@ -22,7 +22,7 @@ export default function SongRadioScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation();
   const route = useRoute();
-  const { playTrack, setQueue } = usePlayer();
+  const { playTrack } = usePlayer();
 
   const { trackId, trackTitle, trackArtist, trackThumbnail } = route.params || {};
 
@@ -48,29 +48,24 @@ export default function SongRadioScreen() {
     }
   };
 
+  const buildQueue = () => tracks.map((tr) => ({
+    id: tr.id,
+    title: tr.title,
+    artist: tr.artist,
+    thumbnail: tr.thumbnail,
+    source: tr.source,
+    audio_url: tr.audio_url,
+  }));
+
   const handlePlayAll = () => {
     if (tracks.length === 0) return;
-    const queueTracks = tracks.map((tr) => ({
-      id: tr.id,
-      title: tr.title,
-      artist: tr.artist,
-      thumbnail: tr.thumbnail,
-      source: tr.source,
-      audio_url: tr.audio_url,
-    }));
-    setQueue(queueTracks, 0);
+    const queueTracks = buildQueue();
+    playTrack(queueTracks[0], queueTracks);
   };
 
   const handlePlayTrack = (track, index) => {
-    const queueTracks = tracks.map((tr) => ({
-      id: tr.id,
-      title: tr.title,
-      artist: tr.artist,
-      thumbnail: tr.thumbnail,
-      source: tr.source,
-      audio_url: tr.audio_url,
-    }));
-    setQueue(queueTracks, index);
+    const queueTracks = buildQueue();
+    playTrack(queueTracks[index], queueTracks);
   };
 
   const renderTrackItem = ({ item, index }) => (
@@ -87,7 +82,7 @@ export default function SongRadioScreen() {
         <Text style={styles.trackArtist} numberOfLines={1}>{item.artist}</Text>
       </View>
       <View style={styles.sourceTag}>
-        <Text style={styles.sourceText}>{item.source === 'spotify' ? 'Spotify' : 'YT'}</Text>
+        <Text style={styles.sourceText}>SoundCloud</Text>
       </View>
       <Ionicons name="play-circle-outline" size={28} color="#8B5CF6" />
     </TouchableOpacity>

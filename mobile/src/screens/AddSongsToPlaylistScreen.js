@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+import { enqueuePendingTrack } from './PlaylistDetailScreen';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -26,7 +27,7 @@ export default function AddSongsToPlaylistScreen({ route, navigation }) {
 
   const search = useCallback(async () => {
     const q = query.trim();
-    if (!q || !token) return;
+    if (!q) return;
     setLoading(true);
     try {
       const encoded = encodeURIComponent(q);
@@ -42,10 +43,12 @@ export default function AddSongsToPlaylistScreen({ route, navigation }) {
 
   const addTrack = async (track) => {
     const trackId = track.id || track.song_id;
-    if (!trackId || !playlistId || !token || addingIds.has(trackId)) return;
+    if (!trackId || !playlistId || addingIds.has(trackId)) return;
     setAddingIds((prev) => new Set([...prev, trackId]));
     try {
       await api.post(`/playlists/${playlistId}/tracks/${trackId}`, {}, token);
+      // Enqueue track so PlaylistDetail picks it up on mount
+      enqueuePendingTrack(playlistId, track);
       navigation.goBack();
     } catch (err) {
       setAddingIds((prev) => {

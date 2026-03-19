@@ -10,6 +10,17 @@ import { usePlayer } from '../contexts/PlayerContext';
 import api from '../services/api';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
+import {
+  removePlaylistFromCache,
+  getStoredTracks,
+  getStoredTrackCount,
+  enqueuePendingTrack,
+  flushPendingTracks,
+  removeStoredTrack,
+} from '../lib/playlistStore';
+
+// Re-export for backwards compatibility (other files import these from here)
+export { enqueuePendingTrack, removeStoredTrack, getStoredTrackCount } from '../lib/playlistStore';
 
 let QRCode = null;
 try {
@@ -22,10 +33,31 @@ export default function PlaylistDetailScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { token, user } = useAuth();
-  const { playTrack } = usePlayer();
-  const { playlistId, name } = route.params || {};
-  const [playlist, setPlaylist] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { playTrack, setQueue } = usePlayer();
+  const { playlistId, name, playlist: initPlaylist } = route.params || {};
+  // Seed from navigation params; merge any pending tracks enqueued by AddSongsToPlaylistScreen
+  const [playlist, setPlaylist] = useState(() => {
+    if (!playlistId) return initPlaylist || null;
+    // Flush pending (just-added via AddToPlaylistModal)
+    const pending = flushPendingTracks(playlistId);
+    // Merge: stored (persisted) + pending (deduplicated)
+    const stored = getStoredTracks(playlistId);
+    const allExtra = [...stored];
+    pending.forEach(t => {
+      if (!allExtra.some(s => String(s.id || s.song_id) === String(t.id || t.song_id)))
+        allExtra.push(t);
+    });
+    const base = initPlaylist || { id: playlistId, name: name || '', track_count: 0 };
+    const apiTracks = base.tracks || [];
+    const merged = [...apiTracks];
+    allExtra.forEach(t => {
+      if (!merged.some(s => String(s.id || s.song_id) === String(t.id || t.song_id)))
+        merged.push(t);
+    });
+    if (merged.length === 0) return base;
+    return { ...base, tracks: merged, track_count: merged.length };
+  });
+  const [loading, setLoading] = useState(!initPlaylist);
   const [error, setError] = useState(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -33,36 +65,43 @@ export default function PlaylistDetailScreen({ navigation, route }) {
   const [editIsPublic, setEditIsPublic] = useState(true);
   const [saving, setSaving] = useState(false);
   const [removingTrackId, setRemovingTrackId] = useState(null);
-  const [qrModalVisible, setQrModalVisible] = useState(false);
 
   const loadPlaylist = useCallback(async () => {
     if (!playlistId) return;
+    // Don't re-fetch if we already have data from navigation params
+    if (initPlaylist) { setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
       const data = await api.get(`/playlists/${playlistId}`, token);
-      setPlaylist(data);
-      setEditName(data?.name || '');
-      setEditIsPublic(!!(data?.is_public ?? true));
+      const hasData = data && (data.id || data.name || Array.isArray(data.tracks));
+      if (hasData) {
+        // Preserve any locally-added tracks
+        setPlaylist(prev => {
+          const localTracks = prev?.tracks || [];
+          const merged = [...(data.tracks || [])];
+          localTracks.forEach(lt => {
+            if (!merged.some(t => String(t.id || t.song_id) === String(lt.id || lt.song_id)))
+              merged.push(lt);
+          });
+          return { ...data, tracks: merged, track_count: merged.length };
+        });
+        setEditName(data?.name || '');
+        setEditIsPublic(!!(data?.is_public ?? true));
+      }
     } catch (err) {
-      setPlaylist(null);
       setError(err?.data?.detail || err?.message || t('common.error', 'Error'));
     } finally {
       setLoading(false);
     }
-  }, [playlistId, token, t]);
+  }, [playlistId, token, t, initPlaylist]);
 
-  useEffect(() => {
-    loadPlaylist();
-  }, [loadPlaylist]);
+  useEffect(() => { loadPlaylist(); }, [loadPlaylist]);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', loadPlaylist);
-    return unsubscribe;
-  }, [navigation, loadPlaylist]);
 
   const tracks = playlist?.tracks || [];
-  const isOwner = !!(playlist?.owner_id && user?.id && playlist.owner_id === user.id);
+  // If playlist has no owner_id set (e.g. freshly created or mock), treat current user as owner
+  const isOwner = !!(playlist && (!playlist.owner_id || (user?.id && String(playlist.owner_id) === String(user.id))));
 
   const handleEdit = () => {
     setMenuVisible(false);
@@ -71,29 +110,6 @@ export default function PlaylistDetailScreen({ navigation, route }) {
     setEditModalVisible(true);
   };
 
-  const handleEditCover = async () => {
-    setMenuVisible(false);
-    try {
-      const { launchImageLibraryAsync } = await import('expo-image-picker');
-      const { MediaTypeOptions } = await import('expo-image-picker');
-      const result = await launchImageLibraryAsync({
-        mediaTypes: MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-      });
-      if (!result.canceled && result.assets?.[0]?.uri && token) {
-        const url = await api.uploadFile(result.assets[0].uri, token, 'playlist_cover', 'image/jpeg');
-        await api.put(`/playlists/${playlistId}`, { cover_url: url }, token);
-        setPlaylist((p) => p ? { ...p, cover_url: url } : p);
-      }
-    } catch (err) {
-      if (err?.code !== 'ERR_MODULE_NOT_FOUND') {
-        Alert.alert(t('common.error', 'Error'), err?.message || t('common.operationFailed', 'Operation failed'));
-      } else {
-        Alert.alert(t('common.info', 'Info'), t('playlistDetail.editCover', 'Edit Cover') + ' – ' + (t('common.operationFailed', 'Operation failed')));
-      }
-    }
-  };
 
   const handleSaveEdit = async () => {
     if (!token || !playlistId || saving) return;
@@ -112,19 +128,19 @@ export default function PlaylistDetailScreen({ navigation, route }) {
   const handleDelete = () => {
     setMenuVisible(false);
     Alert.alert(
-      t('playlistDetail.deletePlaylist', 'Delete Playlist'),
-      t('playlistDetail.deleteConfirm', 'Are you sure you want to delete this playlist?'),
+      'Oynatma Listesini Sil',
+      'Bu oynatma listesini silmek istediğinden emin misin?',
       [
-        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+        { text: 'İptal', style: 'cancel' },
         {
-          text: t('common.delete', 'Delete'),
-          style: 'destructive',
+          text: 'Sil', style: 'destructive',
           onPress: async () => {
             try {
               await api.delete(`/playlists/${playlistId}`, token);
+              removePlaylistFromCache(playlistId);
               navigation.goBack();
             } catch (err) {
-              Alert.alert(t('common.error', 'Error'), err?.data?.detail || err?.message || t('common.operationFailed', 'Operation failed'));
+              Alert.alert('Hata', err?.data?.detail || err?.message || 'Silinemedi.');
             }
           },
         },
@@ -134,15 +150,16 @@ export default function PlaylistDetailScreen({ navigation, route }) {
 
   const handleShare = async () => {
     setMenuVisible(false);
+    const shareUrl = getShareUrl();
     try {
-      const shareUrl = process.env.EXPO_PUBLIC_API_URL
-        ? `${process.env.EXPO_PUBLIC_API_URL.replace('/api', '')}/playlist/${playlistId}`
-        : `https://social-music-fix.preview.emergentagent.com/playlist/${playlistId}`;
-      await Share.share({
-        message: `${playlist?.name || t('playlist.playlist', 'Playlist')}: ${shareUrl}`,
-        title: t('playlistDetail.shareTitle', 'Share playlist'),
-        url: shareUrl,
-      });
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ title: playlist?.name || 'Playlist', url: shareUrl });
+      } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+        Alert.alert('Kopyalandı', 'Bağlantı panoya kopyalandı!');
+      } else {
+        await Share.share({ message: `${playlist?.name || 'Playlist'}: ${shareUrl}`, url: shareUrl });
+      }
     } catch { }
   };
 
@@ -152,14 +169,18 @@ export default function PlaylistDetailScreen({ navigation, route }) {
       : `https://social-music-fix.preview.emergentagent.com/playlist/${playlistId}`;
   };
 
-  const handleShareQR = () => {
+
+  const handlePlayAll = () => {
     setMenuVisible(false);
-    setQrModalVisible(true);
+    if (tracks.length > 0) setQueue(tracks, 0);
   };
 
   const handleAddSongs = () => {
     setMenuVisible(false);
-    navigation.navigate('AddSongsToPlaylist', { playlistId, playlistName: playlist?.name });
+    navigation.navigate('AddSongsToPlaylist', {
+      playlistId,
+      playlistName: playlist?.name || name,
+    });
   };
 
   const handleMoveTrack = async (index, direction) => {
@@ -172,34 +193,34 @@ export default function PlaylistDetailScreen({ navigation, route }) {
     setPlaylist(p => p ? { ...p, tracks: newTracks } : p);
     try {
       const trackIds = newTracks.map(t => t.id || t.song_id);
-      await api.put(`/playlists/${playlistId}/reorder`, { track_ids: trackIds }, token);
+      await api.put(`/playlists/${playlistId}/tracks/reorder`, { track_ids: trackIds }, token);
     } catch {
       setPlaylist(p => p ? { ...p, tracks } : p);
     }
   };
 
-  const handleRemoveTrack = async (track) => {
+  const handleRemoveTrack = (track) => {
     const trackId = track.id || track.song_id;
-    if (!trackId || !token || removingTrackId) return;
+    if (!trackId || removingTrackId) return;
     Alert.alert(
-      t('playlistDetail.removeSong', 'Remove from playlist'),
-      `${t('playlistDetail.removeSong', 'Remove')} "${track.title || track.name}"?`,
+      'Şarkıyı Kaldır',
+      `"${track.title || track.name}" listeden çıkarılsın mı?`,
       [
-        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+        { text: 'İptal', style: 'cancel' },
         {
-          text: t('common.delete', 'Delete'),
-          style: 'destructive',
+          text: 'Kaldır', style: 'destructive',
           onPress: async () => {
             setRemovingTrackId(trackId);
             try {
               await api.delete(`/playlists/${playlistId}/tracks/${trackId}`, token);
+              removeStoredTrack(playlistId, trackId);
               setPlaylist((p) => {
                 if (!p) return p;
                 const newTracks = (p.tracks || []).filter((t) => String(t.id || t.song_id) !== String(trackId));
                 return { ...p, tracks: newTracks, track_count: newTracks.length };
               });
-            } catch (err) {
-              Alert.alert(t('common.error', 'Error'), err?.data?.detail || err?.message);
+            } catch {
+              Alert.alert('Hata', 'Şarkı listeden çıkarılamadı.');
             } finally {
               setRemovingTrackId(null);
             }
@@ -289,6 +310,12 @@ export default function PlaylistDetailScreen({ navigation, route }) {
           {tracks.length} {t('search.songs', 'songs')}
           {playlist && ` • ${playlist.is_public ? t('playlistDetail.public', 'Public') : t('playlistDetail.private', 'Private')}`}
         </Text>
+        {tracks.length > 0 && (
+          <TouchableOpacity style={styles.playAllBtn} onPress={() => setQueue(tracks, 0)}>
+            <Ionicons name="play-circle" size={20} color="#fff" />
+            <Text style={styles.playAllText}>Tümünü Oynat</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {loading ? (
@@ -325,57 +352,26 @@ export default function PlaylistDetailScreen({ navigation, route }) {
           onPress={() => setMenuVisible(false)}
         >
           <View style={styles.menuSheet}>
+            <TouchableOpacity style={styles.menuItem} onPress={handlePlayAll}>
+              <Ionicons name="play-circle-outline" size={22} color="#8B5CF6" />
+              <Text style={styles.menuText}>Tümünü Oynat</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
               <Ionicons name="pencil-outline" size={22} color="#fff" />
-              <Text style={styles.menuText}>{t('playlistDetail.editName', 'Edit Name')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={handleEditCover}>
-              <Ionicons name="image-outline" size={22} color="#fff" />
-              <Text style={styles.menuText}>{t('playlistDetail.editCover', 'Edit Cover')}</Text>
+              <Text style={styles.menuText}>Yeniden Adlandır</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={handleShare}>
               <Ionicons name="share-outline" size={22} color="#fff" />
-              <Text style={styles.menuText}>{t('common.share', 'Share')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={handleShareQR}>
-              <Ionicons name="qr-code-outline" size={22} color="#fff" />
-              <Text style={styles.menuText}>{t('playlistDetail.shareQR', 'QR Code')}</Text>
+              <Text style={styles.menuText}>Paylaş</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={handleDelete}>
               <Ionicons name="trash-outline" size={22} color="#EF4444" />
-              <Text style={[styles.menuText, styles.menuTextDanger]}>{t('common.delete', 'Delete')}</Text>
+              <Text style={[styles.menuText, styles.menuTextDanger]}>Sil</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
 
-      {/* QR Code Modal */}
-      <Modal visible={qrModalVisible} transparent animationType="fade">
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setQrModalVisible(false)}
-        >
-          <View style={styles.qrModal}>
-            <Text style={styles.qrTitle}>{t('playlistDetail.shareQR', 'QR Kod ile Paylaş')}</Text>
-            <View style={styles.qrContainer}>
-              {QRCode ? (
-                <QRCode value={getShareUrl()} size={200} color="#fff" backgroundColor="#1F2937" />
-              ) : (
-                <Text style={styles.qrFallbackText}>{getShareUrl()}</Text>
-              )}
-            </View>
-            <Text style={styles.qrUrl} numberOfLines={2}>{getShareUrl()}</Text>
-            <TouchableOpacity style={styles.qrShareBtn} onPress={handleShare}>
-              <Ionicons name="share-outline" size={20} color="#fff" />
-              <Text style={styles.qrShareText}>{t('common.share', 'Paylaş')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.qrCloseBtn} onPress={() => setQrModalVisible(false)}>
-              <Text style={styles.qrCloseText}>{t('common.close', 'Kapat')}</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
       {/* Edit Modal */}
       <Modal visible={editModalVisible} transparent animationType="slide">
@@ -420,7 +416,7 @@ export default function PlaylistDetailScreen({ navigation, route }) {
 
 const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
+  header: { paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   backBtn: {},
   backText: { color: colors.accent, fontSize: 16 },
@@ -428,44 +424,46 @@ const createStyles = (colors) => StyleSheet.create({
   addBtn: { padding: 4 },
   shareBtn: { padding: 4 },
   menuBtn: { padding: 4 },
-  title: { fontSize: 22, fontWeight: '700', color: colors.text },
-  subtitle: { fontSize: 14, color: '#9CA3AF', marginTop: 4 },
+  title: { fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, color: colors.textMuted, marginTop: 4 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { padding: 16 },
-  empty: { color: '#9CA3AF', textAlign: 'center', paddingVertical: 40 },
+  empty: { color: colors.textMuted, textAlign: 'center', paddingVertical: 40 },
   retryBtn: { marginTop: 12, paddingVertical: 8, paddingHorizontal: 16 },
   retryText: { color: colors.accent, fontSize: 16 },
-  trackRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
-  trackNum: { width: 28, color: '#9CA3AF', fontSize: 14 },
+  playAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primary, borderRadius: 24, paddingHorizontal: 20, paddingVertical: 10, alignSelf: 'flex-start', marginTop: 12 },
+  playAllText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  trackRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+  trackNum: { width: 28, color: colors.textMuted, fontSize: 14 },
   trackThumb: { width: 48, height: 48, borderRadius: 6, marginRight: 12 },
   trackInfo: { flex: 1 },
   trackTitle: { fontSize: 16, color: colors.text },
-  trackArtist: { fontSize: 14, color: '#9CA3AF', marginTop: 2 },
+  trackArtist: { fontSize: 14, color: colors.textMuted, marginTop: 2 },
   removeBtn: { padding: 8 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  menuSheet: { backgroundColor: '#1F2937', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 32 },
+  modalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
+  menuSheet: { backgroundColor: colors.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 32, borderWidth: 1, borderColor: colors.border },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 12 },
   menuItemDanger: {},
   menuText: { fontSize: 18, color: colors.text },
   menuTextDanger: { color: colors.error },
-  editModal: { backgroundColor: '#1F2937', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24 },
+  editModal: { backgroundColor: colors.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24, borderWidth: 1, borderColor: colors.border },
   editTitle: { fontSize: 20, fontWeight: '600', color: colors.text, marginBottom: 16 },
-  editInput: { height: 48, backgroundColor: colors.background, borderRadius: 8, paddingHorizontal: 16, color: colors.text, fontSize: 16, marginBottom: 16 },
+  editInput: { height: 48, backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 16, color: colors.text, fontSize: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   toggleLabel: { fontSize: 16, color: colors.text },
   editActions: { flexDirection: 'row', gap: 12 },
-  editCancel: { flex: 1, height: 48, borderRadius: 8, backgroundColor: '#374151', justifyContent: 'center', alignItems: 'center' },
-  editCancelText: { color: colors.text, fontSize: 16 },
-  editSave: { flex: 1, height: 48, borderRadius: 8, backgroundColor: '#8B5CF6', justifyContent: 'center', alignItems: 'center' },
-  editSaveText: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  editCancel: { flex: 1, height: 48, borderRadius: 12, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  editCancelText: { color: colors.textSecondary, fontSize: 16 },
+  editSave: { flex: 1, height: 48, borderRadius: 12, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
+  editSaveText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   reorderBtns: { flexDirection: 'column', alignItems: 'center', marginRight: 4 },
-  qrModal: { backgroundColor: '#1F2937', borderRadius: 16, padding: 24, margin: 24, alignItems: 'center' },
+  qrModal: { backgroundColor: colors.card, borderRadius: 20, padding: 24, margin: 24, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
   qrTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 20 },
-  qrContainer: { padding: 16, backgroundColor: '#1F2937', borderRadius: 12, marginBottom: 16 },
-  qrFallbackText: { color: '#9CA3AF', fontSize: 12, textAlign: 'center' },
-  qrUrl: { color: '#9CA3AF', fontSize: 12, textAlign: 'center', marginBottom: 20 },
-  qrShareBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#8B5CF6', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, marginBottom: 12 },
+  qrContainer: { padding: 16, backgroundColor: colors.surface, borderRadius: 12, marginBottom: 16 },
+  qrFallbackText: { color: colors.textMuted, fontSize: 12, textAlign: 'center' },
+  qrUrl: { color: colors.textMuted, fontSize: 12, textAlign: 'center', marginBottom: 20 },
+  qrShareBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, marginBottom: 12 },
   qrShareText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   qrCloseBtn: { padding: 8 },
-  qrCloseText: { color: '#9CA3AF', fontSize: 14 },
+  qrCloseText: { color: colors.textMuted, fontSize: 14 },
 });

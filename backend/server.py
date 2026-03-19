@@ -26,8 +26,6 @@ from collections import defaultdict
 import time
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth, SpotifyClientCredentials
 import socketio
 
 ROOT_DIR = Path(__file__).parent
@@ -49,18 +47,14 @@ db = client[os.environ.get('DB_NAME', 'socialbeats')]
 scheduler = AsyncIOScheduler()
 
 # JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'socialbeats-secret-key-2024')
+JWT_SECRET = os.environ.get('JWT_SECRET')
+if not JWT_SECRET:
+    raise RuntimeError(
+        "JWT_SECRET environment variable is not set. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
-
-# YouTube API Configuration
-YOUTUBE_API_KEY = os.environ.get('YOUTUBE_API_KEY', '')
-YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
-
-# Spotify API Configuration
-SPOTIFY_CLIENT_ID = os.environ.get('SPOTIFY_CLIENT_ID', '')
-SPOTIFY_CLIENT_SECRET = os.environ.get('SPOTIFY_CLIENT_SECRET', '')
-SPOTIFY_REDIRECT_URI = os.environ.get('SPOTIFY_REDIRECT_URI', '')
 
 # Email: via services.email_service (Brevo API). Config: BREVO_API_KEY, EMAIL_FROM in .env
 
@@ -71,20 +65,28 @@ WEBAUTHN_RP_NAME = os.environ.get('WEBAUTHN_RP_NAME', 'SocialBeats')
 
 # ============== SOCKET.IO SETUP ==============
 # Create Socket.IO server
+_sio_origins = os.environ.get(
+    'CORS_ORIGINS',
+    'http://localhost:19006,http://localhost:8080,https://socialbeats.app'
+).split(',')
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins='*',
-    logger=True,
-    engineio_logger=True
+    cors_allowed_origins=_sio_origins,
+    logger=False,
+    engineio_logger=False
 )
 
 # Create the main FastAPI app
 fastapi_app = FastAPI(title="SocialBeats Social API", version="3.0.0")
 
 # Add CORS middleware
+_cors_origins = os.environ.get(
+    'CORS_ORIGINS',
+    'http://localhost:19006,http://localhost:8080,https://socialbeats.app,https://social-music-fix.preview.emergentagent.com'
+).split(',')
 fastapi_app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8081", "http://localhost:8082", "http://localhost:19006", "https://socialbeats.app"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -731,13 +733,6 @@ async def run_scheduled_tasks():
             await cleanup_typing_indicators()
             await cleanup_disappearing_messages()
             await update_trending_hashtags()
-            try:
-                from services.clickhouse_service import aggregate_monthly_stats
-                # This could be scheduled to run once a day/month, 
-                # but running the query periodically safely aggregates older data inside.
-                aggregate_monthly_stats()
-            except Exception as e:
-                logging.error(f"ClickHouse aggregation error in cron: {e}")
         except Exception as e:
             logging.error(f"Scheduled task error: {e}")
         
@@ -1523,17 +1518,10 @@ async def services_status():
         pass
 
     return {
-        "youtube": {
-            "status": "ok" if YOUTUBE_API_KEY else "limited",
-            "message": "Tam API ile çalışıyor" if YOUTUBE_API_KEY else "oEmbed/yt-dlp fallback (API key opsiyonel)",
-            "api_key_configured": bool(YOUTUBE_API_KEY),
+        "soundcloud": {
+            "status": "ok",
+            "message": "SoundCloud arama aktif (main.py microservice)",
             "free": True, "key_required": False,
-        },
-        "spotify": {
-            "status": "ok" if (SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET) else "not_configured",
-            "message": "Spotify arama aktif" if (SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET) else "SPOTIFY_CLIENT_ID ve SPOTIFY_CLIENT_SECRET .env'e ekleyin",
-            "client_configured": bool(SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET),
-            "free": True, "key_required": True,
         },
         "deezer": {
             "status": "ok",
@@ -1952,23 +1940,9 @@ MOCK_ARTISTS = [
 # ============== AUTH ENDPOINTS ==============
 
 def validate_password(password: str) -> tuple[bool, str]:
-    """
-    Validate password strength.
-    Requirements:
-    - Minimum 6 characters
-    - At least 1 uppercase letter
-    - At least 1 special character (!@#$%^&*()_+-=[]{}|;:,.<>?)
-    """
-    if len(password) < 6:
-        return False, "Şifre en az 6 karakter olmalıdır"
-    
-    if not any(c.isupper() for c in password):
-        return False, "Şifre en az 1 büyük harf içermelidir"
-    
-    special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?"
-    if not any(c in special_chars for c in password):
-        return False, "Şifre en az 1 özel karakter içermelidir (!@#$%^&*()_+-=[]{}|;:,.<>?)"
-    
+    """Validate password: minimum 8 characters."""
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters"
     return True, ""
 
 @api_router.post("/auth/register", response_model=TokenResponse)
@@ -2329,7 +2303,7 @@ async def verify_2fa_login(verify_data: Verify2FALoginRequest, request: Request)
 
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
-GOOGLE_REDIRECT_URI = "https://social-music-fix.preview.emergentagent.com/api/auth/google/callback"
+GOOGLE_REDIRECT_URI = os.environ.get("BACKEND_URL", "http://localhost:8080") + "/api/auth/google/callback"
 
 @api_router.get("/auth/google/login")
 async def google_login():
@@ -2354,13 +2328,14 @@ async def google_callback(code: str = None, error: str = None):
     """Handle Google OAuth callback"""
     from fastapi.responses import RedirectResponse
     
-    frontend_url = "https://social-music-fix.preview.emergentagent.com"
-    
+    # Mobile deeplink ile yönlendirme
+    app_scheme = os.environ.get("MOBILE_APP_SCHEME", "socialbeats")
+
     if error:
-        return RedirectResponse(url=f"{frontend_url}/login?error={error}")
-    
+        return RedirectResponse(url=f"{app_scheme}://auth/callback?error={error}")
+
     if not code:
-        return RedirectResponse(url=f"{frontend_url}/login?error=no_code")
+        return RedirectResponse(url=f"{app_scheme}://auth/callback?error=no_code")
     
     try:
         # Exchange code for tokens
@@ -2378,7 +2353,7 @@ async def google_callback(code: str = None, error: str = None):
             
             if token_response.status_code != 200:
                 logging.error(f"Google token error: {token_response.text}")
-                return RedirectResponse(url=f"{frontend_url}/login?error=token_exchange_failed")
+                return RedirectResponse(url=f"{app_scheme}://auth/callback?error=token_exchange_failed")
             
             tokens = token_response.json()
             access_token = tokens.get("access_token")
@@ -2390,13 +2365,13 @@ async def google_callback(code: str = None, error: str = None):
             )
             
             if user_response.status_code != 200:
-                return RedirectResponse(url=f"{frontend_url}/login?error=user_info_failed")
+                return RedirectResponse(url=f"{app_scheme}://auth/callback?error=user_info_failed")
             
             google_user = user_response.json()
     
     except Exception as e:
         logging.error(f"Google OAuth error: {e}")
-        return RedirectResponse(url=f"{frontend_url}/login?error=oauth_error")
+        return RedirectResponse(url=f"{app_scheme}://auth/callback?error=oauth_error")
     
     # Check if user exists
     email = google_user.get("email")
@@ -2451,8 +2426,8 @@ async def google_callback(code: str = None, error: str = None):
     # Create JWT token
     token = create_token(user_id, email)
     
-    # Redirect to frontend with token
-    return RedirectResponse(url=f"{frontend_url}/auth/callback?token={token}")
+    # Mobil uygulama deeplink ile token ilet
+    return RedirectResponse(url=f"{app_scheme}://auth/callback?token={token}")
 
 # Mobile Google Auth - supports both id_token (verified) and access_token + user info
 class GoogleMobileLoginRequest(BaseModel):
@@ -4200,447 +4175,6 @@ async def reply_to_story(
         "reply": message
     }
 
-# ============== YOUTUBE MUSIC API ==============
-
-@api_router.get("/youtube/search")
-async def youtube_search(
-    q: str = Query(..., min_length=1, description="Search query"),
-    max_results: int = Query(20, ge=1, le=50),
-    current_user: dict = Depends(get_current_user)
-):
-    """Search for music videos on YouTube (cache-first via youtube_service, key: yt_search:{query})"""
-    try:
-        from services.youtube_service import youtube_service
-        youtube_service.set_db(db)
-        results = await youtube_service.search(f"{q} music", limit=max_results)
-        tracks = [{
-            "id": f"yt_{r.get('id', r.get('song_id', ''))}",
-            "youtube_id": r.get("id") or r.get("song_id"),
-            "title": r.get("title", ""),
-            "artist": r.get("artist", ""),
-            "cover_url": r.get("thumbnail") or r.get("cover_url", ""),
-            "source": "youtube",
-            "duration": r.get("duration", 0),
-            "preview_url": r.get("youtube_url", ""),
-            "external_url": r.get("youtube_url", ""),
-            "published_at": r.get("published_at"),
-        } for r in results]
-        return {"tracks": tracks, "total": len(tracks), "query": q}
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="YouTube API timeout")
-    except Exception as e:
-        logging.error(f"YouTube search error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/youtube/video/{video_id}")
-async def get_youtube_video(video_id: str, current_user: dict = Depends(get_current_user)):
-    """Get detailed info about a YouTube video (cache-first via youtube_service, key: yt_video:{id})"""
-    try:
-        from services.youtube_service import youtube_service
-        youtube_service.set_db(db)
-        info = await youtube_service.get_video_info(video_id)
-        if not info:
-            raise HTTPException(status_code=404, detail="Video not found")
-        return {
-            "id": f"yt_{video_id}",
-            "youtube_id": video_id,
-            "title": info.get("title", ""),
-            "artist": info.get("artist", ""),
-            "cover_url": info.get("thumbnail") or info.get("cover_url", ""),
-            "source": "youtube",
-            "duration": info.get("duration", 0),
-            "preview_url": info.get("youtube_url", ""),
-            "external_url": info.get("youtube_url", ""),
-            "view_count": info.get("view_count", 0),
-            "like_count": info.get("like_count", 0),
-            "published_at": info.get("published_at", ""),
-            "description": (info.get("description") or "")[:500],
-        }
-    except HTTPException:
-        raise
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="YouTube API timeout")
-    except Exception as e:
-        logging.error(f"YouTube video error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/youtube/trending")
-async def youtube_trending(
-    region_code: str = Query("TR", description="Country code"),
-    max_results: int = Query(20, ge=1, le=50),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get trending music videos from YouTube (cache-first, key: yt_trending:{region})"""
-    cache_key = f"yt_trending:{region_code}"
-    try:
-        from services.music_cache import set_db, get_cached, set_cached
-        set_db(db)
-        cached = await get_cached(cache_key, None)
-        if cached is not None:
-            logging.info(f"YouTube trending cache HIT: {region_code}")
-            return {"tracks": cached[:max_results], "total": len(cached[:max_results]), "region": region_code}
-    except Exception as e:
-        logging.error(f"Cache get error: {e}")
-
-    if not YOUTUBE_API_KEY:
-        raise HTTPException(status_code=500, detail="YouTube API key not configured")
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{YOUTUBE_API_BASE}/videos",
-                params={
-                    "part": "snippet,statistics",
-                    "chart": "mostPopular",
-                    "videoCategoryId": "10",  # Music category
-                    "regionCode": region_code,
-                    "maxResults": max_results,
-                    "key": YOUTUBE_API_KEY
-                },
-                timeout=10.0
-            )
-
-            if response.status_code != 200:
-                raise HTTPException(status_code=response.status_code, detail="YouTube API error")
-
-            data = response.json()
-            tracks = []
-            for item in data.get("items", []):
-                video_id = item["id"]
-                snippet = item["snippet"]
-                stats = item.get("statistics", {})
-                title = snippet["title"]
-                artist = snippet["channelTitle"]
-                if " - " in title:
-                    parts = title.split(" - ", 1)
-                    artist = parts[0].strip()
-                    title = parts[1].strip()
-                tracks.append({
-                    "id": f"yt_{video_id}",
-                    "youtube_id": video_id,
-                    "title": title,
-                    "artist": artist,
-                    "cover_url": snippet["thumbnails"]["high"]["url"],
-                    "source": "youtube",
-                    "duration": 0,
-                    "preview_url": f"https://www.youtube.com/watch?v={video_id}",
-                    "external_url": f"https://www.youtube.com/watch?v={video_id}",
-                    "view_count": int(stats.get("viewCount", 0)),
-                    "like_count": int(stats.get("likeCount", 0))
-                })
-
-            try:
-                from services.music_cache import set_db as _set_db, set_cached as _set
-                _set_db(db)
-                await _set(cache_key, tracks, None)
-            except Exception:
-                pass
-
-            return {"tracks": tracks, "total": len(tracks), "region": region_code}
-
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="YouTube API timeout")
-    except Exception as e:
-        logging.error(f"YouTube trending error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/youtube/channel/{channel_id}/videos")
-async def youtube_channel_videos(
-    channel_id: str,
-    max_results: int = Query(20, ge=1, le=50),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get videos from a specific YouTube channel (cache-first, key: yt_channel:{channel_id})"""
-    cache_key = f"yt_channel:{channel_id}:{max_results}"
-    try:
-        from services.music_cache import set_db, get_cached, set_cached
-        set_db(db)
-        cached = await get_cached(cache_key, None)
-        if cached is not None:
-            logging.info(f"YouTube channel cache HIT: {channel_id}")
-            return {"tracks": cached, "total": len(cached), "channel_id": channel_id}
-    except Exception as e:
-        logging.error(f"Cache get error: {e}")
-
-    if not YOUTUBE_API_KEY:
-        raise HTTPException(status_code=500, detail="YouTube API key not configured")
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{YOUTUBE_API_BASE}/search",
-                params={
-                    "part": "snippet",
-                    "channelId": channel_id,
-                    "type": "video",
-                    "order": "date",
-                    "maxResults": max_results,
-                    "key": YOUTUBE_API_KEY
-                },
-                timeout=10.0
-            )
-
-            if response.status_code != 200:
-                raise HTTPException(status_code=response.status_code, detail="YouTube API error")
-
-            data = response.json()
-            tracks = []
-            for item in data.get("items", []):
-                video_id = item["id"]["videoId"]
-                snippet = item["snippet"]
-                tracks.append({
-                    "id": f"yt_{video_id}",
-                    "youtube_id": video_id,
-                    "title": snippet["title"],
-                    "artist": snippet["channelTitle"],
-                    "cover_url": snippet["thumbnails"]["high"]["url"],
-                    "source": "youtube",
-                    "duration": 0,
-                    "preview_url": f"https://www.youtube.com/watch?v={video_id}",
-                    "external_url": f"https://www.youtube.com/watch?v={video_id}",
-                    "published_at": snippet["publishedAt"]
-                })
-
-            try:
-                from services.music_cache import set_db as _set_db, set_cached as _set
-                _set_db(db)
-                await _set(cache_key, tracks, None)
-            except Exception:
-                pass
-
-            return {"tracks": tracks, "total": len(tracks), "channel_id": channel_id}
-
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="YouTube API timeout")
-    except Exception as e:
-        logging.error(f"YouTube channel error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/youtube/playlist/{playlist_id}")
-async def get_youtube_playlist(
-    playlist_id: str,
-    max_results: int = Query(50, ge=1, le=50),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get videos from a YouTube playlist (cache-first, key: yt_playlist:{playlist_id})"""
-    cache_key = f"yt_playlist:{playlist_id}:{max_results}"
-    try:
-        from services.music_cache import set_db, get_cached, set_cached
-        set_db(db)
-        cached = await get_cached(cache_key, None)
-        if cached is not None:
-            logging.info(f"YouTube playlist cache HIT: {playlist_id}")
-            return cached
-    except Exception as e:
-        logging.error(f"Cache get error: {e}")
-
-    if not YOUTUBE_API_KEY:
-        raise HTTPException(status_code=500, detail="YouTube API key not configured")
-
-    try:
-        async with httpx.AsyncClient() as client:
-            # Get playlist info
-            playlist_response = await client.get(
-                f"{YOUTUBE_API_BASE}/playlists",
-                params={
-                    "part": "snippet",
-                    "id": playlist_id,
-                    "key": YOUTUBE_API_KEY
-                },
-                timeout=10.0
-            )
-            
-            playlist_info = None
-            if playlist_response.status_code == 200:
-                playlist_data = playlist_response.json()
-                if playlist_data.get("items"):
-                    pl_snippet = playlist_data["items"][0]["snippet"]
-                    playlist_info = {
-                        "id": playlist_id,
-                        "title": pl_snippet["title"],
-                        "description": pl_snippet.get("description", ""),
-                        "thumbnail": pl_snippet["thumbnails"]["high"]["url"] if "high" in pl_snippet.get("thumbnails", {}) else None,
-                        "channel": pl_snippet["channelTitle"]
-                    }
-            
-            # Get playlist items
-            response = await client.get(
-                f"{YOUTUBE_API_BASE}/playlistItems",
-                params={
-                    "part": "snippet",
-                    "playlistId": playlist_id,
-                    "maxResults": max_results,
-                    "key": YOUTUBE_API_KEY
-                },
-                timeout=10.0
-            )
-            
-            if response.status_code != 200:
-                raise HTTPException(status_code=response.status_code, detail="YouTube API error")
-            
-            data = response.json()
-            
-            tracks = []
-            for item in data.get("items", []):
-                snippet = item["snippet"]
-                video_id = snippet.get("resourceId", {}).get("videoId")
-                
-                if not video_id:
-                    continue
-                
-                title = snippet["title"]
-                artist = snippet["videoOwnerChannelTitle"] if "videoOwnerChannelTitle" in snippet else snippet.get("channelTitle", "Unknown")
-                
-                # Try to parse artist from title
-                if " - " in title:
-                    parts = title.split(" - ", 1)
-                    artist = parts[0].strip()
-                    title = parts[1].strip()
-                
-                tracks.append({
-                    "id": f"yt_{video_id}",
-                    "youtube_id": video_id,
-                    "title": title,
-                    "artist": artist,
-                    "cover_url": snippet["thumbnails"]["high"]["url"] if "high" in snippet.get("thumbnails", {}) else None,
-                    "source": "youtube",
-                    "duration": 0,
-                    "preview_url": f"https://www.youtube.com/watch?v={video_id}",
-                    "external_url": f"https://www.youtube.com/watch?v={video_id}",
-                    "position": snippet.get("position", 0)
-                })
-
-            result = {
-                "playlist": playlist_info,
-                "tracks": tracks,
-                "total": len(tracks),
-                "next_page_token": data.get("nextPageToken")
-            }
-            try:
-                from services.music_cache import set_db as _set_db, set_cached as _set
-                _set_db(db)
-                await _set(cache_key, result, None)
-            except Exception:
-                pass
-            return result
-
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="YouTube API timeout")
-    except Exception as e:
-        logging.error(f"YouTube playlist error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.post("/youtube/playlist/{playlist_id}/import")
-async def import_youtube_playlist(
-    playlist_id: str,
-    playlist_name: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
-    """Import a YouTube playlist as an SocialBeats playlist"""
-    if not YOUTUBE_API_KEY:
-        raise HTTPException(status_code=500, detail="YouTube API key not configured")
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            # Get playlist info
-            playlist_response = await client.get(
-                f"{YOUTUBE_API_BASE}/playlists",
-                params={
-                    "part": "snippet",
-                    "id": playlist_id,
-                    "key": YOUTUBE_API_KEY
-                },
-                timeout=10.0
-            )
-            
-            youtube_playlist_name = playlist_id
-            youtube_cover = None
-            
-            if playlist_response.status_code == 200:
-                playlist_data = playlist_response.json()
-                if playlist_data.get("items"):
-                    pl_snippet = playlist_data["items"][0]["snippet"]
-                    youtube_playlist_name = pl_snippet["title"]
-                    youtube_cover = pl_snippet["thumbnails"]["high"]["url"] if "high" in pl_snippet.get("thumbnails", {}) else None
-            
-            # Get playlist items
-            response = await client.get(
-                f"{YOUTUBE_API_BASE}/playlistItems",
-                params={
-                    "part": "snippet",
-                    "playlistId": playlist_id,
-                    "maxResults": 50,
-                    "key": YOUTUBE_API_KEY
-                },
-                timeout=10.0
-            )
-            
-            if response.status_code != 200:
-                raise HTTPException(status_code=response.status_code, detail="YouTube API error")
-            
-            data = response.json()
-            
-            # Create tracks for the playlist
-            tracks = []
-            for item in data.get("items", []):
-                snippet = item["snippet"]
-                video_id = snippet.get("resourceId", {}).get("videoId")
-                
-                if not video_id:
-                    continue
-                
-                title = snippet["title"]
-                artist = snippet.get("videoOwnerChannelTitle", "Unknown")
-                
-                if " - " in title:
-                    parts = title.split(" - ", 1)
-                    artist = parts[0].strip()
-                    title = parts[1].strip()
-                
-                tracks.append({
-                    "id": f"yt_{video_id}",
-                    "youtube_id": video_id,
-                    "title": title,
-                    "artist": artist,
-                    "cover_url": snippet["thumbnails"]["high"]["url"] if "high" in snippet.get("thumbnails", {}) else None,
-                    "source": "youtube",
-                    "preview_url": f"https://www.youtube.com/watch?v={video_id}"
-                })
-            
-            # Create playlist in database
-            now = datetime.now(timezone.utc).isoformat()
-            new_playlist_id = str(uuid.uuid4())
-            
-            playlist = {
-                "id": new_playlist_id,
-                "user_id": current_user["id"],
-                "name": playlist_name or youtube_playlist_name,
-                "description": f"YouTube'dan içe aktarıldı: {youtube_playlist_name}",
-                "cover_url": youtube_cover,
-                "tracks": tracks,
-                "track_count": len(tracks),
-                "is_public": True,
-                "imported_from": "youtube",
-                "youtube_playlist_id": playlist_id,
-                "created_at": now,
-                "updated_at": now
-            }
-            
-            await db.playlists.insert_one(playlist)
-            playlist.pop("_id", None)
-            
-            return {
-                "message": f"Playlist '{playlist['name']}' başarıyla içe aktarıldı",
-                "playlist": playlist,
-                "tracks_imported": len(tracks)
-            }
-            
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="YouTube API timeout")
-    except Exception as e:
-        logging.error(f"YouTube playlist import error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 # ============== PUSH NOTIFICATIONS ==============
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
@@ -5706,14 +5240,6 @@ async def search(
                 ]}
                 results["playlists"] = await db.playlists.find(playlist_query, {"_id": 0}).limit(limit).skip(offset).to_list(limit)
     
-    # Trench: track search event (popüler aramalar için)
-    try:
-        from services.trench_service import track, is_available
-        if is_available() and q.strip():
-            await track("search", current_user["id"], {"query": q.strip(), "type": type, "platform": platform})
-    except Exception:
-        pass
-
     return results
 
 @api_router.get("/search/history")
@@ -5832,23 +5358,6 @@ async def get_trending_searches(limit: int = 10, current_user: dict = Depends(ge
     ]
     
     trending = await db.search_history.aggregate(pipeline).to_list(limit)
-    try:
-        from services.trench_service import query_events, is_available
-        if is_available() and len(trending) < limit:
-            events = await query_events("search", limit=limit * 3)
-            q_counts = {}
-            for e in events:
-                q = (e.get("properties") or {}).get("query", "")
-                if q and q.strip():
-                    q_counts[q.strip()] = q_counts.get(q.strip(), 0) + 1
-            trench_top = sorted(q_counts.items(), key=lambda x: -x[1])[:limit]
-            existing = {t.get("_id", t.get("query", "")) for t in trending}
-            for q, c in trench_top:
-                if q not in existing:
-                    trending.append({"_id": q, "count": c})
-                    existing.add(q)
-    except Exception:
-        pass
     # If no recent searches, return popular categories
     if not trending:
         trending = [
@@ -5899,13 +5408,7 @@ async def get_mood_music(mood: str = Query(..., description="Ruh hali: mutlu, h�
         from services.ai_text_service import generate_ai_playlist
         tracks = await generate_ai_playlist(mood=mood, activity=activity, limit=limit)
         if tracks:
-            try:
-                from services.trench_service import track, is_available
-                if is_available():
-                    await track("mood_search", current_user["id"], {"mood": mood, "activity": activity})
-            except Exception:
-                pass
-            return {"tracks": tracks, "mood": mood, "source": "gemini"}
+            return {"tracks": tracks, "mood": mood}
     except Exception:
         pass
     return {"tracks": [], "mood": mood}
@@ -5925,33 +5428,14 @@ async def get_mood_tracks(mood: str, limit: int = 20, current_user: dict = Depen
 @api_router.get("/search/recommendations")
 async def get_personalized_recommendations(limit: int = 20, current_user: dict = Depends(get_current_user)):
     """Kişiselleştirilmiş öneriler - Google Gemini + Trench (kullanıcı etkinlikleri)"""
-    user_context = ""
-    try:
-        from services.trench_service import query_events, is_available
-        if is_available():
-            events = await query_events(user_id=current_user["id"], limit=30)
-            plays = [e for e in events if e.get("event") in ("track_played", "search", "playlist_created")]
-            genres = set()
-            artists = set()
-            for e in events:
-                p = e.get("properties") or {}
-                if p.get("genre"):
-                    genres.add(p["genre"])
-                if p.get("artist"):
-                    artists.add(p["artist"])
-            if genres or artists:
-                user_context = f"Kullanıcı dinleme/arama geçmişi: {', '.join(list(genres)[:5])} türleri, {', '.join(list(artists)[:5])} sanatçıları."
-    except Exception:
-        pass
     try:
         from services.ai_text_service import generate_ai_playlist
-        activity = user_context or "genel popüler müzik"
-        tracks = await generate_ai_playlist(activity=activity, limit=limit)
+        tracks = await generate_ai_playlist(activity="genel popüler müzik", limit=limit)
         if tracks:
-            return {"tracks": tracks, "source": "gemini", "personalized": bool(user_context)}
+            return {"tracks": tracks}
     except Exception:
         pass
-    return {"tracks": [], "source": "none"}
+    return {"tracks": []}
 
 @api_router.get("/social/friends/activity")
 async def get_friends_activity(limit: int = 30, current_user: dict = Depends(get_current_user)):
@@ -5969,12 +5453,6 @@ async def get_friends_activity(limit: int = 30, current_user: dict = Depends(get
     for p in posts:
         u = await db.users.find_one({"id": p["user_id"]}, {"_id": 0, "username": 1, "display_name": 1, "avatar_url": 1})
         activities.append({"type": "post", "post": p, "user": u})
-    try:
-        from services.trench_service import track, is_available
-        if is_available():
-            await track("friends_activity_view", current_user["id"], {"following_count": len(following_ids)})
-    except Exception:
-        pass
     return {"activities": activities}
 
 @api_router.get("/search/nearby")
@@ -9984,44 +9462,8 @@ async def admin_api_status(current_user: dict = Depends(get_current_user)):
 
     apis = []
 
-    # YouTube
-    yt_configured = bool(YOUTUBE_API_KEY and YOUTUBE_API_KEY.strip())
-    yt_status = "ok" if yt_configured else "missing"
-    try:
-        if yt_configured:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                r = await client.get(
-                    f"{YOUTUBE_API_BASE}/videos",
-                    params={"part": "snippet", "id": "dQw4w9WgXcQ", "key": YOUTUBE_API_KEY},
-                )
-                if r.status_code == 403 and "quotaExceeded" in r.text:
-                    yt_status = "ok"  # Key works, just quota
-                elif r.status_code != 200:
-                    yt_status = "error"
-    except Exception:
-        yt_status = "error" if yt_configured else "missing"
-    apis.append(_check("YouTube", yt_configured, yt_status))
-
-    # Spotify
-    sp_configured = bool(SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET)
-    sp_status = "missing"
-    if sp_configured:
-        sp_status = "ok"
-        try:
-            auth = base64.b64encode(
-                f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()
-            ).decode()
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                r = await client.post(
-                    "https://accounts.spotify.com/api/token",
-                    headers={"Authorization": f"Basic {auth}"},
-                    data={"grant_type": "client_credentials"},
-                )
-                if r.status_code != 200:
-                    sp_status = "error"
-        except Exception:
-            sp_status = "error"
-    apis.append(_check("Spotify", sp_configured, sp_status))
+    # SoundCloud (via main.py microservice)
+    apis.append(_check("SoundCloud", True, "ok"))
 
     # Firebase
     fb_configured = bool(
@@ -11545,8 +10987,61 @@ async def search_story_music(
 
 # ============== VOICE & VIDEO CALLS (WebRTC) ==============
 
-# In-memory call state (in production, use Redis)
-active_calls = {}
+# ── Redis-backed call state (falls back to in-memory) ──────────────────────────
+import json as _json
+
+_redis_client = None
+
+async def _get_redis():
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
+    try:
+        import redis.asyncio as aioredis
+        url = os.environ.get("REDIS_URL", "")
+        if url:
+            _redis_client = aioredis.from_url(url, decode_responses=True, socket_connect_timeout=3)
+            await _redis_client.ping()
+            logger.info("Redis connected for call state")
+    except Exception as e:
+        logger.debug(f"Redis unavailable, using in-memory: {e}")
+        _redis_client = None
+    return _redis_client
+
+_active_calls_memory = {}  # fallback
+
+async def _set_call(call_id: str, data: dict):
+    r = await _get_redis()
+    if r:
+        try:
+            await r.setex(f"call:{call_id}", 3600, _json.dumps(data))
+            return
+        except Exception:
+            pass
+    _active_calls_memory[call_id] = data
+
+async def _get_call(call_id: str) -> dict | None:
+    r = await _get_redis()
+    if r:
+        try:
+            raw = await r.get(f"call:{call_id}")
+            if raw:
+                return _json.loads(raw)
+        except Exception:
+            pass
+    return _active_calls_memory.get(call_id)
+
+async def _del_call(call_id: str):
+    r = await _get_redis()
+    if r:
+        try:
+            await r.delete(f"call:{call_id}")
+        except Exception:
+            pass
+    _active_calls_memory.pop(call_id, None)
+
+# Keep active_calls as alias (sync fallback dict still used in legacy code)
+active_calls = _active_calls_memory
 
 @api_router.post("/calls/initiate")
 async def initiate_call(
@@ -11586,8 +11081,10 @@ async def initiate_call(
         "duration": 0
     }
     
-    active_calls[call_id] = call_data
-    
+    await _set_call(call_id, call_data)
+
+    room_name = f"call_{call_id}"
+
     # Store in DB for history
     await db.calls.insert_one({**call_data})
     
@@ -11607,7 +11104,6 @@ async def initiate_call(
     try:
         from services.evolution_api_service import send_text, is_available
         if is_available() and callee.get("phone"):
-            frontend_url = os.environ.get("FRONTEND_URL", "https://socialbeats.app")
             call_label = "Görüntülü arama" if call_type == "video" else "Sesli arama"
             msg = f"📞 {current_user.get('display_name', current_user['username'])} sizi {call_label} ile arıyor. Açmak için uygulamayı kullanın."
             await send_text(callee["phone"], msg)
@@ -11629,31 +11125,28 @@ async def answer_call(
     current_user: dict = Depends(get_current_user)
 ):
     """Answer an incoming call"""
-    if call_id not in active_calls:
-        # Try to get from DB
+    call = await _get_call(call_id)
+    if not call:
         call = await db.calls.find_one({"id": call_id}, {"_id": 0})
         if not call:
             raise HTTPException(status_code=404, detail="Çağrı bulunamadı")
-        active_calls[call_id] = call
-    
-    call = active_calls[call_id]
-    
+
     if call["callee_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Bu çağrıyı cevaplayamazsınız")
-    
+
     if call["status"] != "ringing":
         raise HTTPException(status_code=400, detail="Çağrı artık cevaplanamaz")
-    
+
     now = datetime.now(timezone.utc)
     call["status"] = "active"
     call["answered_at"] = now.isoformat()
-    
-    # Update in DB
+    await _set_call(call_id, call)
+
     await db.calls.update_one(
         {"id": call_id},
         {"$set": {"status": "active", "answered_at": now.isoformat()}}
     )
-    
+
     return {
         "call_id": call_id,
         "status": "active",
@@ -11671,30 +11164,21 @@ async def reject_call(
     current_user: dict = Depends(get_current_user)
 ):
     """Reject an incoming call"""
-    if call_id not in active_calls:
+    call = await _get_call(call_id)
+    if not call:
         call = await db.calls.find_one({"id": call_id}, {"_id": 0})
         if not call:
             raise HTTPException(status_code=404, detail="Çağrı bulunamadı")
-        active_calls[call_id] = call
-    
-    call = active_calls[call_id]
-    
+
     if call["callee_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Bu çağrıyı reddedemezsiniz")
-    
+
     now = datetime.now(timezone.utc)
-    call["status"] = "rejected"
-    call["ended_at"] = now.isoformat()
-    
-    # Update in DB
     await db.calls.update_one(
         {"id": call_id},
         {"$set": {"status": "rejected", "ended_at": now.isoformat()}}
     )
-    
-    # Remove from active calls
-    active_calls.pop(call_id, None)
-    
+    await _del_call(call_id)
     return {"message": "Çağrı reddedildi"}
 
 @api_router.post("/calls/{call_id}/end")
@@ -11703,44 +11187,29 @@ async def end_call(
     current_user: dict = Depends(get_current_user)
 ):
     """End an active call"""
-    if call_id not in active_calls:
+    call = await _get_call(call_id)
+    if not call:
         call = await db.calls.find_one({"id": call_id}, {"_id": 0})
         if not call:
             raise HTTPException(status_code=404, detail="Çağrı bulunamadı")
-        active_calls[call_id] = call
-    
-    call = active_calls[call_id]
+
     user_id = current_user["id"]
-    
     if user_id not in [call["caller_id"], call["callee_id"]]:
         raise HTTPException(status_code=403, detail="Bu çağrıyı sonlandıramazsınız")
-    
+
     now = datetime.now(timezone.utc)
-    call["status"] = "ended"
-    call["ended_at"] = now.isoformat()
-    
-    # Calculate duration
+    duration = 0
     if call.get("answered_at"):
         answered = datetime.fromisoformat(call["answered_at"].replace("Z", "+00:00"))
-        call["duration"] = int((now - answered).total_seconds())
-    
-    # Update in DB
+        duration = int((now - answered).total_seconds())
+
     await db.calls.update_one(
         {"id": call_id},
-        {"$set": {
-            "status": "ended", 
-            "ended_at": now.isoformat(),
-            "duration": call.get("duration", 0)
-        }}
+        {"$set": {"status": "ended", "ended_at": now.isoformat(), "duration": duration}}
     )
-    
-    # Remove from active calls
-    active_calls.pop(call_id, None)
-    
-    return {
-        "message": "Çağrı sonlandırıldı",
-        "duration": call.get("duration", 0)
-    }
+    await _del_call(call_id)
+
+    return {"message": "Çağrı sonlandırıldı", "duration": duration}
 
 @api_router.get("/calls/{call_id}/status")
 async def get_call_status(
@@ -15357,13 +14826,6 @@ async def startup_event():
     except Exception as e:
         logger.info(f"PostgreSQL init skipped: {e}")
 
-    # Initialize ClickHouse
-    try:
-        from services.clickhouse_service import init_tables as ch_init
-        ch_init()
-    except Exception as e:
-        logger.info(f"ClickHouse init skipped: {e}")
-
     # Initialize SuperTokens
     try:
         from services.supertokens_service import init_supertokens
@@ -15563,899 +15025,6 @@ async def send_weekly_summary_push_to_all():
     except Exception as e:
         logging.exception(f"Weekly summary push job error: {e}")
 
-
-# ============== SPOTIFY/DEEZER INTEGRATION ==============
-# Music data now powered by Deezer API (free, no key required)
-# Spotify OAuth kept as stubs for API compatibility
-
-def get_spotify_oauth():
-    """Spotify OAuth stub - returns None when not configured"""
-    if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
-        return None
-    try:
-        return SpotifyOAuth(
-            client_id=SPOTIFY_CLIENT_ID,
-            client_secret=SPOTIFY_CLIENT_SECRET,
-            redirect_uri=SPOTIFY_REDIRECT_URI,
-            scope="user-read-playback-state user-modify-playback-state user-read-private streaming playlist-read-private user-library-read"
-        )
-    except Exception:
-        return None
-
-def get_spotify_client():
-    """Spotify client stub - returns None when not configured"""
-    if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
-        return None
-    try:
-        return spotipy.Spotify(auth_manager=SpotifyClientCredentials(
-            client_id=SPOTIFY_CLIENT_ID,
-            client_secret=SPOTIFY_CLIENT_SECRET
-        ))
-    except Exception:
-        return None
-
-@api_router.get("/spotify/auth/login")
-async def spotify_login():
-    """Get Spotify authorization URL (returns Deezer notice when Spotify not configured)"""
-    if not SPOTIFY_CLIENT_ID:
-        return {"message": "Music powered by Deezer (free). Spotify OAuth not configured.", "auth_url": None}
-    sp_oauth = get_spotify_oauth()
-    if not sp_oauth:
-        return {"message": "Music powered by Deezer (free). Spotify OAuth not configured.", "auth_url": None}
-    auth_url = sp_oauth.get_authorize_url()
-    return {"auth_url": auth_url}
-
-@api_router.get("/spotify/callback")
-async def spotify_callback(code: str):
-    """Handle Spotify OAuth callback"""
-    sp_oauth = get_spotify_oauth()
-    if not sp_oauth:
-        return {"message": "Spotify OAuth not configured. Music data served via Deezer API."}
-    try:
-        token_info = sp_oauth.get_access_token(code)
-        return {
-            "access_token": token_info["access_token"],
-            "refresh_token": token_info.get("refresh_token"),
-            "expires_in": token_info.get("expires_in", 3600)
-        }
-    except Exception as e:
-        logging.error(f"Spotify callback error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@api_router.post("/spotify/auth/refresh")
-async def spotify_refresh_token(refresh_token: str = Form(...)):
-    """Refresh Spotify access token"""
-    sp_oauth = get_spotify_oauth()
-    if not sp_oauth:
-        return {"message": "Spotify OAuth not configured. Music data served via Deezer API."}
-    try:
-        token_info = sp_oauth.refresh_access_token(refresh_token)
-        return {
-            "access_token": token_info["access_token"],
-            "expires_in": token_info.get("expires_in", 3600)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@api_router.get("/spotify/search")
-async def spotify_search(
-    request: Request,
-    query: str,
-    type: str = "track",
-    limit: int = 20,
-    country: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
-    """Search Spotify tracks (cache-first via spotify_cached)"""
-    try:
-        from services.spotify_cached import set_db, search as spotify_cached_search
-        set_db(db)
-        market = _get_request_country(request, country)
-        tracks = await spotify_cached_search(query, country=market, limit=limit)
-        # Format for response
-        out = [{
-            "id": t["id"],
-            "uri": f"spotify:track:{t['id']}",
-            "title": t["title"],
-            "artist": t["artist"],
-            "album": t.get("album", ""),
-            "cover_url": t.get("thumbnail") or t.get("cover_url"),
-            "duration_ms": t.get("duration_ms", 0),
-            "preview_url": t.get("preview_url"),
-            "external_url": f"https://open.spotify.com/track/{t['id']}" if t.get("id") else None,
-            "source": "spotify",
-        } for t in tracks]
-        return {"tracks": out, "total": len(out)}
-    except Exception as e:
-        logging.error(f"Spotify search error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/spotify/track/{track_id}")
-async def spotify_get_track(
-    track_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get Spotify track details (cache-first via spotify_cached)"""
-    try:
-        from services.spotify_cached import set_db, get_track as spotify_get_track_cached
-        set_db(db)
-        track = await spotify_get_track_cached(track_id)
-        if not track:
-            raise HTTPException(status_code=404, detail="Track not found")
-        return {
-            "id": track["id"],
-            "uri": f"spotify:track:{track['id']}",
-            "title": track["title"],
-            "artist": track["artist"],
-            "album": track.get("album", ""),
-            "cover_url": track.get("thumbnail") or track.get("cover_url"),
-            "duration_ms": track.get("duration_ms", 0),
-            "preview_url": track.get("preview_url"),
-            "external_url": f"https://open.spotify.com/track/{track['id']}",
-            "source": "spotify"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-def _get_request_country(request: Request, query_country: Optional[str] = None) -> str:
-    """Get country from X-Country-Code header, ?country= query, else default US."""
-    if query_country and len(query_country) >= 2:
-        return query_country.upper()[:2]
-    h = request.headers.get("X-Country-Code")
-    if h and len(h) >= 2:
-        return h.upper()[:2]
-    return "US"
-
-
-@api_router.get("/spotify/trending")
-async def spotify_trending(
-    request: Request,
-    country: Optional[str] = None,
-    limit: int = 20,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get Spotify trending tracks (cache-first via spotify_cached). country from ?country= or X-Country-Code header."""
-    try:
-        from services.spotify_cached import set_db, get_trending as spotify_get_trending
-        set_db(db)
-        market = _get_request_country(request, country)
-        tracks_raw = await spotify_get_trending(country=market, limit=limit)
-        tracks = [{
-            "id": t["id"],
-            "uri": f"spotify:track:{t['id']}",
-            "title": t["title"],
-            "artist": t["artist"],
-            "album": t.get("album", ""),
-            "cover_url": t.get("thumbnail") or t.get("cover_url"),
-            "duration_ms": t.get("duration_ms", 0),
-            "preview_url": t.get("preview_url"),
-            "source": "spotify"
-        } for t in tracks_raw]
-        return {"tracks": tracks, "playlists": []}
-    except Exception as e:
-        logging.error(f"Spotify trending error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/spotify/artist/{artist_id}")
-async def spotify_get_artist(
-    request: Request,
-    artist_id: str,
-    country: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get Spotify artist details and top tracks (cache-first via spotify_cached). country from ?country= or X-Country-Code header."""
-    try:
-        from services.spotify_cached import set_db, get_artist as spotify_get_artist_cached
-        set_db(db)
-        market = _get_request_country(request, country)
-        result = await spotify_get_artist_cached(artist_id, country=market)
-        if not result:
-            raise HTTPException(status_code=404, detail="Artist not found")
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/spotify/recommendations")
-async def spotify_recommendations(
-    seed_tracks: str = None,  # comma-separated track IDs
-    seed_artists: str = None,  # comma-separated artist IDs
-    seed_genres: str = None,  # comma-separated genres
-    limit: int = 20,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get Spotify recommendations (cache-first via spotify_cached)"""
-    try:
-        from services.spotify_cached import set_db, get_recommendations as spotify_get_recommendations
-        set_db(db)
-        st = seed_tracks.split(",")[:5] if seed_tracks else None
-        sa = seed_artists.split(",")[:5] if seed_artists else None
-        sg = seed_genres.split(",")[:5] if seed_genres else None
-        tracks = await spotify_get_recommendations(seed_tracks=st, seed_artists=sa, seed_genres=sg, limit=limit)
-        return {"tracks": tracks}
-    except Exception as e:
-        logging.error(f"Spotify recommendations error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============== MUSIC API - YouTube Integration with yt-dlp ==============
-# Self-hosted music streaming with server-side caching
-# Mobile app -> Our Backend (yt-dlp + cache) -> YouTube
-
-import yt_dlp
-from concurrent.futures import ThreadPoolExecutor
-
-# Thread pool for yt-dlp operations
-yt_executor = ThreadPoolExecutor(max_workers=3)
-
-# yt-dlp configuration
-YDL_OPTIONS = {
-    'format': 'bestaudio/best',
-    'noplaylist': True,
-    'quiet': True,
-    'no_warnings': True,
-    'extract_flat': False,
-    'skip_download': True,
-    'ignoreerrors': True,
-    'nocheckcertificate': True,
-}
-
-MUSIC_CACHE_EXPIRY_HOURS = 24
-STREAM_CACHE_EXPIRY_HOURS = 6  # Stream URLs expire faster
-
-class MusicSearchResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    song_id: str
-    title: str
-    artist: str
-    album: Optional[str] = None
-    duration: Optional[int] = None
-    duration_formatted: Optional[str] = None
-    thumbnail: Optional[str] = None
-    cover_url: Optional[str] = None
-    stream_url: Optional[str] = None
-    source: str = "YouTube"
-
-def format_duration(seconds: int) -> str:
-    """Format duration from seconds to MM:SS"""
-    if not seconds or not isinstance(seconds, (int, float)):
-        return "0:00"
-    seconds = int(seconds)
-    mins = seconds // 60
-    secs = seconds % 60
-    return f"{mins}:{secs:02d}"
-
-def _format_track(entry: dict, video_id: str = None) -> dict:
-    """Format a single track from yt-dlp result"""
-    vid = video_id or entry.get('id', '')
-    return {
-        'id': vid,
-        'song_id': vid,
-        'title': entry.get('title', 'Unknown'),
-        'artist': entry.get('uploader', entry.get('channel', 'Unknown Artist')),
-        'album': entry.get('album', ''),
-        'duration': entry.get('duration', 0),
-        'duration_formatted': format_duration(entry.get('duration', 0)),
-        'thumbnail': entry.get('thumbnail', ''),
-        'cover_url': entry.get('thumbnail', ''),
-        'view_count': entry.get('view_count', 0),
-        'youtube_url': f"https://www.youtube.com/watch?v={vid}" if vid else '',
-        'source': 'YouTube',
-    }
-
-def _yt_search_sync(query: str, limit: int = 10) -> list:
-    """Synchronous YouTube search using yt-dlp"""
-    try:
-        search_opts = {
-            **YDL_OPTIONS,
-            'extract_flat': True,
-            'default_search': f'ytsearch{limit}',
-        }
-        with yt_dlp.YoutubeDL(search_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
-            if info and 'entries' in info:
-                return [_format_track(e) for e in info['entries'] if e and e.get('id')]
-        return []
-    except Exception as e:
-        logging.error(f"yt-dlp search error: {e}")
-        return []
-
-def _yt_get_stream_sync(video_id: str) -> Optional[dict]:
-    """Synchronous stream URL extraction using yt-dlp"""
-    try:
-        url = f"https://www.youtube.com/watch?v={video_id}"
-        with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if not info:
-                return None
-            
-            # Get best audio URL
-            stream_url = None
-            if info.get('url'):
-                stream_url = info['url']
-            elif info.get('formats'):
-                audio_formats = [f for f in info['formats'] if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
-                if audio_formats:
-                    audio_formats.sort(key=lambda x: x.get('abr', 0) or 0, reverse=True)
-                    stream_url = audio_formats[0].get('url')
-                else:
-                    for fmt in info['formats']:
-                        if fmt.get('url') and fmt.get('acodec') != 'none':
-                            stream_url = fmt['url']
-                            break
-            
-            if not stream_url:
-                return None
-            
-            return {
-                'song_id': video_id,
-                'stream_url': stream_url,
-                'title': info.get('title', 'Unknown'),
-                'artist': info.get('uploader', info.get('channel', 'Unknown')),
-                'thumbnail': info.get('thumbnail', ''),
-                'duration': info.get('duration', 0),
-                'duration_formatted': format_duration(info.get('duration', 0)),
-            }
-    except Exception as e:
-        logging.error(f"yt-dlp stream error: {e}")
-        return None
-
-async def get_or_create_music_cache():
-    """Get or create music cache collection with TTL index"""
-    collection = db.music_cache
-    await collection.create_index("cached_at", expireAfterSeconds=MUSIC_CACHE_EXPIRY_HOURS * 3600)
-    return collection
-
-@api_router.get("/music/search/{query}")
-async def music_search(query: str, limit: int = 10):
-    """
-    Search for songs on YouTube with server-side caching.
-    Uses yt-dlp for extraction - self-hosted, no external API dependency.
-    """
-    if not query or len(query.strip()) < 2:
-        raise HTTPException(status_code=400, detail="Query must be at least 2 characters")
-    
-    query = query.strip()
-    cache_key = f"yt_search_{query.lower()}"
-    
-    try:
-        cache = await get_or_create_music_cache()
-        
-        # Check cache first
-        cached_result = await cache.find_one({"cache_key": cache_key})
-        if cached_result and cached_result.get("results"):
-            logging.info(f"YouTube search cache HIT: {query}")
-            return {
-                "results": cached_result["results"],
-                "query": query,
-                "count": len(cached_result["results"]),
-                "cached": True,
-                "source": "YouTube"
-            }
-        
-        logging.info(f"YouTube search cache MISS: {query}, fetching from YouTube")
-        
-        # Search YouTube using yt-dlp (run in thread pool)
-        loop = asyncio.get_event_loop()
-        results = await loop.run_in_executor(yt_executor, _yt_search_sync, query, min(limit, 20))
-        
-        # Cache results
-        if results:
-            await cache.update_one(
-                {"cache_key": cache_key},
-                {"$set": {
-                    "cache_key": cache_key,
-                    "query": query,
-                    "results": results,
-                    "cached_at": datetime.now(timezone.utc)
-                }},
-                upsert=True
-            )
-        
-        return {
-            "results": results,
-            "query": query,
-            "count": len(results),
-            "cached": False,
-            "source": "YouTube"
-        }
-        
-    except Exception as e:
-        logging.error(f"Music search error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/music/song/{song_id}")
-async def music_get_song(song_id: str):
-    """
-    Get song details by YouTube video ID.
-    Returns metadata without stream URL (use /stream endpoint for that).
-    """
-    if not song_id:
-        raise HTTPException(status_code=400, detail="Song ID required")
-    
-    cache_key = f"yt_details_{song_id}"
-    
-    try:
-        cache = await get_or_create_music_cache()
-        
-        # Check cache first
-        cached_result = await cache.find_one({"cache_key": cache_key})
-        if cached_result and cached_result.get("song"):
-            logging.info(f"YouTube details cache HIT: {song_id}")
-            return {**cached_result["song"], "cached": True}
-        
-        logging.info(f"YouTube details cache MISS: {song_id}")
-        
-        # Get details using yt-dlp (flat extraction for speed)
-        def get_details():
-            try:
-                url = f"https://www.youtube.com/watch?v={song_id}"
-                with yt_dlp.YoutubeDL({**YDL_OPTIONS, 'extract_flat': True}) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    return _format_track(info, song_id) if info else None
-            except:
-                return None
-        
-        loop = asyncio.get_event_loop()
-        song = await loop.run_in_executor(yt_executor, get_details)
-        
-        if not song:
-            raise HTTPException(status_code=404, detail="Song not found")
-        
-        # Cache
-        await cache.update_one(
-            {"cache_key": cache_key},
-            {"$set": {
-                "cache_key": cache_key,
-                "song_id": song_id,
-                "song": song,
-                "cached_at": datetime.now(timezone.utc)
-            }},
-            upsert=True
-        )
-        
-        return {**song, "cached": False}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Music get song error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/music/stream/{song_id}")
-async def music_stream_url(song_id: str):
-    """
-    Get the audio stream URL for a song.
-    Extracts direct audio URL from YouTube using yt-dlp.
-    Note: Stream URLs expire after a few hours.
-    """
-    if not song_id:
-        raise HTTPException(status_code=400, detail="Song ID required")
-    
-    cache_key = f"yt_stream_{song_id}"
-    
-    try:
-        cache = await get_or_create_music_cache()
-        
-        # Check cache (shorter expiry for stream URLs)
-        cached_result = await cache.find_one({"cache_key": cache_key})
-        if cached_result and cached_result.get("stream_url"):
-            cached_at = cached_result.get("cached_at")
-            if cached_at:
-                # Make sure cached_at is timezone aware
-                if cached_at.tzinfo is None:
-                    cached_at = cached_at.replace(tzinfo=timezone.utc)
-                age_hours = (datetime.now(timezone.utc) - cached_at).total_seconds() / 3600
-                if age_hours < STREAM_CACHE_EXPIRY_HOURS:
-                    logging.info(f"YouTube stream cache HIT: {song_id}")
-                    return {
-                        "song_id": song_id,
-                        "stream_url": cached_result["stream_url"],
-                        "title": cached_result.get("title", ""),
-                        "artist": cached_result.get("artist", ""),
-                        "thumbnail": cached_result.get("thumbnail", ""),
-                        "duration": cached_result.get("duration", 0),
-                        "cached": True,
-                        "source": "YouTube"
-                    }
-        
-        logging.info(f"YouTube stream cache MISS: {song_id}, extracting from YouTube")
-        
-        # Extract stream URL using yt-dlp
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(yt_executor, _yt_get_stream_sync, song_id)
-        
-        if not result or not result.get("stream_url"):
-            raise HTTPException(status_code=404, detail="Stream URL not found")
-        
-        # Cache
-        await cache.update_one(
-            {"cache_key": cache_key},
-            {"$set": {
-                "cache_key": cache_key,
-                **result,
-                "cached_at": datetime.now(timezone.utc)
-            }},
-            upsert=True
-        )
-        
-        return {**result, "cached": False, "source": "YouTube"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Music stream error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/music/cache/stats")
-async def music_cache_stats():
-    """Get cache statistics"""
-    try:
-        cache = await get_or_create_music_cache()
-        
-        total = await cache.count_documents({})
-        search_cached = await cache.count_documents({"cache_key": {"$regex": "^yt_search_"}})
-        songs_cached = await cache.count_documents({"cache_key": {"$regex": "^yt_details_"}})
-        streams_cached = await cache.count_documents({"cache_key": {"$regex": "^yt_stream_"}})
-        
-        return {
-            "total_cached": total,
-            "search_cached": search_cached,
-            "songs_cached": songs_cached,
-            "streams_cached": streams_cached,
-            "source": "YouTube"
-        }
-    except Exception as e:
-        logging.error(f"Cache stats error: {e}")
-        return {"total_cached": 0, "search_cached": 0, "songs_cached": 0, "streams_cached": 0}
-
-@api_router.delete("/music/cache/clear")
-async def music_cache_clear():
-    """Clear all music cache"""
-    try:
-        cache = await get_or_create_music_cache()
-        result = await cache.delete_many({})
-        return {"deleted": result.deleted_count, "message": "Cache cleared"}
-    except Exception as e:
-        logging.error(f"Cache clear error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============== SYNCED LYRICS ==============
-# Get synchronized lyrics (LRC format) for karaoke-style display
-
-import syncedlyrics
-
-def _get_synced_lyrics_sync(track_name: str, artist: str) -> Optional[dict]:
-    """Get synced lyrics for a track (synchronous)"""
-    try:
-        search_term = f"{track_name} {artist}"
-        lrc = syncedlyrics.search(search_term)
-        
-        if not lrc:
-            return None
-        
-        # Parse LRC format to structured data
-        lines = []
-        for line in lrc.strip().split('\n'):
-            line = line.strip()
-            if line.startswith('[') and ']' in line:
-                # Extract timestamp and text
-                bracket_end = line.index(']')
-                timestamp_str = line[1:bracket_end]
-                text = line[bracket_end+1:].strip()
-                
-                # Skip metadata lines
-                if ':' in timestamp_str and not timestamp_str[0].isdigit():
-                    continue
-                
-                # Parse timestamp [mm:ss.xx] or [mm:ss]
-                try:
-                    parts = timestamp_str.replace('.', ':').split(':')
-                    if len(parts) >= 2:
-                        minutes = int(parts[0])
-                        seconds = int(parts[1])
-                        ms = int(parts[2]) if len(parts) > 2 else 0
-                        time_ms = (minutes * 60 + seconds) * 1000 + ms * 10
-                        
-                        if text:  # Only add lines with text
-                            lines.append({
-                                'time': time_ms,
-                                'time_formatted': f"{minutes}:{seconds:02d}",
-                                'text': text
-                            })
-                except:
-                    continue
-        
-        return {
-            'synced': True,
-            'lines': lines,
-            'raw_lrc': lrc,
-            'track': track_name,
-            'artist': artist
-        }
-        
-    except Exception as e:
-        logging.error(f"Synced lyrics error: {e}")
-        return None
-
-@api_router.get("/music/lyrics/{track_name}")
-async def get_synced_lyrics(track_name: str, artist: str = ""):
-    """
-    Get synchronized lyrics for a track.
-    Returns LRC format lyrics with timestamps for karaoke-style display.
-    
-    Query params:
-    - track_name: Name of the track (URL encoded)
-    - artist: Artist name (optional but recommended)
-    """
-    if not track_name or len(track_name.strip()) < 2:
-        raise HTTPException(status_code=400, detail="Track name too short")
-    
-    cache_key = f"lyrics_{track_name.lower()}_{artist.lower()}"
-    
-    try:
-        cache = await get_or_create_music_cache()
-        
-        # Check cache first
-        cached = await cache.find_one({"cache_key": cache_key})
-        if cached and cached.get("lyrics"):
-            logging.info(f"Lyrics cache HIT: {track_name} - {artist}")
-            return {**cached["lyrics"], "cached": True}
-        
-        logging.info(f"Lyrics cache MISS: {track_name} - {artist}, fetching...")
-        
-        # Fetch lyrics
-        loop = asyncio.get_event_loop()
-        lyrics = await loop.run_in_executor(
-            yt_executor, 
-            _get_synced_lyrics_sync, 
-            track_name.strip(), 
-            artist.strip()
-        )
-        
-        if not lyrics:
-            # Try without artist
-            if artist:
-                lyrics = await loop.run_in_executor(
-                    yt_executor, 
-                    _get_synced_lyrics_sync, 
-                    track_name.strip(), 
-                    ""
-                )
-        
-        if not lyrics:
-            raise HTTPException(status_code=404, detail="Lyrics not found")
-        
-        # Cache the result
-        await cache.update_one(
-            {"cache_key": cache_key},
-            {"$set": {
-                "cache_key": cache_key,
-                "track": track_name,
-                "artist": artist,
-                "lyrics": lyrics,
-                "cached_at": datetime.now(timezone.utc)
-            }},
-            upsert=True
-        )
-        
-        return {**lyrics, "cached": False}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Lyrics fetch error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============== SPOTIFY INTEGRATION ==============
-# Import Spotify playlists and search YouTube for matching tracks
-
-async def _spotify_to_youtube_async(track_name: str, artist: str) -> Optional[dict]:
-    """Search YouTube for a Spotify track (cache-first via youtube_service)"""
-    try:
-        from services.youtube_service import youtube_service
-        youtube_service.set_db(db)
-        query = f"{track_name} {artist}"
-        results = await youtube_service.search(query, limit=1)
-        if results:
-            r = results[0]
-            return {
-                "song_id": r.get("id") or r.get("song_id"),
-                "title": r.get("title", ""),
-                "artist": r.get("artist", ""),
-                "thumbnail": r.get("thumbnail") or r.get("cover_url", ""),
-                "youtube_url": r.get("youtube_url", ""),
-                "embed_url": r.get("embed_url", ""),
-                "duration": r.get("duration", 0),
-            }
-    except Exception as e:
-        logging.error(f"Spotify to YouTube error: {e}")
-    return None
-
-
-@api_router.get("/music/spotify/search/{query}")
-async def music_spotify_search(query: str, limit: int = 10, country: str = "US"):
-    """
-    Search for tracks on Spotify (cache-first) and find YouTube matches (cache-first).
-    Returns Spotify metadata with YouTube streaming URLs.
-    """
-    if not query or len(query.strip()) < 2:
-        raise HTTPException(status_code=400, detail="Query too short")
-
-    try:
-        from services.spotify_cached import set_db as set_sp_db, search as spotify_search
-        set_sp_db(db)
-        tracks = await spotify_search(query, country=country, limit=min(limit, 20))
-
-        if not tracks:
-            return {"results": [], "query": query, "count": 0, "source": "Spotify"}
-
-        formatted_tracks = []
-        for track in tracks[:10]:
-            spotify_info = {
-                "spotify_id": track.get("id", ""),
-                "title": track.get("title", "Unknown"),
-                "artist": track.get("artist", "Unknown"),
-                "album": track.get("album", ""),
-                "duration": (track.get("duration_ms") or 0) // 1000,
-                "duration_formatted": format_duration((track.get("duration_ms") or 0) // 1000),
-                "thumbnail": track.get("thumbnail") or track.get("cover_url", ""),
-                "spotify_url": f"https://open.spotify.com/track/{track.get('id', '')}",
-                "preview_url": track.get("preview_url", ""),
-                "popularity": track.get("popularity", 0),
-            }
-            yt_match = await _spotify_to_youtube_async(spotify_info["title"], spotify_info["artist"])
-            formatted_tracks.append({"spotify": spotify_info, "youtube": yt_match, "source": "Spotify"})
-
-        return {"results": formatted_tracks, "query": query, "count": len(formatted_tracks), "source": "Spotify"}
-
-    except Exception as e:
-        logging.error(f"Spotify search error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/music/spotify/track/{track_query}")
-async def spotify_track_search(track_query: str):
-    """
-    Search for YouTube match for a track (cache-first via youtube_service).
-    track_query format: "track_name - artist_name" or just "track_name"
-    """
-    if not track_query or len(track_query.strip()) < 2:
-        raise HTTPException(status_code=400, detail="Query too short")
-
-    try:
-        parts = track_query.split(" - ")
-        track_name = parts[0].strip()
-        artist = parts[1].strip() if len(parts) > 1 else ""
-        result = await _spotify_to_youtube_async(track_name, artist)
-        if not result:
-            raise HTTPException(status_code=404, detail="No YouTube match found")
-        return {"original_query": track_query, "youtube_match": result, "source": "Spotify->YouTube"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Spotify track search error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.post("/music/spotify/playlist/import")
-async def spotify_playlist_import(playlist_url: str = Form(None), url: str = None):
-    """
-    Import a Spotify playlist (cache-first) and convert tracks to YouTube (cache-first).
-    Accepts playlist URL via form data or JSON body.
-    """
-    actual_url = playlist_url or url
-
-    if not actual_url or "spotify.com" not in actual_url:
-        raise HTTPException(status_code=400, detail="Invalid Spotify playlist URL. Example: https://open.spotify.com/playlist/xxxxx")
-
-    try:
-        from services.spotify_cached import set_db, get_playlist_tracks
-        set_db(db)
-        if "/playlist/" in actual_url:
-            playlist_id = actual_url.split("/playlist/")[-1].split("?")[0].split("/")[0]
-        elif "playlist:" in actual_url:
-            playlist_id = actual_url.split("playlist:")[-1]
-        else:
-            raise HTTPException(status_code=400, detail="Could not extract playlist ID from URL")
-
-        logging.info(f"Importing Spotify playlist: {playlist_id}")
-        tracks_raw = await get_playlist_tracks(playlist_id, limit=50)
-        if not tracks_raw:
-            raise HTTPException(status_code=404, detail="Playlist not found or not accessible. Make sure the playlist is public.")
-
-        tracks_info = [{
-            "name": t.get("title", ""),
-            "artist": t.get("artist", ""),
-            "album": t.get("album", ""),
-            "duration_ms": t.get("duration_ms", 0),
-            "spotify_id": t.get("id", ""),
-        } for t in tracks_raw[:50]]
-
-        results = []
-        for track_info in tracks_info[:20]:
-            try:
-                yt_match = await _spotify_to_youtube_async(track_info["name"], track_info["artist"])
-                results.append({"spotify": track_info, "youtube": yt_match})
-            except Exception as e:
-                logging.warning(f"Failed to match track: {track_info['name']} - {e}")
-                results.append({"spotify": track_info, "youtube": None})
-
-        return {
-            "playlist_name": "Imported Playlist",
-            "owner": "Unknown",
-            "total_tracks": len(tracks_info),
-            "converted_tracks": len([r for r in results if r["youtube"]]),
-            "tracks": results,
-            "source": "Spotify",
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Spotify playlist import error: {e}")
-        raise HTTPException(status_code=503, detail="Spotify yapılandırılmadı veya playlist alınamadı.")
-
-@api_router.get("/music/radio/{track_id}")
-async def get_song_radio(track_id: str, limit: int = 20):
-    """Generate a radio station based on a track using YouTube/Spotify similar tracks."""
-    cache_key = f"radio_{track_id}"
-    cached = await db.music_cache.find_one({"cache_key": cache_key})
-    if cached and cached.get("data"):
-        return {"tracks": cached["data"][:limit], "source": "cache"}
-
-    track = await db.listening_history.find_one({"track_id": track_id})
-    artist = track.get("artist", "") if track else ""
-    title = track.get("title", "") if track else ""
-
-    results = []
-
-    if YOUTUBE_API_KEY and (artist or title):
-        try:
-            search_query = f"{artist} {title} similar music mix"
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(f"{YOUTUBE_API_BASE}/search", params={
-                    "part": "snippet", "q": search_query, "type": "video",
-                    "videoCategoryId": "10", "maxResults": limit,
-                    "key": YOUTUBE_API_KEY
-                })
-                if resp.status_code == 200:
-                    data = resp.json()
-                    for item in data.get("items", []):
-                        results.append({
-                            "id": item["id"].get("videoId", ""),
-                            "title": item["snippet"]["title"],
-                            "artist": item["snippet"]["channelTitle"],
-                            "thumbnail": item["snippet"]["thumbnails"].get("high", {}).get("url", ""),
-                            "source": "youtube",
-                            "audio_url": f"https://www.youtube.com/watch?v={item['id'].get('videoId', '')}",
-                        })
-        except Exception as e:
-            logger.warning(f"YouTube radio search error: {e}")
-
-    try:
-        if artist or title:
-            from services.spotify_cached import search as deezer_search
-            deezer_results = await deezer_search(f"{artist} {title}", limit=limit)
-            for t in deezer_results:
-                results.append({
-                    "id": f"deezer_{t['id']}",
-                    "title": t["title"],
-                    "artist": t["artist"],
-                    "thumbnail": t.get("thumbnail", ""),
-                    "source": "deezer",
-                })
-    except Exception as e:
-        logger.warning(f"Deezer radio error: {e}")
-
-    if results:
-        await db.music_cache.update_one(
-            {"cache_key": cache_key},
-            {"$set": {"cache_key": cache_key, "data": results, "created_at": datetime.now(timezone.utc).isoformat()}},
-            upsert=True,
-        )
-
-    return {"tracks": results[:limit], "source": "fresh"}
 
 # ============== VIDEO CALLS ==============
 class CallLogRequest(BaseModel):
@@ -17076,14 +15645,6 @@ try:
 except ImportError as e:
     logging.warning(f"Could not load legal router: {e}")
 
-try:
-    from routes.music_tos_compliant import router as music_tos_router
-    from routes.music_tos_compliant import set_db as set_music_db
-    fastapi_app.include_router(music_tos_router, prefix="/api")
-    set_music_db(db)
-    logging.info("Music ToS-compliant router loaded")
-except ImportError as e:
-    logging.warning(f"Could not load music ToS router: {e}")
 
 try:
     from routes.themes import router as themes_router
@@ -17133,7 +15694,7 @@ except ImportError as e:
 try:
     from routes.analytics import router as analytics_router
     fastapi_app.include_router(analytics_router, prefix="/api")
-    logging.info("Analytics router loaded (Trench+ClickHouse+Jitsu+Grafana+Gemini)")
+    logging.info("Analytics router loaded")
 except ImportError as e:
     logging.warning(f"Could not load analytics router: {e}")
 
@@ -17175,12 +15736,6 @@ try:
 except ImportError as e:
     logging.warning(f"Could not load karaoke router: {e}")
 
-try:
-    from routes.music_routes import router as music_router
-    fastapi_app.include_router(music_router, prefix="/api")
-    logging.info("Music router loaded")
-except ImportError as e:
-    logging.warning(f"Could not load music router: {e}")
 
 try:
     from routes.social_routes import router as social_router
@@ -17222,7 +15777,7 @@ except ImportError as e:
 try:
     from routes.infrastructure import router as infrastructure_router
     fastapi_app.include_router(infrastructure_router, prefix="/api")
-    logging.info("Infrastructure router loaded (LiveKit, MinIO, ClickHouse, etc.)")
+    logging.info("Infrastructure router loaded")
 except ImportError as e:
     logging.warning(f"Could not load infrastructure router: {e}")
 
@@ -17311,6 +15866,13 @@ try:
     logging.info("Backup router loaded (backup, restore, GDPR export, merge)")
 except ImportError as e:
     logging.warning(f"Could not load backup router: {e}")
+
+try:
+    from routes.music_hybrid import music_hybrid_router
+    fastapi_app.include_router(music_hybrid_router, prefix="/api")
+    logging.info("Hybrid Music router loaded (SoundCloud + Audiomack)")
+except ImportError as e:
+    logging.warning(f"Could not load hybrid music router: {e}")
 
 # Mount uploads directory for serving files
 fastapi_app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
