@@ -516,7 +516,7 @@ export default function ChatScreen({ route, navigation }) {
           )}
           {item.content_type === 'VOICE' && (
             <View style={styles.voiceRow}>
-              <Ionicons name="mic" size={20} color={mine ? '#fff' : '#8B5CF6'} />
+              <Ionicons name="mic" size={20} color={mine ? '#fff' : colors.primary} />
               <Text style={[styles.voiceText, mine && styles.voiceTextMe]}>{item.duration || 0}s</Text>
             </View>
           )}
@@ -524,14 +524,13 @@ export default function ChatScreen({ route, navigation }) {
             <Image source={{ uri: item.media_url }} style={styles.gifMsg} resizeMode="cover" />
           )}
           {item.content_type === 'POST' && item.post_id ? (
-            <TouchableOpacity style={styles.shareCard} onPress={() => navigation.navigate('PostDetail', { postId: item.post_id })} activeOpacity={0.8}>
-              <Ionicons name="newspaper" size={24} color={mine ? '#fff' : '#8B5CF6'} />
+            <View style={styles.shareCard}>
+              <Ionicons name="newspaper" size={24} color={mine ? '#fff' : colors.primary} />
               <Text style={[styles.shareCardText, mine && styles.shareCardTextMe]} numberOfLines={2}>{item.content || t('chat.postShared')}</Text>
-              <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.6)" />
-            </TouchableOpacity>
+            </View>
           ) : item.content_type === 'MUSIC' && item.music_id ? (
             <TouchableOpacity style={styles.shareCard} onPress={() => { }} activeOpacity={0.8}>
-              <Ionicons name="musical-notes" size={24} color={mine ? '#fff' : '#8B5CF6'} />
+              <Ionicons name="musical-notes" size={24} color={mine ? '#fff' : colors.primary} />
               <Text style={[styles.shareCardText, mine && styles.shareCardTextMe]} numberOfLines={2}>{item.content || t('chat.musicShared')}</Text>
             </TouchableOpacity>
           ) : item.content_type === 'PLAYLIST' && item.playlist_id ? (
@@ -660,7 +659,7 @@ export default function ChatScreen({ route, navigation }) {
           <Ionicons
             name={vanishMode ? 'eye-off' : 'eye-off-outline'}
             size={22}
-            color={vanishMode ? '#A78BFA' : '#fff'}
+            color={vanishMode ? colors.primary : '#fff'}
           />
         </TouchableOpacity>
         <TouchableOpacity
@@ -813,7 +812,7 @@ export default function ChatScreen({ route, navigation }) {
       )}
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color="#8B5CF6" /></View>
+        <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
       ) : (
         <FlatList
           ref={flatListRef}
@@ -828,13 +827,13 @@ export default function ChatScreen({ route, navigation }) {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           ListEmptyComponent={<Text style={styles.empty}>{t('chat.noMessages')}</Text>}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={(_, h) => { if (!refreshing) flatListRef.current?.scrollToEnd({ animated: false }); }}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={async () => { setRefreshing(true); try { await loadMessages(); } finally { setRefreshing(false); } }}
-              tintColor="#8B5CF6"
+              tintColor={colors.primary}
             />
           }
         />
@@ -886,10 +885,6 @@ export default function ChatScreen({ route, navigation }) {
             <TouchableOpacity style={styles.attachItem} onPress={() => { setShowStickers(true); setShowAttach(false); }}>
               <Text style={styles.attachEmoji}>😀</Text>
               <Text style={styles.attachLabel}>{t('chat.stickers')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.attachItem} onPress={() => { navigation.navigate('SharePostPicker', { conversationId }); setShowAttach(false); }}>
-              <Ionicons name="newspaper-outline" size={24} color="#fff" />
-              <Text style={styles.attachLabel}>{t('chat.post')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.attachItem} onPress={() => { navigation.navigate('ShareMusicPicker', { conversationId }); setShowAttach(false); }}>
               <Ionicons name="musical-notes-outline" size={24} color="#fff" />
