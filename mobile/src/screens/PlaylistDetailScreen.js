@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Modal,
-  TextInput, Switch, Alert, ActivityIndicator, Share,
+  TextInput, Switch, Alert, ActivityIndicator, Share, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -345,71 +345,116 @@ export default function PlaylistDetailScreen({ navigation, route }) {
       )}
 
       {/* Menu Modal */}
-      <Modal visible={menuVisible} transparent animationType="fade">
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setMenuVisible(false)}
-        >
-          <View style={styles.menuSheet}>
-            <TouchableOpacity style={styles.menuItem} onPress={handlePlayAll}>
-              <Ionicons name="play-circle-outline" size={22} color="#8B5CF6" />
-              <Text style={styles.menuText}>Tümünü Oynat</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
-              <Ionicons name="pencil-outline" size={22} color="#fff" />
-              <Text style={styles.menuText}>Yeniden Adlandır</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={handleShare}>
-              <Ionicons name="share-outline" size={22} color="#fff" />
-              <Text style={styles.menuText}>Paylaş</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={handleDelete}>
-              <Ionicons name="trash-outline" size={22} color="#EF4444" />
-              <Text style={[styles.menuText, styles.menuTextDanger]}>Sil</Text>
+      {Platform.OS === 'web' ? (
+        menuVisible && (
+          <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]} pointerEvents="box-none">
+            <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
+              <View style={styles.menuSheet}>
+                <TouchableOpacity style={styles.menuItem} onPress={handlePlayAll}>
+                  <Ionicons name="play-circle-outline" size={22} color="#C084FC" />
+                  <Text style={styles.menuText}>Tümünü Oynat</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
+                  <Ionicons name="pencil-outline" size={22} color="#fff" />
+                  <Text style={styles.menuText}>Yeniden Adlandır</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={handleShare}>
+                  <Ionicons name="share-outline" size={22} color="#fff" />
+                  <Text style={styles.menuText}>Paylaş</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={handleDelete}>
+                  <Ionicons name="trash-outline" size={22} color="#EF4444" />
+                  <Text style={[styles.menuText, styles.menuTextDanger]}>Sil</Text>
+                </TouchableOpacity>
+              </View>
             </TouchableOpacity>
           </View>
-        </TouchableOpacity>
-      </Modal>
-
+        )
+      ) : (
+        <Modal visible={menuVisible} transparent animationType="fade">
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
+            <View style={styles.menuSheet}>
+              <TouchableOpacity style={styles.menuItem} onPress={handlePlayAll}>
+                <Ionicons name="play-circle-outline" size={22} color="#C084FC" />
+                <Text style={styles.menuText}>Tümünü Oynat</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
+                <Ionicons name="pencil-outline" size={22} color="#fff" />
+                <Text style={styles.menuText}>Yeniden Adlandır</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem} onPress={handleShare}>
+                <Ionicons name="share-outline" size={22} color="#fff" />
+                <Text style={styles.menuText}>Paylaş</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={handleDelete}>
+                <Ionicons name="trash-outline" size={22} color="#EF4444" />
+                <Text style={[styles.menuText, styles.menuTextDanger]}>Sil</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
 
       {/* Edit Modal */}
-      <Modal visible={editModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.editModal, { paddingBottom: insets.bottom + 24 }]}>
-            <Text style={styles.editTitle}>{t('common.edit', 'Edit')}</Text>
-            <TextInput
-              style={styles.editInput}
-              placeholder={t('playlistDetail.playlistName', 'Playlist name')}
-              placeholderTextColor="#6B7280"
-              value={editName}
-              onChangeText={setEditName}
-              autoCapitalize="none"
-            />
-            <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>{editIsPublic ? t('playlistDetail.public', 'Public') : t('playlistDetail.private', 'Private')}</Text>
-              <Switch
-                value={editIsPublic}
-                onValueChange={setEditIsPublic}
-                trackColor={{ false: '#4B5563', true: '#7C3AED' }}
-                thumbColor="#fff"
-              />
-            </View>
-            <View style={styles.editActions}>
-              <TouchableOpacity style={styles.editCancel} onPress={() => setEditModalVisible(false)}>
-                <Text style={styles.editCancelText}>{t('common.cancel', 'Cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.editSave}
-                onPress={handleSaveEdit}
-                disabled={saving}
-              >
-                {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.editSaveText}>{t('common.save', 'Save')}</Text>}
-              </TouchableOpacity>
+      {Platform.OS === 'web' ? (
+        editModalVisible && (
+          <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]} pointerEvents="box-none">
+            <View style={styles.modalOverlay}>
+              <View style={[styles.editModal, { paddingBottom: insets.bottom + 24 }]}>
+                <Text style={styles.editTitle}>{t('common.edit', 'Edit')}</Text>
+                <TextInput
+                  style={styles.editInput}
+                  placeholder={t('playlistDetail.playlistName', 'Playlist name')}
+                  placeholderTextColor="#6B7280"
+                  value={editName}
+                  onChangeText={setEditName}
+                  autoCapitalize="none"
+                />
+                <View style={styles.toggleRow}>
+                  <Text style={styles.toggleLabel}>{editIsPublic ? t('playlistDetail.public', 'Public') : t('playlistDetail.private', 'Private')}</Text>
+                  <Switch value={editIsPublic} onValueChange={setEditIsPublic} trackColor={{ false: '#4B5563', true: '#7C3AED' }} thumbColor="#fff" />
+                </View>
+                <View style={styles.editActions}>
+                  <TouchableOpacity style={styles.editCancel} onPress={() => setEditModalVisible(false)}>
+                    <Text style={styles.editCancelText}>{t('common.cancel', 'Cancel')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.editSave} onPress={handleSaveEdit} disabled={saving}>
+                    {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.editSaveText}>{t('common.save', 'Save')}</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        )
+      ) : (
+        <Modal visible={editModalVisible} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={[styles.editModal, { paddingBottom: insets.bottom + 24 }]}>
+              <Text style={styles.editTitle}>{t('common.edit', 'Edit')}</Text>
+              <TextInput
+                style={styles.editInput}
+                placeholder={t('playlistDetail.playlistName', 'Playlist name')}
+                placeholderTextColor="#6B7280"
+                value={editName}
+                onChangeText={setEditName}
+                autoCapitalize="none"
+              />
+              <View style={styles.toggleRow}>
+                <Text style={styles.toggleLabel}>{editIsPublic ? t('playlistDetail.public', 'Public') : t('playlistDetail.private', 'Private')}</Text>
+                <Switch value={editIsPublic} onValueChange={setEditIsPublic} trackColor={{ false: '#4B5563', true: '#7C3AED' }} thumbColor="#fff" />
+              </View>
+              <View style={styles.editActions}>
+                <TouchableOpacity style={styles.editCancel} onPress={() => setEditModalVisible(false)}>
+                  <Text style={styles.editCancelText}>{t('common.cancel', 'Cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.editSave} onPress={handleSaveEdit} disabled={saving}>
+                  {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.editSaveText}>{t('common.save', 'Save')}</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }

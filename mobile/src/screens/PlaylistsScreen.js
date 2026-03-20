@@ -5,7 +5,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
-  RefreshControl, TextInput, ActivityIndicator, Alert, Animated, Pressable, Modal,
+  RefreshControl, TextInput, ActivityIndicator, Alert, Animated, Pressable, Modal, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,8 +48,9 @@ const PINNED = [
     name: 'Beğenilen Şarkılar',
     subtitle: 'Beğendiğin tüm parçalar',
     icon: 'heart',
-    iconColor: '#FF2D55',
-    bgColors: ['#3D0010', '#7C0021'],
+    iconColor: '#fff',
+    bgColors: ['#4C1D95', '#C084FC'],
+    glowColor: 'rgba(192,132,252,0.55)',
     route: 'Liked',
     track_count: null,
   },
@@ -57,9 +58,10 @@ const PINNED = [
     id: '__recent__',
     name: 'Son Dinlenen',
     subtitle: 'Son çaldığın parçalar',
-    icon: 'time',
-    iconColor: '#FF9500',
-    bgColors: ['#2D1A00', '#5C3500'],
+    icon: 'radio',
+    iconColor: '#fff',
+    bgColors: ['#7C2D12', '#FB923C'],
+    glowColor: 'rgba(251,146,60,0.55)',
     route: 'ListeningHistory',
     track_count: null,
   },
@@ -89,8 +91,12 @@ function PinnedRow({ item, onPress, colors }) {
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <LinearGradient colors={item.bgColors} style={pr.cover}>
-        <Ionicons name={item.icon} size={26} color={item.iconColor} />
+      <LinearGradient
+        colors={item.bgColors}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={[pr.cover, { shadowColor: item.glowColor, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12, elevation: 8 }]}
+      >
+        <Ionicons name={item.icon} size={28} color={item.iconColor} />
       </LinearGradient>
       <View style={pr.info}>
         <Text style={[pr.name, { color: colors.text }]}>{item.name}</Text>
@@ -102,9 +108,9 @@ function PinnedRow({ item, onPress, colors }) {
 }
 
 const pr = StyleSheet.create({
-  row:   { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 20, borderBottomWidth: StyleSheet.hairlineWidth, gap: 14 },
-  cover: { width: 60, height: 60, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  info:  { flex: 1, gap: 3 },
+  row:   { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 20, borderBottomWidth: StyleSheet.hairlineWidth, gap: 14 },
+  cover: { width: 64, height: 64, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  info:  { flex: 1, gap: 4 },
   name:  { fontSize: 15, fontWeight: '700' },
   sub:   { fontSize: 12 },
 });
@@ -144,6 +150,21 @@ function BottomModal({ visible, onClose, title, children }) {
       Animated.timing(translateY, { toValue: 400, duration: 220, useNativeDriver: true }).start();
     }
   }, [visible]);
+
+  if (Platform.OS === 'web') {
+    if (!visible) return null;
+    return (
+      <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]} pointerEvents="box-none">
+        <Pressable style={bm.overlay} onPress={onClose}>
+          <Pressable style={bm.sheet} onPress={e => e.stopPropagation()}>
+            <View style={bm.handle} />
+            {title && <Text style={bm.title}>{title}</Text>}
+            {children}
+          </Pressable>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <Modal
@@ -329,7 +350,12 @@ export default function PlaylistsScreen({ navigation }) {
       {/* ── Section Header ── */}
       <View style={s.sectionHeader}>
         <Text style={[s.sectionTitle, { color: colors.text }]}>Oynatma Listelerim</Text>
-        <Text style={[s.sectionCount, { color: colors.textMuted }]}>{filtered.length}</Text>
+        <TouchableOpacity style={s.createBtn} onPress={() => { setInputVal(''); setCreateModal(true); }} activeOpacity={0.85}>
+          <LinearGradient colors={['#A78BFA', '#7C3AED']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.createBtnGrad}>
+            <Ionicons name="add" size={16} color="#FFF" />
+            <Text style={s.createBtnText}>Oluştur</Text>
+          </LinearGradient>
+        </TouchableOpacity>
       </View>
 
       {/* ── List ── */}
@@ -361,17 +387,6 @@ export default function PlaylistsScreen({ navigation }) {
           }
         />
       )}
-
-      {/* ── FAB ── */}
-      <TouchableOpacity
-        style={[s.fab, { bottom: insets.bottom + 80 }]}
-        onPress={() => { setInputVal(''); setCreateModal(true); }}
-        activeOpacity={0.9}
-      >
-        <LinearGradient colors={['#A78BFA', '#7C3AED']} style={s.fabGrad}>
-          <Ionicons name="add" size={28} color="#FFF" />
-        </LinearGradient>
-      </TouchableOpacity>
 
       {/* ── Create Modal ── */}
       <BottomModal visible={createModal} onClose={() => setCreateModal(false)} title="Yeni Playlist">
@@ -450,9 +465,10 @@ function createStyles(colors, insets) {
     emptyBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, marginTop: 8 },
     emptyBtnText:{ color: '#FFF', fontWeight: '700', fontSize: 15 },
 
-    // FAB
-    fab:     { position: 'absolute', right: 20, width: 58, height: 58, borderRadius: 29, overflow: 'hidden', shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.5, shadowRadius: 12, elevation: 10 },
-    fabGrad: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    // Create button
+    createBtn:     { borderRadius: 20, overflow: 'hidden' },
+    createBtnGrad: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 7 },
+    createBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 
     // Modal
     modalInput:   { borderRadius: 14, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, marginBottom: 16 },
