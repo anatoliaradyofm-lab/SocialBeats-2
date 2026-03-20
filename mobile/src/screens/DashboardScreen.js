@@ -160,8 +160,10 @@ export default function DashboardScreen({ navigation }) {
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [dropdownTop,   setDropdownTop]   = useState(160);
   const searchDebounce = useRef(null);
   const searchInputRef = useRef(null);
+  const searchWrapRef  = useRef(null);
 
   useEffect(() => {
     if (searchDebounce.current) clearTimeout(searchDebounce.current);
@@ -196,10 +198,48 @@ export default function DashboardScreen({ navigation }) {
     return t('dashboard.greetingEvening') + ' 🌙';
   };
 
+  const searchDropdownContent = (searchFocused && searchQuery.trim().length > 0) && (
+    <View style={[s.searchDropdown, { backgroundColor: '#130A24', borderColor: 'rgba(192,132,252,0.15)' }]}>
+      {searchLoading ? (
+        <ActivityIndicator size="small" color={colors.primary} style={{ padding: 20 }} />
+      ) : searchResults.length === 0 ? (
+        <Text style={[s.searchEmpty, { color: colors.textMuted }]}>"{searchQuery}" için sonuç bulunamadı</Text>
+      ) : (
+        searchResults.map((item, idx) => (
+          <TouchableOpacity
+            key={item.id || item._id || idx}
+            style={[s.searchResultRow, { borderBottomColor: 'rgba(192,132,252,0.10)', borderBottomWidth: idx < searchResults.length - 1 ? 1 : 0 }]}
+            onPress={() => { playTrack?.(item); setSearchQuery(''); setSearchResults([]); setSearchFocused(false); }}
+          >
+            {item.cover_url || item.cover ? (
+              <Image source={{ uri: item.cover_url || item.cover }} style={s.searchResultCover} />
+            ) : (
+              <View style={[s.searchResultCover, { backgroundColor: colors.primaryGlow, alignItems: 'center', justifyContent: 'center' }]}>
+                <Ionicons name="musical-note" size={16} color={colors.primary} />
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={[s.searchResultTitle, { color: colors.text }]} numberOfLines={1}>{item.title || item.name}</Text>
+              <Text style={[s.searchResultArtist, { color: colors.textMuted }]} numberOfLines={1}>{item.artist || item.artist_name || ''}</Text>
+            </View>
+            <Ionicons name="play-circle-outline" size={22} color={colors.primary} />
+          </TouchableOpacity>
+        ))
+      )}
+    </View>
+  );
+
   return (
     <View style={s.root}>
+      {Platform.OS === 'web' && searchDropdownContent && (
+        <View style={{ position: 'fixed', top: dropdownTop, left: 0, right: 0, bottom: 68, zIndex: 9999 }}>
+          {searchDropdownContent}
+        </View>
+      )}
       <ScrollView
         showsVerticalScrollIndicator={false}
+        scrollEnabled={!searchFocused}
+        keyboardShouldPersistTaps="always"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         contentContainerStyle={s.content}
       >
@@ -223,10 +263,10 @@ export default function DashboardScreen({ navigation }) {
             </View>
             <View style={s.headerRight}>
               <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Conversations')}>
-                <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="chatbubble" size={20} color="#FFFFFF" />
               </TouchableOpacity>
               <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')}>
-                <Ionicons name="notifications-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="notifications" size={20} color="#FFFFFF" />
                 <View style={[s.badge, { backgroundColor: '#FF3B30' }]} />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={s.avatarWrap}>
@@ -337,7 +377,12 @@ export default function DashboardScreen({ navigation }) {
         </LinearGradient>
 
         {/* ── Search Bar ───────────────────────────────────────────── */}
-        <View style={s.searchWrap}>
+        <View ref={searchWrapRef} style={s.searchWrap}>
+          {Platform.OS !== 'web' && searchDropdownContent && (
+            <View style={{ position: 'absolute', top: 52, left: 0, right: 0, zIndex: 999 }}>
+              {searchDropdownContent}
+            </View>
+          )}
           <View style={[s.searchBar, { backgroundColor: colors.searchBg, borderColor: searchFocused ? colors.primary : colors.border }]}>
             <Ionicons name="search-outline" size={16} color={searchFocused ? colors.primary : colors.textMuted} />
             <TextInput
@@ -347,7 +392,12 @@ export default function DashboardScreen({ navigation }) {
               placeholderTextColor={colors.textGhost}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              onFocus={() => setSearchFocused(true)}
+              onFocus={() => {
+                setSearchFocused(true);
+                searchWrapRef.current?.measure?.((x, y, w, h, px, py) => {
+                  setDropdownTop(py + h - 2);
+                });
+              }}
               onBlur={() => { if (!searchQuery) setSearchFocused(false); }}
               returnKeyType="search"
             />
@@ -361,43 +411,6 @@ export default function DashboardScreen({ navigation }) {
               </View>
             )}
           </View>
-          {(searchFocused && searchQuery.trim().length > 0) && (
-            <View style={[s.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              {searchLoading ? (
-                <ActivityIndicator size="small" color={colors.primary} style={{ padding: 16 }} />
-              ) : searchResults.length === 0 ? (
-                <Text style={[s.searchEmpty, { color: colors.textMuted }]}>"{searchQuery}" için sonuç bulunamadı</Text>
-              ) : (
-                searchResults.map((item, idx) => (
-                  <TouchableOpacity
-                    key={item.id || item._id || idx}
-                    style={[s.searchResultRow, { borderBottomColor: colors.border, borderBottomWidth: idx < searchResults.length - 1 ? 1 : 0 }]}
-                    onPress={() => { playTrack?.(item); setSearchQuery(''); setSearchResults([]); setSearchFocused(false); }}
-                  >
-                    {item.cover_url || item.cover ? (
-                      <Image source={{ uri: item.cover_url || item.cover }} style={s.searchResultCover} />
-                    ) : (
-                      <View style={[s.searchResultCover, { backgroundColor: colors.primaryGlow, alignItems:'center', justifyContent:'center' }]}>
-                        <Ionicons name="musical-note" size={16} color={colors.primary} />
-                      </View>
-                    )}
-                    <View style={{ flex: 1 }}>
-                      <Text style={[s.searchResultTitle, { color: colors.text }]} numberOfLines={1}>{item.title || item.name}</Text>
-                      <Text style={[s.searchResultArtist, { color: colors.textMuted }]} numberOfLines={1}>{item.artist || item.artist_name || ''}</Text>
-                    </View>
-                    <Ionicons name="play-circle-outline" size={20} color={colors.primary} />
-                  </TouchableOpacity>
-                ))
-              )}
-              <TouchableOpacity
-                style={[s.searchSeeAll, { borderTopColor: colors.border }]}
-                onPress={() => { navigation.navigate('Search', { query: searchQuery }); setSearchFocused(false); }}
-              >
-                <Text style={[s.searchSeeAllText, { color: colors.primary }]}>{t('common.seeAll')}</Text>
-                <Ionicons name="arrow-forward" size={14} color={colors.primary} />
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
 
         {/* ── Featured Hero ────────────────────────────────────────── */}
@@ -431,30 +444,32 @@ export default function DashboardScreen({ navigation }) {
         </ScrollView>
 
 
-        {/* ── Discover Genres ──────────────────────────────────────── */}
-        <SectionHeader title="Discover Genres" onSeeAll={() => navigation.navigate('Search')} colors={colors} />
-        <View style={s.genreRow}>
-          {GENRES.slice(0,2).map(g => (
-            <TouchableOpacity key={g.id} activeOpacity={0.85} style={{ flex: 1 }}>
-              <LinearGradient colors={g.grad} start={{ x:0,y:0 }} end={{ x:1,y:1 }} style={s.genreCard}>
-                <Text style={s.genreEmoji}>{g.emoji}</Text>
-                <Text style={s.genreLabel}>{g.label}</Text>
-              </LinearGradient>
+        {/* ── Made For You (Sana Özel) ──────────────────────────────── */}
+        <SectionHeader title={t('dashboard.madeForYou')} onSeeAll={() => navigation.navigate('Library')} colors={colors} />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.hScrollContent} style={s.hScroll}>
+          {PLAYLISTS.map(p => (
+            <TouchableOpacity key={p.id} style={s.playlistCard} onPress={() => navigation.navigate('PlaylistDetail', { playlistId: p.id, playlist: p })} activeOpacity={0.88}>
+              <Image source={{ uri: p.cover }} style={s.playlistCover} />
+              <Text style={[s.playlistName, { color: colors.text }]} numberOfLines={2}>{p.name}</Text>
+              <Text style={[s.playlistCount, { color: colors.textMuted }]}>{p.count} {t('dashboard.tracks')}</Text>
             </TouchableOpacity>
           ))}
-        </View>
-        {false && <View style={[s.genreRow, { marginTop: -12 }]}>
-          {GENRES.slice(2,4).map(g => (
-            <TouchableOpacity key={g.id} activeOpacity={0.85} style={{ flex: 1 }}>
-              <LinearGradient colors={g.grad} start={{ x:0,y:0 }} end={{ x:1,y:1 }} style={s.genreCard}>
-                <Text style={s.genreEmoji}>{g.emoji}</Text>
-                <Text style={s.genreLabel}>{g.label}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          ))}
-        </View>}
+        </ScrollView>
 
-        {/* ── Jump Back In ─────────────────────────────────────────── */}
+        {/* ── Discover People ───────────────────────────────────────── */}
+        <TouchableOpacity activeOpacity={0.88} onPress={() => navigation.navigate('DiscoverPeople')}>
+          <LinearGradient colors={['rgba(168,85,247,0.2)','rgba(34,211,238,0.15)']} start={{ x:0,y:0 }} end={{ x:1,y:0 }} style={s.discoverBanner}>
+            <View style={s.discoverLeft}>
+              <Text style={[s.discoverTitle, { color: colors.text }]}>Discover People</Text>
+              <Text style={[s.discoverSub, { color: colors.textSecondary }]}>Find friends who share your taste</Text>
+            </View>
+            <View style={[s.discoverIcon, { backgroundColor: colors.primaryGlow }]}>
+              <Ionicons name="people" size={24} color={colors.primary} />
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* ── Jump Back In (Kaldığın Yerden) ───────────────────────── */}
         <SectionHeader title={t('dashboard.jumpBackIn')} onSeeAll={() => navigation.navigate('Library')} colors={colors} />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.hScrollContent} style={s.hScroll}>
           {RECENT.map(r => (
@@ -465,18 +480,6 @@ export default function DashboardScreen({ navigation }) {
               </View>
               <Text style={[s.recentTitle, { color: colors.text }]} numberOfLines={1}>{r.title}</Text>
               <Text style={[s.recentArtist, { color: colors.textMuted }]} numberOfLines={1}>{r.artist}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* ── Made For You ──────────────────────────────────────────── */}
-        <SectionHeader title={t('dashboard.madeForYou')} onSeeAll={() => navigation.navigate('Library')} colors={colors} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.hScrollContent} style={s.hScroll}>
-          {PLAYLISTS.map(p => (
-            <TouchableOpacity key={p.id} style={s.playlistCard} onPress={() => navigation.navigate('PlaylistDetail', { playlistId: p.id, playlist: p })} activeOpacity={0.88}>
-              <Image source={{ uri: p.cover }} style={s.playlistCover} />
-              <Text style={[s.playlistName, { color: colors.text }]} numberOfLines={2}>{p.name}</Text>
-              <Text style={[s.playlistCount, { color: colors.textMuted }]}>{p.count} {t('dashboard.tracks')}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -503,19 +506,6 @@ export default function DashboardScreen({ navigation }) {
             </TouchableOpacity>
           ))}
         </View>
-
-        {/* ── Discover People ───────────────────────────────────────── */}
-        <TouchableOpacity activeOpacity={0.88} onPress={() => navigation.navigate('DiscoverPeople')}>
-          <LinearGradient colors={['rgba(168,85,247,0.2)','rgba(34,211,238,0.15)']} start={{ x:0,y:0 }} end={{ x:1,y:0 }} style={s.discoverBanner}>
-            <View style={s.discoverLeft}>
-              <Text style={[s.discoverTitle, { color: colors.text }]}>Discover People</Text>
-              <Text style={[s.discoverSub, { color: colors.textSecondary }]}>Find friends who share your taste</Text>
-            </View>
-            <View style={[s.discoverIcon, { backgroundColor: colors.primaryGlow }]}>
-              <Ionicons name="people" size={24} color={colors.primary} />
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
 
         <View style={{ height: 120 }} />
       </ScrollView>
@@ -595,7 +585,7 @@ function createStyles(colors, insets) {
       paddingVertical: 10,
       gap: 8,
     },
-    searchInput: { flex: 1, fontSize: 14, fontWeight: '400', paddingVertical: 0, letterSpacing: 0 },
+    searchInput: { flex: 1, fontSize: 16, fontWeight: '400', paddingVertical: 0, letterSpacing: 0, outlineWidth: 0, outlineStyle: 'none' },
     searchMic: {
       width: 28,
       height: 28,
@@ -604,24 +594,20 @@ function createStyles(colors, insets) {
       justifyContent: 'center',
     },
     searchDropdown: {
-      marginHorizontal: 20,
-      marginTop: 4,
-      borderRadius: 16,
-      borderWidth: 1,
+      flex: 1,
       overflow: 'hidden',
-      zIndex: 100,
     },
-    searchEmpty: { fontSize: 13, textAlign: 'center', paddingVertical: 18, paddingHorizontal: 16, fontWeight: '400' },
+    searchEmpty: { fontSize: 14, textAlign: 'center', paddingVertical: 24, paddingHorizontal: 20, fontWeight: '400' },
     searchResultRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      gap: 12,
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+      gap: 14,
     },
-    searchResultCover: { width: 40, height: 40, borderRadius: 8 },
-    searchResultTitle: { fontSize: 14, fontWeight: '700', letterSpacing: -0.2 },
-    searchResultArtist: { fontSize: 12, marginTop: 1, fontWeight: '400' },
+    searchResultCover: { width: 48, height: 48, borderRadius: 10 },
+    searchResultTitle: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+    searchResultArtist: { fontSize: 13, marginTop: 2, fontWeight: '400' },
     searchSeeAll: {
       flexDirection: 'row',
       alignItems: 'center',

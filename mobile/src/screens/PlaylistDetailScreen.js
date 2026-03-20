@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import api from '../services/api';
@@ -284,10 +285,16 @@ export default function PlaylistDetailScreen({ navigation, route }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Text style={styles.backText}>← {t('playlistDetail.back', 'Back')}</Text>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <View style={styles.headerActions}>
             {isOwner && (
@@ -347,7 +354,7 @@ export default function PlaylistDetailScreen({ navigation, route }) {
       {/* Menu Modal */}
       {Platform.OS === 'web' ? (
         menuVisible && (
-          <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]} pointerEvents="box-none">
+          <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 68, zIndex: 9999 }} pointerEvents="box-none">
             <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
               <View style={styles.menuSheet}>
                 <TouchableOpacity style={styles.menuItem} onPress={handlePlayAll}>
@@ -398,7 +405,7 @@ export default function PlaylistDetailScreen({ navigation, route }) {
       {/* Edit Modal */}
       {Platform.OS === 'web' ? (
         editModalVisible && (
-          <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]} pointerEvents="box-none">
+          <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 68, zIndex: 9999 }} pointerEvents="box-none">
             <View style={styles.modalOverlay}>
               <View style={[styles.editModal, { paddingBottom: insets.bottom + 24 }]}>
                 <Text style={styles.editTitle}>{t('common.edit', 'Edit')}</Text>
@@ -486,12 +493,12 @@ const createStyles = (colors) => StyleSheet.create({
   trackArtist: { fontSize: 14, color: colors.textMuted, marginTop: 2 },
   removeBtn: { padding: 8 },
   modalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
-  menuSheet: { backgroundColor: colors.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 32, borderWidth: 1, borderColor: colors.border },
+  menuSheet: { backgroundColor: '#130A24', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.12)', overflow: 'hidden', marginHorizontal: 6 },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 12 },
   menuItemDanger: {},
   menuText: { fontSize: 18, color: colors.text },
   menuTextDanger: { color: colors.error },
-  editModal: { backgroundColor: colors.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24, borderWidth: 1, borderColor: colors.border },
+  editModal: { backgroundColor: '#130A24', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.12)', overflow: 'hidden', marginHorizontal: 6 },
   editTitle: { fontSize: 20, fontWeight: '600', color: colors.text, marginBottom: 16 },
   editInput: { height: 48, backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 16, color: colors.text, fontSize: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },

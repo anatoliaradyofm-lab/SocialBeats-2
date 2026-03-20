@@ -757,7 +757,9 @@ function App() {
   const bgScreen  = isModal
     ? (stack.length > 1 ? stack[stack.length - 2] : { name: 'Dashboard', params: {} })
     : null;
-  const showTabBar = TAB_NAMES.has(isModal && bgScreen ? bgScreen.name : screen.name);
+  const LIBRARY_STACK = new Set(['PlaylistDetail', 'Liked', 'ListeningHistory', 'AddSongsToPlaylist']);
+  const effectiveName = isModal && bgScreen ? bgScreen.name : screen.name;
+  const showTabBar = TAB_NAMES.has(effectiveName) || LIBRARY_STACK.has(effectiveName);
 
   const renderScreen = (s) => {
     const r     = s || screen;

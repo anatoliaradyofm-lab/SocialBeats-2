@@ -140,7 +140,8 @@ const lr = StyleSheet.create({
 });
 
 // ─── Bottom Sheet Modal ──────────────────────────────────────────────────────
-function BottomModal({ visible, onClose, title, children }) {
+function BottomModal({ visible, onClose, title, children, bottomOffset = 68 }) {
+  const { colors } = useTheme();
   const translateY = useRef(new Animated.Value(400)).current;
 
   useEffect(() => {
@@ -151,14 +152,26 @@ function BottomModal({ visible, onClose, title, children }) {
     }
   }, [visible]);
 
+  const sheetStyle = {
+    backgroundColor: '#130A24',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    borderColor: colors.border || 'rgba(192,132,252,0.12)',
+    padding: 24,
+    paddingBottom: 40,
+    overflow: 'hidden',
+    alignSelf: 'stretch',
+  };
+
   if (Platform.OS === 'web') {
     if (!visible) return null;
     return (
-      <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]} pointerEvents="box-none">
+      <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: bottomOffset, zIndex: 9999 }} pointerEvents="box-none">
         <Pressable style={bm.overlay} onPress={onClose}>
-          <Pressable style={bm.sheet} onPress={e => e.stopPropagation()}>
+          <Pressable style={sheetStyle} onPress={e => e.stopPropagation()}>
             <View style={bm.handle} />
-            {title && <Text style={bm.title}>{title}</Text>}
+            {title && <Text style={[bm.title, { color: colors.text }]}>{title}</Text>}
             {children}
           </Pressable>
         </Pressable>
@@ -175,10 +188,10 @@ function BottomModal({ visible, onClose, title, children }) {
       statusBarTranslucent
     >
       <Pressable style={bm.overlay} onPress={onClose}>
-        <Animated.View style={[bm.sheet, { transform: [{ translateY }] }]}>
+        <Animated.View style={[sheetStyle, { transform: [{ translateY }] }]}>
           <Pressable onPress={e => e.stopPropagation()}>
             <View style={bm.handle} />
-            {title && <Text style={bm.title}>{title}</Text>}
+            {title && <Text style={[bm.title, { color: colors.text }]}>{title}</Text>}
             {children}
           </Pressable>
         </Animated.View>
@@ -188,10 +201,9 @@ function BottomModal({ visible, onClose, title, children }) {
 }
 
 const bm = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  sheet:   { backgroundColor: '#1A1A2E', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 },
-  handle:  { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginBottom: 20 },
-  title:   { fontSize: 18, fontWeight: '800', color: '#FFF', marginBottom: 20 },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
+  handle:  { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(192,132,252,0.25)', alignSelf: 'center', marginBottom: 20 },
+  title:   { fontSize: 18, fontWeight: '800', marginBottom: 20 },
 });
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
