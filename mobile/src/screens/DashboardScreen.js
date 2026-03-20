@@ -395,7 +395,7 @@ export default function DashboardScreen({ navigation }) {
               onFocus={() => {
                 setSearchFocused(true);
                 searchWrapRef.current?.measure?.((x, y, w, h, px, py) => {
-                  setDropdownTop(py + h - 2);
+                  setDropdownTop(py + h);
                 });
               }}
               onBlur={() => { if (!searchQuery) setSearchFocused(false); }}
