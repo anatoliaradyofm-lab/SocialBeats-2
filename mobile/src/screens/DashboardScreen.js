@@ -18,6 +18,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
+import NativeAdSlot from '../components/ads/NativeAdSlot';
 
 const { width: W } = Dimensions.get('window');
 const PHONE_INNER_W = 374; // web preview phone frame inner width (390 - 8*2 border)
@@ -263,10 +264,10 @@ export default function DashboardScreen({ navigation }) {
             </View>
             <View style={s.headerRight}>
               <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Conversations')}>
-                <Ionicons name="chatbubble" size={20} color="#FFFFFF" />
+                <Ionicons name="chatbubble-outline" size={20} color="#F8F8F8" />
               </TouchableOpacity>
               <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')}>
-                <Ionicons name="notifications" size={20} color="#FFFFFF" />
+                <Ionicons name="notifications-outline" size={20} color="#F8F8F8" />
                 <View style={[s.badge, { backgroundColor: '#FF3B30' }]} />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={s.avatarWrap}>
@@ -395,7 +396,7 @@ export default function DashboardScreen({ navigation }) {
               onFocus={() => {
                 setSearchFocused(true);
                 searchWrapRef.current?.measure?.((x, y, w, h, px, py) => {
-                  setDropdownTop(py + h);
+                  setDropdownTop(py + h - 20);
                 });
               }}
               onBlur={() => { if (!searchQuery) setSearchFocused(false); }}
@@ -468,6 +469,9 @@ export default function DashboardScreen({ navigation }) {
             </View>
           </LinearGradient>
         </TouchableOpacity>
+
+        {/* ── Native Reklam ────────────────────────────────────────── */}
+        <NativeAdSlot colors={colors} />
 
         {/* ── Jump Back In (Kaldığın Yerden) ───────────────────────── */}
         <SectionHeader title={t('dashboard.jumpBackIn')} onSeeAll={() => navigation.navigate('Library')} colors={colors} />
@@ -549,7 +553,7 @@ function createStyles(colors, insets) {
       width: 38,
       height: 38,
       borderRadius: 19,
-      backgroundColor: 'rgba(255,255,255,0.08)',
+      backgroundColor: 'rgba(248,248,248,0.1)',
       alignItems: 'center',
       justifyContent: 'center',
       position: 'relative',

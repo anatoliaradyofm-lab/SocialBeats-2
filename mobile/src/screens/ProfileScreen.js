@@ -3,9 +3,10 @@
  * Own profile · Music-first · No photo/video posts · Graphical listening stats
  */
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
-  Dimensions, RefreshControl, Modal, Animated, Pressable, ActivityIndicator,
+  Dimensions, RefreshControl, Modal, Animated, Pressable, ActivityIndicator, Platform, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 
 const { width: SW } = Dimensions.get('window');
+
 const COVER_H = 80;
 
 const DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
@@ -76,24 +78,22 @@ const gb = StyleSheet.create({
 });
 
 /* ── Mock highlights ── */
-const MOCK_HIGHLIGHTS = [
-  { id: 'h1', label: 'Live',   cover: 'https://picsum.photos/seed/h1/80/80' },
-  { id: 'h2', label: 'Music',  cover: 'https://picsum.photos/seed/h2/80/80' },
-  { id: 'h3', label: 'Events', cover: 'https://picsum.photos/seed/h3/80/80' },
-  { id: 'h4', label: 'Tour',   cover: 'https://picsum.photos/seed/h4/80/80' },
-];
 
 export default function ProfileScreen({ navigation }) {
   const { colors }       = useTheme();
-  const { user, logout } = useAuth();
+  const { user, token, logout, updateUser } = useAuth();
   const { t }            = useTranslation();
   const insets           = useSafeAreaInsets();
 
   const [refreshing,   setRefreshing]   = useState(false);
   const [menuVisible,  setMenuVisible]  = useState(false);
+  const [showAvatar,   setShowAvatar]   = useState(false);
   const [listenStats,  setListenStats]  = useState(null);
   const [nowPlaying,   setNowPlaying]   = useState(null);
   const scrollY = useRef(new Animated.Value(0)).current;
+  /* Always hold latest user to avoid stale-closure in useFocusEffect */
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
 
   const loadStats = useCallback(async () => {
     if (!user?.id) return;
@@ -108,6 +108,16 @@ export default function ProfileScreen({ navigation }) {
   }, [user?.id]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
+
+  /* Refresh profile data when returning from ProfileEdit */
+  useFocusEffect(useCallback(() => {
+    if (!token) return;
+    api.get('/auth/me', token)
+      .then(data => {
+        if (data?.id) updateUser?.({ ...userRef.current, ...data });
+      })
+      .catch(() => {});
+  }, [token, updateUser]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -161,7 +171,9 @@ export default function ProfileScreen({ navigation }) {
 
       {/* ── Float top bar ── */}
       <View style={[s.floatBar, { top: insets.top + 8 }]}>
-        <View style={{ width: 34 }} />
+        <TouchableOpacity onPress={() => navigation.navigate('Home')} style={s.floatBtn}>
+          <Ionicons name="chevron-back" size={20} color="#F8F8F8" />
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => setMenuVisible(true)} style={s.floatBtn}>
           <Ionicons name="ellipsis-horizontal" size={20} color="#F8F8F8" />
         </TouchableOpacity>
@@ -175,15 +187,15 @@ export default function ProfileScreen({ navigation }) {
         )}
         scrollEventThrottle={16}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#C084FC" />}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 12) + 68 + 40 }}
       >
-        {/* hero gradient spacer */}
-        <View style={s.heroBg} />
+        {/* hero gradient spacer — insets.top pushes content below status bar */}
+        <View style={{ height: COVER_H + insets.top }} />
 
         {/* ── Identity ── */}
         <View style={s.identityBlock}>
           {/* Avatar ring */}
-          <View style={s.avatarRing}>
+          <TouchableOpacity style={s.avatarRing} activeOpacity={0.9} onPress={() => setShowAvatar(true)}>
             <LinearGradient
               colors={['#9333EA', '#FB923C']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -196,12 +208,52 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons name="musical-note" size={7} color="#fff" />
               </View>
             )}
-          </View>
+          </TouchableOpacity>
 
           {/* Name */}
           <Text style={s.displayName}>{user?.display_name || user?.name || 'Your Name'}</Text>
           <Text style={s.handle}>@{user?.username || 'username'}</Text>
           {user?.bio ? <Text style={s.bio}>{user.bio}</Text> : null}
+
+          {/* Location / website / social */}
+          {(user?.city || user?.country || user?.location) ? (
+            <View style={s.metaRow}>
+              <Ionicons name="location-outline" size={13} color="rgba(248,248,248,0.35)" />
+              <Text style={s.metaTx}>
+                {[user?.city, user?.country].filter(Boolean).join(', ') || user?.location}
+              </Text>
+            </View>
+          ) : null}
+          {user?.website ? (
+            <View style={s.metaRow}>
+              <Ionicons name="globe-outline" size={13} color="rgba(248,248,248,0.35)" />
+              <Text style={s.metaTx}>{user.website}</Text>
+            </View>
+          ) : null}
+          {(user?.instagram || user?.twitter) ? (
+            <View style={s.metaLinks}>
+              {user?.instagram ? (
+                <TouchableOpacity
+                  style={s.metaChip}
+                  activeOpacity={0.7}
+                  onPress={() => Linking.openURL(`https://instagram.com/${user.instagram}`)}
+                >
+                  <Ionicons name="logo-instagram" size={13} color="#E1306C" />
+                  <Text style={s.metaChipTx}>@{user.instagram}</Text>
+                </TouchableOpacity>
+              ) : null}
+              {user?.twitter ? (
+                <TouchableOpacity
+                  style={s.metaChip}
+                  activeOpacity={0.7}
+                  onPress={() => Linking.openURL(`https://x.com/${user.twitter}`)}
+                >
+                  <Ionicons name="logo-twitter" size={13} color="#1DA1F2" />
+                  <Text style={s.metaChipTx}>@{user.twitter}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
 
           {/* Stats */}
           <View style={s.statsCard}>
@@ -216,11 +268,6 @@ export default function ProfileScreen({ navigation }) {
               <Text style={s.statNum}>{(user?.following_count ?? 0).toLocaleString()}</Text>
               <Text style={s.statLabel}>Takip</Text>
             </TouchableOpacity>
-            <View style={s.statLine} />
-            <View style={s.statItem}>
-              <Text style={s.statNum}>{listenStats?.total_tracks_played ?? totalHours}</Text>
-              <Text style={s.statLabel}>Dinleme</Text>
-            </View>
           </View>
 
           {/* Action buttons */}
@@ -238,24 +285,6 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
-        {/* ── Story Highlights ── */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          contentContainerStyle={s.highlightsContent} style={{ marginBottom: 8 }}>
-          <TouchableOpacity style={s.highlightWrap}>
-            <View style={[s.highlightAdd, { borderColor: colors.border }]}>
-              <Ionicons name="add" size={24} color={colors.textMuted} />
-            </View>
-            <Text style={s.highlightLabel}>Ekle</Text>
-          </TouchableOpacity>
-          {MOCK_HIGHLIGHTS.map(h => (
-            <TouchableOpacity key={h.id} style={s.highlightWrap}>
-              <View style={s.highlightRing}>
-                <Image source={{ uri: h.cover }} style={s.highlightCover} />
-              </View>
-              <Text style={s.highlightLabel}>{h.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
 
         {/* ── Now Playing ── */}
         {nowPlaying ? (
@@ -282,7 +311,7 @@ export default function ProfileScreen({ navigation }) {
           </View>
         ) : null}
 
-        {/* ── Listening Stats ── */}
+        {/* ── Dinleme İstatistikleri ── */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Dinleme İstatistikleri</Text>
 
@@ -333,43 +362,78 @@ export default function ProfileScreen({ navigation }) {
 
       </Animated.ScrollView>
 
-      {/* ── Menu Modal ── */}
-      <Modal visible={menuVisible} transparent animationType="slide" onRequestClose={() => setMenuVisible(false)}>
-        <Pressable style={s.overlay} onPress={() => setMenuVisible(false)}>
-          <View style={s.sheet} onStartShouldSetResponder={() => true}>
-            <View style={s.sheetHandle} />
-            {[
-              { icon: 'settings-outline',   color: '#C084FC', label: 'Ayarlar',          nav: 'Settings' },
-              { icon: 'create-outline',      color: '#FB923C', label: 'Profili Düzenle',  nav: 'ProfileEdit' },
-              { icon: 'bar-chart-outline',   color: '#34D399', label: 'İstatistikler',    nav: 'ProfileStats' },
-              { icon: 'qr-code-outline',     color: '#60A5FA', label: 'QR Kod',           nav: 'ProfileQR' },
-              { icon: 'time-outline',        color: '#FBBF24', label: 'Ekran Süresi',     nav: 'ScreenTime' },
-              { icon: 'archive-outline',     color: '#F472B6', label: 'Hikaye Arşivi',    nav: 'StoryArchive' },
-            ].map(item => (
-              <TouchableOpacity
-                key={item.nav}
-                style={s.menuRow}
-                onPress={() => { setMenuVisible(false); navigation.navigate(item.nav); }}
-              >
-                <View style={[s.menuIcon, { backgroundColor: item.color + '22' }]}>
-                  <Ionicons name={item.icon} size={18} color={item.color} />
-                </View>
-                <Text style={s.menuTx}>{item.label}</Text>
-                <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity style={s.menuRow} onPress={() => { setMenuVisible(false); logout?.(); }}>
-              <View style={[s.menuIcon, { backgroundColor: '#F8717122' }]}>
-                <Ionicons name="log-out-outline" size={18} color="#F87171" />
-              </View>
-              <Text style={[s.menuTx, { color: '#F87171' }]}>Çıkış Yap</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.cancelBtn} onPress={() => setMenuVisible(false)}>
-              <Text style={s.cancelTx}>İptal</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
+
+      {/* ── Avatar fullscreen ── */}
+      <Modal visible={showAvatar} transparent animationType="fade" statusBarTranslucent>
+        <TouchableOpacity style={s.avatarOverlay} activeOpacity={1} onPress={() => setShowAvatar(false)}>
+          <Image source={{ uri: avatar }} style={s.avatarFull} resizeMode="contain" />
+          <TouchableOpacity style={s.avatarClose} onPress={() => setShowAvatar(false)}>
+            <Ionicons name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
+
+      {/* ── Menu Modal ── */}
+      {Platform.OS === 'web' ? (
+        menuVisible ? (
+          <View style={[StyleSheet.absoluteFill, s.overlay]} pointerEvents="box-none">
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuVisible(false)} />
+            <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} onStartShouldSetResponder={() => true}>
+              <View style={s.sheetHandle} />
+              {[
+                { icon: 'settings-outline',  color: '#C084FC', label: 'Ayarlar',      nav: 'Settings'      },
+                { icon: 'bar-chart-outline', color: '#34D399', label: 'İstatistikler', nav: 'ProfileStats'  },
+              ].map(item => (
+                <TouchableOpacity key={item.nav} style={s.menuRow} onPress={() => { setMenuVisible(false); navigation.navigate(item.nav); }}>
+                  <View style={[s.menuIcon, { backgroundColor: item.color + '22' }]}>
+                    <Ionicons name={item.icon} size={18} color={item.color} />
+                  </View>
+                  <Text style={s.menuTx}>{item.label}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={s.menuRow} onPress={() => { setMenuVisible(false); logout?.(); }}>
+                <View style={[s.menuIcon, { backgroundColor: '#F8717122' }]}>
+                  <Ionicons name="log-out-outline" size={18} color="#F87171" />
+                </View>
+                <Text style={[s.menuTx, { color: '#F87171' }]}>Çıkış Yap</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.cancelBtn} onPress={() => setMenuVisible(false)}>
+                <Text style={s.cancelTx}>İptal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null
+      ) : (
+        <Modal visible={menuVisible} transparent animationType="slide" onRequestClose={() => setMenuVisible(false)}>
+          <Pressable style={s.overlay} onPress={() => setMenuVisible(false)}>
+            <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} onStartShouldSetResponder={() => true}>
+              <View style={s.sheetHandle} />
+              {[
+                { icon: 'settings-outline',  color: '#C084FC', label: 'Ayarlar',      nav: 'Settings'      },
+                { icon: 'bar-chart-outline', color: '#34D399', label: 'İstatistikler', nav: 'ProfileStats'  },
+              ].map(item => (
+                <TouchableOpacity key={item.nav} style={s.menuRow} onPress={() => { setMenuVisible(false); navigation.navigate(item.nav); }}>
+                  <View style={[s.menuIcon, { backgroundColor: item.color + '22' }]}>
+                    <Ionicons name={item.icon} size={18} color={item.color} />
+                  </View>
+                  <Text style={s.menuTx}>{item.label}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={s.menuRow} onPress={() => { setMenuVisible(false); logout?.(); }}>
+                <View style={[s.menuIcon, { backgroundColor: '#F8717122' }]}>
+                  <Ionicons name="log-out-outline" size={18} color="#F87171" />
+                </View>
+                <Text style={[s.menuTx, { color: '#F87171' }]}>Çıkış Yap</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.cancelBtn} onPress={() => setMenuVisible(false)}>
+                <Text style={s.cancelTx}>İptal</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -384,7 +448,7 @@ const s = StyleSheet.create({
   stickyName: { flex: 1, color: '#F8F8F8', fontSize: 16, fontWeight: '700', letterSpacing: -0.3 },
   stickyMore: { padding: 4 },
 
-  floatBar: { position: 'absolute', left: 0, right: 0, zIndex: 15,
+  floatBar: { position: 'absolute', left: 0, right: 0, zIndex: 30,
               flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16 },
   floatBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.5)',
               alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
@@ -394,7 +458,7 @@ const s = StyleSheet.create({
 
   /* Identity */
   identityBlock: { paddingHorizontal: 20, marginTop: -46, paddingBottom: 8 },
-  avatarRing:    { width: 92, height: 92, borderRadius: 46, marginBottom: 14, position: 'relative' },
+  avatarRing:    { width: 92, height: 92, borderRadius: 46, marginBottom: 14, position: 'relative', zIndex: 20, elevation: 20 },
   avatarGrad:    { width: 92, height: 92, borderRadius: 46, padding: 3, alignItems: 'center', justifyContent: 'center' },
   avatar:        { width: 84, height: 84, borderRadius: 42, borderWidth: 2, borderColor: '#08060F' },
   nowDot:        { position: 'absolute', bottom: 1, right: 1, width: 20, height: 20, borderRadius: 10,
@@ -403,10 +467,17 @@ const s = StyleSheet.create({
 
   displayName: { fontSize: 23, fontWeight: '800', color: '#F8F8F8', letterSpacing: -0.5, marginBottom: 3 },
   handle:      { fontSize: 14, color: 'rgba(248,248,248,0.38)', marginBottom: 10 },
-  bio:         { fontSize: 14, color: 'rgba(248,248,248,0.60)', lineHeight: 21, marginBottom: 12 },
+  bio:         { fontSize: 14, color: 'rgba(248,248,248,0.60)', lineHeight: 21, marginBottom: 8 },
+
+  metaRow:     { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 },
+  metaTx:      { fontSize: 13, color: 'rgba(248,248,248,0.40)' },
+  metaLinks:   { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4, marginBottom: 8 },
+  metaChip:    { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.06)',
+                 borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
+  metaChipTx:  { fontSize: 12, color: 'rgba(248,248,248,0.55)', fontWeight: '500' },
 
   statsCard:  { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)',
-                borderRadius: 18, padding: 16, marginBottom: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
+                borderRadius: 18, padding: 16, marginTop: 10, marginBottom: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
   statItem:   { flex: 1, alignItems: 'center' },
   statNum:    { fontSize: 19, fontWeight: '800', color: '#F8F8F8', letterSpacing: -0.5 },
   statLabel:  { fontSize: 11, color: 'rgba(248,248,248,0.38)', marginTop: 2, fontWeight: '500' },
@@ -479,4 +550,10 @@ const s = StyleSheet.create({
   cancelBtn:   { marginTop: 14, paddingVertical: 14, alignItems: 'center', borderRadius: 14,
                  backgroundColor: 'rgba(255,255,255,0.05)' },
   cancelTx:    { color: 'rgba(248,248,248,0.45)', fontSize: 15, fontWeight: '500' },
+
+
+  avatarOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
+  avatarFull:    { width: '90%', height: '90%' },
+  avatarClose:   { position: 'absolute', top: 56, right: 20, width: 40, height: 40, borderRadius: 20,
+                   backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
 });

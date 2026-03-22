@@ -53,8 +53,8 @@ export const onMessage       = () => () => {};
 const mockUser = {
   uid: 'preview-user',
   email: 'preview@socialbeats.app',
-  displayName: 'Anatolia Radio FM',
-  photoURL: 'https://i.pravatar.cc/200?u=anatolia',
+  displayName: 'SocialBeats User',
+  photoURL: 'https://i.pravatar.cc/200?u=preview1',
   getIdToken: () => Promise.resolve('mock-google-id-token'),
 };
 const mockAuth = { currentUser: null, onAuthStateChanged: (cb) => { setTimeout(() => cb(null), 0); return () => {}; } };

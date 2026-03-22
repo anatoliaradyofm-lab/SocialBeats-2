@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { navigationRef } from './navigationRef';
+import { onScreenChange } from '../services/adManager';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
@@ -14,7 +15,6 @@ import MainTabNavigator from './MainTabNavigator';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import PlaylistDetailScreen from '../screens/PlaylistDetailScreen';
 import AddSongsToPlaylistScreen from '../screens/AddSongsToPlaylistScreen';
-import ProfileScreen     from '../screens/ProfileScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
 import SearchScreen from '../screens/SearchScreen';
 import StoriesScreen from '../screens/StoriesScreen';
@@ -33,7 +33,6 @@ import GroupSettingsScreen from '../screens/GroupSettingsScreen';
 import ArchivedConversationsScreen from '../screens/ArchivedConversationsScreen';
 import StarredMessagesScreen from '../screens/StarredMessagesScreen';
 import CallHistoryScreen from '../screens/CallHistoryScreen';
-import SharePostPickerScreen from '../screens/SharePostPickerScreen';
 import ShareMusicPickerScreen from '../screens/ShareMusicPickerScreen';
 import SharePlaylistPickerScreen from '../screens/SharePlaylistPickerScreen';
 import ShareProfilePickerScreen from '../screens/ShareProfilePickerScreen';
@@ -149,7 +148,6 @@ function AppStack() {
           <Stack.Screen name="AdSettings" component={AdSettingsScreen} />
           <Stack.Screen name="PlaylistDetail" component={PlaylistDetailScreen} />
           <Stack.Screen name="AddSongsToPlaylist" component={AddSongsToPlaylistScreen} />
-          <Stack.Screen name="Profile"     component={ProfileScreen}     />
           <Stack.Screen name="UserProfile" component={UserProfileScreen} />
           <Stack.Screen name="Search" component={SearchScreen} />
           <Stack.Screen name="Stories" component={StoriesScreen} />
@@ -165,7 +163,6 @@ function AppStack() {
           <Stack.Screen name="ArchivedConversations" component={ArchivedConversationsScreen} />
           <Stack.Screen name="StarredMessages" component={StarredMessagesScreen} />
           <Stack.Screen name="CallHistory" component={CallHistoryScreen} />
-          <Stack.Screen name="SharePostPicker" component={SharePostPickerScreen} />
           <Stack.Screen name="ShareMusicPicker" component={ShareMusicPickerScreen} />
           <Stack.Screen name="SharePlaylistPicker" component={SharePlaylistPickerScreen} />
           <Stack.Screen name="ShareProfilePicker" component={ShareProfilePickerScreen} />
@@ -238,6 +235,7 @@ export default function AppNavigator({ onRouteChanged }) {
         onStateChange={() => {
           const currentRouteName = navigationRef.current?.getCurrentRoute()?.name;
           if (onRouteChanged) onRouteChanged(currentRouteName);
+          onScreenChange(currentRouteName);
         }}
       >
         <AppStack />

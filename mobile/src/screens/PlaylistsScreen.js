@@ -10,6 +10,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import NativeAdSlot from '../components/ads/NativeAdSlot';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -383,6 +384,7 @@ export default function PlaylistsScreen({ navigation }) {
           contentContainerStyle={[s.listContent, { paddingBottom: insets.bottom + 100 }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           showsVerticalScrollIndicator={false}
+          ListFooterComponent={<NativeAdSlot colors={colors} />}
           ListEmptyComponent={
             <View style={s.empty}>
               <Ionicons name="musical-notes-outline" size={56} color={colors.textGhost || colors.textMuted} />

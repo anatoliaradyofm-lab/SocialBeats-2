@@ -10,6 +10,9 @@ class UserCreate(BaseModel):
     password: str
     username: str
     display_name: Optional[str] = None
+    gender: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -38,6 +41,11 @@ class UserResponse(BaseModel):
     badges: List[str] = []
     profile_theme: str = "default"
     is_online: bool = False
+    instagram: Optional[str] = None
+    twitter: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    gender: Optional[str] = None
 
 class UserPublicProfile(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -56,6 +64,10 @@ class UserPublicProfile(BaseModel):
     level: int = 1
     badges: List[str] = []
     profile_theme: str = "default"
+    instagram: Optional[str] = None
+    twitter: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str

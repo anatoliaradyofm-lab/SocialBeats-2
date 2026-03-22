@@ -212,6 +212,9 @@ export default defineConfig({
       '@react-navigation/bottom-tabs':    path.join(mocksDir, 'react-navigation.js'),
       '@react-navigation/native-stack':   path.join(mocksDir, 'react-navigation.js'),
 
+      // AdMob
+      'react-native-google-mobile-ads': path.join(mocksDir, 'google-mobile-ads.js'),
+
       // Others
       'socket.io-client': path.join(mocksDir, 'socket.js'),
       'shaka-player':     path.join(mocksDir, 'noop.js'),

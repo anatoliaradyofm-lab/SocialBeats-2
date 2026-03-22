@@ -147,6 +147,9 @@ async def register(user_data: UserCreate):
         "profile_theme": "default",
         "is_online": True,
         "last_seen": now_iso(),
+        "gender": user_data.gender or None,
+        "country": user_data.country or None,
+        "city": user_data.city or None,
     }
     
     await db.users.insert_one(new_user)

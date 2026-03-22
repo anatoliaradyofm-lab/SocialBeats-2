@@ -783,6 +783,8 @@ class UserCreate(BaseModel):
     password: str
     username: str
     display_name: Optional[str] = None
+    country: Optional[str] = None
+    gender: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -811,6 +813,14 @@ class UserResponse(BaseModel):
     badges: List[str] = []
     profile_theme: str = "default"
     is_online: bool = False
+    instagram: Optional[str] = None
+    twitter: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    location: Optional[str] = None
+    website: Optional[str] = None
+    birth_date: Optional[str] = None
+    is_private: bool = False
 
 class UserPublicProfile(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -848,6 +858,10 @@ class ProfileUpdateBody(BaseModel):
     favorite_artists: Optional[List[str]] = None
     music_mood: Optional[str] = None
     profile_theme: Optional[str] = None
+    instagram: Optional[str] = None
+    twitter: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
 
 class ConnectedService(BaseModel):
     service_type: str
@@ -1981,9 +1995,11 @@ async def register(user_data: UserCreate):
         "xp": 0,
         "badges": ["new_user"],
         "profile_theme": "default",
-        "is_online": True
+        "is_online": True,
+        "country": user_data.country or None,
+        "gender": user_data.gender or None,
     }
-    
+
     await db.users.insert_one(user_doc)
     
     try:
@@ -2658,7 +2674,15 @@ async def update_profile(
         update_data["music_mood"] = body.music_mood
     if body.profile_theme is not None:
         update_data["profile_theme"] = body.profile_theme
-    
+    if body.instagram is not None:
+        update_data["instagram"] = body.instagram.strip().lstrip('@') or None
+    if body.twitter is not None:
+        update_data["twitter"] = body.twitter.strip().lstrip('@') or None
+    if body.country is not None:
+        update_data["country"] = body.country.strip() or None
+    if body.city is not None:
+        update_data["city"] = body.city.strip() or None
+
     if update_data:
         await db.users.update_one({"id": current_user["id"]}, {"$set": update_data})
     
@@ -7029,78 +7053,91 @@ async def discover_users(
     offset: int = 0,
     country: str = None,
     city: str = None,
+    gender: str = None,
     current_user=Depends(get_current_user)
 ):
-    """Discover new users with region-based filtering."""
+    """Discover all registered users sorted by activity. Filters: country, city, gender."""
     user_id = current_user["id"]
-    following = await db.follows.find({"follower_id": user_id}).to_list(5000)
-    following_ids = set(f["following_id"] for f in following)
-    following_ids.add(user_id)
 
-    match_filter = {"id": {"$nin": list(following_ids)}}
+    # Only exclude self
+    match_filter = {"id": {"$ne": user_id}}
+
+    and_clauses = []
 
     if country:
-        match_filter["$or"] = [
+        and_clauses.append({"$or": [
             {"country": {"$regex": country, "$options": "i"}},
             {"location.country": {"$regex": country, "$options": "i"}},
             {"region": {"$regex": country, "$options": "i"}},
-        ]
+        ]})
     if city:
-        city_filter = {"$or": [
+        and_clauses.append({"$or": [
             {"city": {"$regex": city, "$options": "i"}},
             {"location.city": {"$regex": city, "$options": "i"}},
-        ]}
-        if "$or" in match_filter:
-            match_filter = {"$and": [match_filter, city_filter]}
-        else:
-            match_filter.update(city_filter)
+        ]})
+    if gender:
+        and_clauses.append({"$or": [
+            {"gender": {"$regex": f"^{gender}$", "$options": "i"}},
+            {"profile.gender": {"$regex": f"^{gender}$", "$options": "i"}},
+        ]})
 
-    current_user_country = current_user.get("country") or current_user.get("region", "")
+    if and_clauses:
+        match_filter = {"$and": [match_filter] + and_clauses}
 
     pipeline = [
         {"$match": match_filter},
+        # Follower count
         {"$lookup": {
             "from": "follows",
             "localField": "id",
             "foreignField": "following_id",
             "as": "follower_docs"
         }},
+        # Following count
         {"$lookup": {
             "from": "follows",
             "localField": "id",
             "foreignField": "follower_id",
             "as": "following_docs"
         }},
+        # Post count
+        {"$lookup": {
+            "from": "posts",
+            "localField": "id",
+            "foreignField": "user_id",
+            "as": "post_docs"
+        }},
         {"$addFields": {
             "follower_count": {"$size": "$follower_docs"},
             "following_count": {"$size": "$following_docs"},
-            "same_country": {
-                "$cond": {
-                    "if": {"$or": [
-                        {"$eq": [{"$toLower": {"$ifNull": ["$country", ""]}}, current_user_country.lower() if current_user_country else ""]},
-                        {"$eq": [{"$toLower": {"$ifNull": ["$region", ""]}}, current_user_country.lower() if current_user_country else ""]},
-                    ]},
-                    "then": 1,
-                    "else": 0,
-                }
+            "post_count": {"$size": "$post_docs"},
+            # Activity score: followers weighted most, then posts
+            "activity_score": {
+                "$add": [
+                    {"$multiply": [{"$size": "$follower_docs"}, 3]},
+                    {"$multiply": [{"$size": "$post_docs"}, 2]},
+                    {"$size": "$following_docs"},
+                ]
             },
         }},
-        {"$sort": {"same_country": -1, "follower_count": -1}},
+        {"$sort": {"activity_score": -1}},
         {"$skip": offset},
         {"$limit": limit},
         {"$project": {
             "_id": 0, "id": 1, "username": 1, "display_name": 1,
             "avatar_url": 1, "cover_url": 1, "bio": 1, "is_verified": 1,
-            "follower_count": 1, "following_count": 1,
-            "country": 1, "city": 1, "region": 1,
-            "location": 1,
+            "follower_count": 1, "following_count": 1, "post_count": 1,
+            "country": 1, "city": 1, "region": 1, "location": 1,
+            "gender": 1,
             "music_genres": 1, "favorite_genres": 1,
-            "created_at": 1,
-            "now_playing": 1,
+            "created_at": 1, "now_playing": 1,
         }}
     ]
 
     suggestions = await db.users.aggregate(pipeline).to_list(limit)
+
+    # Count total for has_more
+    total_count = await db.users.count_documents(match_filter)
 
     for user in suggestions:
         user["country"] = user.get("country") or user.get("region") or (user.get("location", {}) or {}).get("country", "")
@@ -7109,60 +7146,16 @@ async def discover_users(
         user.pop("location", None)
         user.pop("region", None)
         user.pop("favorite_genres", None)
+        user.setdefault("mutual_friends", 0)
 
-        post_count = await db.posts.count_documents({"user_id": user["id"]})
-        user["post_count"] = post_count
-
-        mutual = await db.follows.count_documents({
-            "follower_id": {"$in": list(following_ids - {user_id})},
-            "following_id": user["id"],
-        })
-        user["mutual_friends"] = mutual
-
-    if not country and not city and offset == 0:
-        fof_pipeline = [
-            {"$match": {"follower_id": {"$in": list(following_ids - {user_id})}}},
-            {"$match": {"following_id": {"$nin": list(following_ids)}}},
-            {"$group": {"_id": "$following_id", "mutual_count": {"$sum": 1}}},
-            {"$sort": {"mutual_count": -1}},
-            {"$limit": 5}
-        ]
-        fof = await db.follows.aggregate(fof_pipeline).to_list(5)
-        fof_ids = [f["_id"] for f in fof]
-
-        if fof_ids:
-            existing_ids = {u["id"] for u in suggestions}
-            fof_ids_filtered = [fid for fid in fof_ids if fid not in existing_ids]
-            if fof_ids_filtered:
-                mutual_users = await db.users.find(
-                    {"id": {"$in": fof_ids_filtered}},
-                    {"_id": 0, "id": 1, "username": 1, "display_name": 1,
-                     "avatar_url": 1, "cover_url": 1, "bio": 1, "is_verified": 1,
-                     "country": 1, "city": 1, "region": 1, "location": 1,
-                     "music_genres": 1, "favorite_genres": 1}
-                ).to_list(5)
-                for u in mutual_users:
-                    fof_entry = next((f for f in fof if f["_id"] == u["id"]), None)
-                    u["mutual_friends"] = fof_entry["mutual_count"] if fof_entry else 0
-                    u["suggestion_type"] = "mutual"
-                    u["country"] = u.get("country") or u.get("region") or (u.get("location", {}) or {}).get("country", "")
-                    u["city"] = u.get("city") or (u.get("location", {}) or {}).get("city", "")
-                    u["music_genres"] = u.get("music_genres") or u.get("favorite_genres") or []
-                    u.pop("location", None)
-                    u.pop("region", None)
-                    u.pop("favorite_genres", None)
-                    u["follower_count"] = 0
-                    u["following_count"] = 0
-                    u["post_count"] = 0
-                suggestions = mutual_users + suggestions
-
-    return {"users": suggestions[:limit], "total": len(suggestions), "has_more": len(suggestions) >= limit}
+    return {"users": suggestions, "total": total_count, "has_more": offset + len(suggestions) < total_count}
 
 @api_router.get("/users/discover/countries")
 async def get_discover_countries(current_user=Depends(get_current_user)):
-    """Get list of countries available for discover filtering."""
+    """Get list of countries and genders available for discover filtering."""
     countries = await db.users.distinct("country")
     regions = await db.users.distinct("region")
+    genders_raw = await db.users.distinct("gender")
 
     all_countries = set()
     for c in countries:
@@ -7172,7 +7165,57 @@ async def get_discover_countries(current_user=Depends(get_current_user)):
         if r and isinstance(r, str) and len(r) > 1:
             all_countries.add(r)
 
-    return {"countries": sorted(list(all_countries))}
+    all_genders = sorted({g for g in genders_raw if g and isinstance(g, str)})
+
+    return {"countries": sorted(list(all_countries)), "genders": all_genders}
+
+
+@api_router.get("/users/{user_id}/recent-tracks")
+async def get_user_recent_tracks(user_id: str, limit: int = 5, current_user=Depends(get_current_user)):
+    """Get a user's recently played tracks from listening history."""
+    history = await db.listening_history.find(
+        {"user_id": user_id},
+        {"_id": 0}
+    ).sort("played_at", -1).limit(limit).to_list(limit)
+    tracks = []
+    for h in history:
+        tracks.append({
+            "id":        h.get("track_id") or h.get("id"),
+            "title":     h.get("title") or h.get("track_title", ""),
+            "artist":    h.get("artist") or h.get("artist_name", ""),
+            "cover_url": h.get("cover_url") or h.get("thumbnail", ""),
+            "played_at": h.get("played_at", ""),
+        })
+    return {"tracks": tracks}
+
+
+@api_router.get("/playlists/user/{user_id}")
+async def get_user_public_playlists(user_id: str, limit: int = 6, current_user=Depends(get_current_user)):
+    """Get another user's public playlists."""
+    playlists = await db.playlists.find(
+        {"owner_id": user_id, "is_public": True},
+        {"_id": 0, "owner_id": 0}
+    ).sort("created_at", -1).limit(limit).to_list(limit)
+    for pl in playlists:
+        pl["track_count"] = len(pl.get("track_ids") or pl.get("tracks") or [])
+    return {"playlists": playlists}
+
+
+@api_router.get("/social/mutual-followers/{user_id}")
+async def get_mutual_followers(user_id: str, limit: int = 5, current_user=Depends(get_current_user)):
+    """Get users that both the current user and the target user follow."""
+    my_id = current_user["id"]
+    my_following = {f["following_id"] async for f in db.follows.find({"follower_id": my_id}, {"following_id": 1})}
+    their_following = {f["following_id"] async for f in db.follows.find({"follower_id": user_id}, {"following_id": 1})}
+    mutual_ids = list(my_following & their_following)[:limit]
+    if not mutual_ids:
+        return {"users": []}
+    users = await db.users.find(
+        {"id": {"$in": mutual_ids}},
+        {"_id": 0, "password": 0, "email": 0}
+    ).limit(limit).to_list(limit)
+    result = [{"id": u["id"], "username": u.get("username"), "display_name": u.get("display_name"), "avatar_url": u.get("avatar_url")} for u in users]
+    return {"users": result}
 
 
 @api_router.get("/users/{user_id}/taste-match")

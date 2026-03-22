@@ -97,8 +97,26 @@ const MOCK_POSTS = [
   { id: 'p2', user: { username: 'melodikbeat', avatar_url: 'https://i.pravatar.cc/60?u=melodikbeat' }, content: 'Chill lo-fi session 🌙', likes_count: 89, comments_count: 11, is_liked: true, created_at: new Date().toISOString() },
 ];
 
-const MOCK_USER = { id: 'preview-1', username: 'anatolia', display_name: 'Anatolia Radio FM', email: 'preview@socialbeats.app', avatar_url: 'https://i.pravatar.cc/200?u=anatolia', followers_count: 1200, following_count: 450, posts_count: 2 };
-const MOCK_AUTH = { access_token: 'preview-token', token: 'preview-token', user: MOCK_USER };
+/* Mutable mock user — persisted in localStorage so changes survive page refresh */
+const _DEFAULT_USER = { id: 'preview-1', username: 'socialbeats_user', display_name: 'SocialBeats User', email: 'preview@socialbeats.app', avatar_url: 'https://i.pravatar.cc/200?u=preview1', bio: '', followers_count: 1200, following_count: 450, posts_count: 2, instagram: '', twitter: '', country: '', city: '', location: '', website: '', is_private: false };
+function _loadMockUser() {
+  try { const s = localStorage.getItem('_mock_user'); if (s) return { ..._DEFAULT_USER, ...JSON.parse(s) }; } catch {}
+  return { ..._DEFAULT_USER };
+}
+function _saveMockUser(u) {
+  try { localStorage.setItem('_mock_user', JSON.stringify(u)); } catch {}
+}
+let _mockUser = _loadMockUser();
+const MOCK_USER = _mockUser;
+const MOCK_AUTH = { access_token: 'preview-token', token: 'preview-token', user: _mockUser };
+
+const MOCK_DISCOVER_USERS = [
+  { id: 'u1', username: 'demo_ahmet', display_name: 'Ahmet Yılmaz', instagram: 'ahmet.music', twitter: 'ahmetyilmaz', avatar_url: 'https://i.pravatar.cc/300?img=12', cover_url: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&q=80', bio: 'Müzik benim hayatım 🎵 | İstanbul | DJ & Prodüktör', country: 'Türkiye', city: 'İstanbul', gender: 'male', music_genres: ['Electronic', 'Hip-Hop', 'R&B'], is_verified: true, follower_count: 1240, following_count: 380, post_count: 87, mutual_friends: 3 },
+  { id: 'u2', username: 'demo_zeynep', display_name: 'Zeynep Kaya', avatar_url: 'https://i.pravatar.cc/300?img=5', cover_url: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=800&q=80', bio: 'Pop & Soul lover. Ankara native, music addict.', country: 'Türkiye', city: 'Ankara', gender: 'female', music_genres: ['Pop', 'Soul', 'Jazz'], is_verified: false, follower_count: 432, following_count: 210, post_count: 34, mutual_friends: 0 },
+  { id: 'u3', username: 'demo_carlos', display_name: 'Carlos Rivera', avatar_url: 'https://i.pravatar.cc/300?img=33', cover_url: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=800&q=80', bio: 'Latin vibes | Madrid | Guitar player 🎸', country: 'Spain', city: 'Madrid', gender: 'male', music_genres: ['Latin', 'Flamenco', 'Pop'], is_verified: true, follower_count: 3800, following_count: 920, post_count: 215, mutual_friends: 1 },
+  { id: 'u4', username: 'demo_sofia', display_name: 'Sofia Dubois', avatar_url: 'https://i.pravatar.cc/300?img=47', cover_url: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=800&q=80', bio: 'Electronic music producer from Paris. Peace & bass 🎛️', country: 'France', city: 'Paris', gender: 'female', music_genres: ['Electronic', 'House', 'Techno'], is_verified: true, follower_count: 8200, following_count: 540, post_count: 312, mutual_friends: 0 },
+  { id: 'u5', username: 'demo_mehmet', display_name: 'Mehmet Demir', avatar_url: 'https://i.pravatar.cc/300?img=68', cover_url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&q=80', bio: 'Hip-hop producer | İzmir | Beats & bars 🎤', country: 'Türkiye', city: 'İzmir', gender: 'male', music_genres: ['Hip-Hop', 'Trap', 'R&B'], is_verified: false, follower_count: 760, following_count: 450, post_count: 62, mutual_friends: 2 },
+];
 
 const api = {
   // Auth — returns data directly (no .data wrapper), matching real api.js fetch behavior
@@ -107,7 +125,7 @@ const api = {
   logout:   ()     => delay().then(() => ({})),
 
   // Profile
-  getProfile:       (id) => delay().then(() => ({ data: { id, username: id || 'anatolia', followers_count: 1200, following_count: 450 } })),
+  getProfile:       (id) => delay().then(() => ({ data: { id, username: id || _mockUser.username, followers_count: 1200, following_count: 450 } })),
   updateProfile:    (data) => delay().then(() => ({ data })),
   followUser:       (id) => delay().then(() => ({ data: { is_following: true } })),
   unfollowUser:     (id) => delay().then(() => ({ data: { is_following: false } })),
@@ -147,6 +165,44 @@ const api = {
 
   // Fallback — SoundCloud hybrid for /search & /music/search, mock for the rest
   get: (url) => {
+    // Current user
+    if (url === '/auth/me') {
+      return delay(100).then(() => ({ ..._mockUser }));
+    }
+    // Discover users
+    if (url.startsWith('/users/discover')) {
+      return delay(300).then(() => ({ users: MOCK_DISCOVER_USERS, total: MOCK_DISCOVER_USERS.length, has_more: false }));
+    }
+    // Playlists for a specific user
+    if (url.startsWith('/playlists/user/')) {
+      return delay(200).then(() => ({ playlists: [] }));
+    }
+    // Recent tracks for a user
+    if (url.includes('/recent-tracks')) {
+      return delay(200).then(() => ({ tracks: [] }));
+    }
+    // Mutual followers
+    if (url.includes('/mutual-followers')) {
+      return delay(200).then(() => ({ users: [] }));
+    }
+    // User profile by username: /user/{username}
+    if (url.startsWith('/user/')) {
+      const uname = url.split('/user/')[1]?.split('?')[0];
+      const found = MOCK_DISCOVER_USERS.find(u => u.username === uname)
+        || (uname === MOCK_USER.username ? MOCK_USER : null);
+      if (!found) return delay(200).then(() => null);
+      return delay(200).then(() => ({
+        ...found,
+        followers_count: found.follower_count ?? found.followers_count ?? 0,
+        following_count: found.following_count ?? 0,
+        posts_count:     found.post_count ?? found.posts_count ?? 0,
+        is_following:    false,
+        instagram:       found.instagram || found.username,
+        twitter:         found.twitter   || found.username,
+        favorite_artists: found.favorite_artists || ['The Weeknd', 'Billie Eilish', 'Daft Punk', 'Frank Ocean'],
+        badges:          found.badges || ['new_user', 'music_lover', 'explorer'],
+      }));
+    }
     if (url.startsWith('/search') || url.startsWith('/music-hybrid')) {
       const params = new URLSearchParams(url.includes('?') ? url.slice(url.indexOf('?') + 1) : '');
       const q = params.get('q') || '';
@@ -176,7 +232,15 @@ const api = {
     if (url.includes('/auth/forgot'))        return delay().then(() => ({ message: 'Reset link sent' }));
     return delay().then(() => ({}));
   },
-  put:    (url, data) => delay().then(() => ({})),
+  put: (url, data) => {
+    if (url === '/user/profile' || url.includes('/user/profile')) {
+      /* Apply changes to mutable mock user and persist to localStorage */
+      Object.assign(_mockUser, data || {});
+      _saveMockUser(_mockUser);
+      return delay().then(() => ({ ..._mockUser }));
+    }
+    return delay().then(() => ({}));
+  },
   delete: (url) => delay().then(() => ({})),
   patch:  (url, data) => delay().then(() => ({})),
   request:(endpoint, opts) => delay().then(() => ({})),

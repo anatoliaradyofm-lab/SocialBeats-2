@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { getLocale } from '../lib/localeStore';
 import { useTheme } from '../contexts/ThemeContext';
+import { COUNTRIES } from '../lib/countries';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -48,43 +49,19 @@ function formatCount(n) {
   return String(n);
 }
 
+// Ülke adı veya kodu → COUNTRIES listesinden eşleşme bul
+function resolveCountry(raw) {
+  if (!raw) return null;
+  const q = raw.trim().toLowerCase();
+  return COUNTRIES.find(
+    c => c.code.toLowerCase() === q || c.name.toLowerCase() === q
+  ) || null;
+}
+
 function CountryFlag({ country }) {
-  const flags = {
-    turkey: '🇹🇷', türkiye: '🇹🇷', tr: '🇹🇷',
-    'united states': '🇺🇸', usa: '🇺🇸', us: '🇺🇸',
-    germany: '🇩🇪', de: '🇩🇪', deutschland: '🇩🇪',
-    france: '🇫🇷', fr: '🇫🇷',
-    japan: '🇯🇵', jp: '🇯🇵',
-    'south korea': '🇰🇷', korea: '🇰🇷', kr: '🇰🇷',
-    brazil: '🇧🇷', br: '🇧🇷', brasil: '🇧🇷',
-    india: '🇮🇳', in: '🇮🇳',
-    indonesia: '🇮🇩', id: '🇮🇩',
-    russia: '🇷🇺', ru: '🇷🇺',
-    mexico: '🇲🇽', mx: '🇲🇽',
-    'united kingdom': '🇬🇧', uk: '🇬🇧', gb: '🇬🇧',
-    spain: '🇪🇸', es: '🇪🇸', españa: '🇪🇸',
-    italy: '🇮🇹', it: '🇮🇹', italia: '🇮🇹',
-    argentina: '🇦🇷', ar: '🇦🇷',
-    colombia: '🇨🇴', co: '🇨🇴',
-    chile: '🇨🇱', cl: '🇨🇱',
-    peru: '🇵🇪', pe: '🇵🇪',
-    egypt: '🇪🇬', eg: '🇪🇬',
-    'saudi arabia': '🇸🇦', sa: '🇸🇦',
-    uae: '🇦🇪', ae: '🇦🇪',
-    'south africa': '🇿🇦', za: '🇿🇦',
-    nigeria: '🇳🇬', ng: '🇳🇬',
-    pakistan: '🇵🇰', pk: '🇵🇰',
-    vietnam: '🇻🇳', vn: '🇻🇳',
-    philippines: '🇵🇭', ph: '🇵🇭',
-    thailand: '🇹🇭', th: '🇹🇭',
-    malaysia: '🇲🇾', my: '🇲🇾',
-    singapore: '🇸🇬', sg: '🇸🇬',
-    poland: '🇵🇱', pl: '🇵🇱',
-  };
-  const key = (country || '').toLowerCase().trim();
-  const flag = flags[key];
-  if (!flag) return null;
-  return <Text style={{ fontSize: 20 }}>{flag}</Text>;
+  const resolved = resolveCountry(country);
+  if (!resolved) return null;
+  return <Text style={{ fontSize: 20 }}>{resolved.flag}</Text>;
 }
 
 export default function DiscoverPeopleScreen({ navigation }) {
@@ -92,10 +69,11 @@ export default function DiscoverPeopleScreen({ navigation }) {
   const styles = createStyles(colors);
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { token } = useAuth();
+  const { token, user: authUser } = useAuth();
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -103,78 +81,99 @@ export default function DiscoverPeopleScreen({ navigation }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [followedIds, setFollowedIds] = useState(new Set());
 
+  const myCountry = authUser?.country || authUser?.region || '';
+
   const [filterVisible, setFilterVisible] = useState(false);
   const [countries, setCountries] = useState([]);
+  const [genders, setGenders] = useState([]);
   const [selectedCountry, setSelectedCountry] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
+  const [selectedGender, setSelectedGender] = useState('');
   const [tempCountry, setTempCountry] = useState('');
   const [tempCity, setTempCity] = useState('');
+  const [tempGender, setTempGender] = useState('');
 
   const flatListRef = useRef(null);
   const followAnimations = useRef({});
+  const touchStartY = useRef(0);
+  const wheelCooldown = useRef(false);
+  const usersLengthRef = useRef(0);
+  usersLengthRef.current = users.length;
+  const [containerHeight, setContainerHeight] = useState(
+    Platform.OS === 'web' ? 700 : SCREEN_HEIGHT - insets.top - insets.bottom
+  );
 
-  const ITEM_HEIGHT = SCREEN_HEIGHT - insets.top - insets.bottom;
+  const ITEM_HEIGHT = Platform.OS === 'web'
+    ? containerHeight
+    : SCREEN_HEIGHT - insets.top - insets.bottom;
 
-  const loadUsers = useCallback(async (reset = false) => {
+  const loadingMoreRef = useRef(false);
+  const offsetRef      = useRef(0);
+  const filtersRef     = useRef({ country: selectedCountry, city: selectedCity, gender: selectedGender });
+
+  // Filtreleri ref'e senkronize et
+  filtersRef.current = { country: selectedCountry, city: selectedCity, gender: selectedGender };
+
+  const fetchUsers = useCallback(async (reset = false) => {
     if (!token) return;
-    if (!reset && loadingMore) return;
+    if (!reset && loadingMoreRef.current) return;
 
-    const newOffset = reset ? 0 : offset;
-    if (!reset) setLoadingMore(true);
-    else setLoading(true);
+    const { country, city, gender } = filtersRef.current;
+    const currentOffset = reset ? 0 : offsetRef.current;
+
+    if (reset) { setLoading(true); offsetRef.current = 0; }
+    else { setLoadingMore(true); loadingMoreRef.current = true; }
 
     try {
-      let url = `/users/discover?limit=15&offset=${newOffset}`;
-      if (selectedCountry) url += `&country=${encodeURIComponent(selectedCountry)}`;
-      if (selectedCity) url += `&city=${encodeURIComponent(selectedCity)}`;
+      let url = `/users/discover?limit=15&offset=${currentOffset}`;
+      if (country) url += `&country=${encodeURIComponent(country)}`;
+      if (city)    url += `&city=${encodeURIComponent(city)}`;
+      if (gender)  url += `&gender=${encodeURIComponent(gender)}`;
 
-      const res = await api.get(url, token);
+      const res  = await api.get(url, token);
       const list = res?.users || (Array.isArray(res) ? res : []);
 
       if (reset) {
         setUsers(list);
-        setOffset(list.length);
       } else {
         setUsers(prev => [...prev, ...list]);
-        setOffset(prev => prev + list.length);
       }
+      offsetRef.current += list.length;
+      setOffset(offsetRef.current);
       setHasMore(res?.has_more !== false && list.length >= 15);
-    } catch {
+    } catch (err) {
       if (reset) setUsers([]);
+      setApiError(err?.message || 'API hatası');
     } finally {
       setLoading(false);
       setLoadingMore(false);
       setRefreshing(false);
+      loadingMoreRef.current = false;
     }
-  }, [token, offset, selectedCountry, selectedCity, loadingMore]);
+  }, [token]);
 
-  const loadCountries = useCallback(async () => {
+  // İlk yükleme ve filtre değişimlerinde yeniden yükle
+  useEffect(() => {
     if (!token) return;
-    try {
-      const res = await api.get('/users/discover/countries', token);
-      setCountries(res?.countries || []);
-    } catch {}
-  }, [token]);
+    fetchUsers(true);
+  }, [token, selectedCountry, selectedCity, selectedGender]);
 
+  // Ülkeler ve cinsiyetler
   useEffect(() => {
-    loadUsers(true);
-    loadCountries();
+    if (!token) return;
+    api.get('/users/discover/countries', token)
+      .then(res => { setCountries(res?.countries || []); setGenders(res?.genders || []); })
+      .catch(() => {});
   }, [token]);
-
-  useEffect(() => {
-    setOffset(0);
-    loadUsers(true);
-  }, [selectedCountry, selectedCity]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    setOffset(0);
-    loadUsers(true);
+    fetchUsers(true);
   };
 
   const onEndReached = () => {
-    if (!loadingMore && hasMore && users.length >= 5) {
-      loadUsers(false);
+    if (!loadingMoreRef.current && hasMore && users.length >= 5) {
+      fetchUsers(false);
     }
   };
 
@@ -215,14 +214,17 @@ export default function DiscoverPeopleScreen({ navigation }) {
   const applyFilter = () => {
     setSelectedCountry(tempCountry);
     setSelectedCity(tempCity);
+    setSelectedGender(tempGender);
     setFilterVisible(false);
   };
 
   const clearFilter = () => {
     setTempCountry('');
     setTempCity('');
+    setTempGender('');
     setSelectedCountry('');
     setSelectedCity('');
+    setSelectedGender('');
     setFilterVisible(false);
   };
 
@@ -233,10 +235,91 @@ export default function DiscoverPeopleScreen({ navigation }) {
     const avatar = user.avatar_url || `https://i.pravatar.cc/200?u=${user.username || user.id}`;
     const cover = user.cover_url;
     const genres = user.music_genres || [];
-    const country = user.country || '';
-    const city = user.city || '';
-    const location = [city, country].filter(Boolean).join(', ');
+    const rawCountry   = user.country || '';
+    const resolved     = resolveCountry(rawCountry);
+    const country      = resolved ? resolved.name : rawCountry;
+    const city         = user.city || '';
+    const location     = [city, country].filter(Boolean).join(', ');
     const nowPlaying = user.now_playing;
+
+    // Web: full-screen card with scroll/swipe navigation
+    if (Platform.OS === 'web') {
+      const handleWheel = (e) => {
+        if (wheelCooldown.current) return;
+        wheelCooldown.current = true;
+        setTimeout(() => { wheelCooldown.current = false; }, 700);
+        if (e.deltaY > 0) setActiveIndex(i => Math.min(usersLengthRef.current - 1, i + 1));
+        else               setActiveIndex(i => Math.max(0, i - 1));
+      };
+      const handleTouchStart = (e) => {
+        touchStartY.current = e.nativeEvent?.pageY ?? e.touches?.[0]?.clientY ?? 0;
+      };
+      const handleTouchEnd = (e) => {
+        const endY = e.nativeEvent?.pageY ?? e.changedTouches?.[0]?.clientY ?? 0;
+        const dy = touchStartY.current - endY;
+        if (dy > 60)       setActiveIndex(i => Math.min(usersLengthRef.current - 1, i + 1));
+        else if (dy < -60) setActiveIndex(i => Math.max(0, i - 1));
+      };
+      return (
+        <View style={styles.webCard} onWheel={handleWheel} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+          {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} blurRadius={20} /> : null}
+          <LinearGradient colors={[`${gradient[0]}AA`, `${gradient[1]}DD`, '#0A0A0BFF']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} />
+
+          {/* Centered content */}
+          <View style={styles.webCardInner}>
+            <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('UserProfile', { username: user.username })}>
+              <View style={styles.avatarContainer}>
+                <Image source={{ uri: avatar }} style={styles.avatar} />
+                {user.is_verified && <View style={styles.verifiedBadge}><Ionicons name="checkmark-circle" size={28} color="#8B5CF6" /></View>}
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('UserProfile', { username: user.username })}>
+              <Text style={styles.displayName}>{user.display_name || user.username}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('UserProfile', { username: user.username })}>
+              <Text style={styles.username}>@{user.username}</Text>
+            </TouchableOpacity>
+            {location ? (
+              <View style={styles.locationRow}>
+                <CountryFlag country={country} />
+                <Ionicons name="location" size={16} color="#D1D5DB" />
+                <Text style={styles.locationText}>{location}</Text>
+              </View>
+            ) : null}
+            {user.bio ? <Text style={styles.bio} numberOfLines={2}>{user.bio}</Text> : null}
+            {genres.length > 0 && (
+              <View style={styles.genresContainer}>
+                <Ionicons name="headset" size={16} color="#D1D5DB" style={{ marginRight: 6 }} />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {genres.slice(0, 5).map((genre, gi) => (
+                    <View key={gi} style={styles.genreChip}>
+                      <Ionicons name={GENRE_ICONS[genre.toLowerCase()] || 'musical-notes'} size={12} color="#E9D5FF" />
+                      <Text style={styles.genreText}>{genre}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}><Text style={styles.statNumber}>{formatCount(user.follower_count)}</Text><Text style={styles.statLabel}>Takipçi</Text></View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}><Text style={styles.statNumber}>{formatCount(user.following_count)}</Text><Text style={styles.statLabel}>Takip</Text></View>
+            </View>
+            <View style={styles.actionButtons}>
+              <TouchableOpacity style={[styles.followButton, isFollowed && styles.followedButton]} onPress={() => !isFollowed && handleFollow(user.id)} activeOpacity={0.8}>
+                <Ionicons name={isFollowed ? 'checkmark' : 'person-add'} size={20} color="#fff" />
+                <Text style={styles.followButtonText}>{isFollowed ? 'Takip Ediliyor' : 'Takip Et'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.messageButton} onPress={() => handleMessage(user)} activeOpacity={0.8}>
+                <Ionicons name="chatbubble-outline" size={20} color="#fff" />
+                <Text style={styles.messageButtonText}>Mesaj</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+        </View>
+      );
+    }
 
     return (
       <View style={[styles.userCard, { height: ITEM_HEIGHT }]}>
@@ -267,8 +350,12 @@ export default function DiscoverPeopleScreen({ navigation }) {
           </TouchableOpacity>
 
           {/* Name + Username */}
-          <Text style={styles.displayName}>{user.display_name || user.username}</Text>
-          <Text style={styles.username}>@{user.username}</Text>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('UserProfile', { username: user.username })}>
+            <Text style={styles.displayName}>{user.display_name || user.username}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('UserProfile', { username: user.username })}>
+            <Text style={styles.username}>@{user.username}</Text>
+          </TouchableOpacity>
 
           {/* Location */}
           {location ? (
@@ -324,11 +411,6 @@ export default function DiscoverPeopleScreen({ navigation }) {
               <Text style={styles.statNumber}>{formatCount(user.following_count)}</Text>
               <Text style={styles.statLabel}>{t('profile.following') || 'Following'}</Text>
             </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{formatCount(user.post_count)}</Text>
-              <Text style={styles.statLabel}>{t('profile.posts') || 'Posts'}</Text>
-            </View>
           </View>
 
           {/* Mutual Friends */}
@@ -377,7 +459,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
     );
   };
 
-  const hasActiveFilter = selectedCountry || selectedCity;
+  const hasActiveFilter = selectedCountry || selectedCity || selectedGender;
 
   if (loading && users.length === 0) {
     return (
@@ -408,7 +490,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('discover.suggestedUsers') || 'Discover People'}</Text>
         <TouchableOpacity
-          onPress={() => { setTempCountry(selectedCountry); setTempCity(selectedCity); setFilterVisible(true); }}
+          onPress={() => { setTempCountry(selectedCountry); setTempCity(selectedCity); setTempGender(selectedGender); setFilterVisible(true); }}
           style={[styles.filterBtn, hasActiveFilter && styles.filterBtnActive]}
         >
           <Ionicons name="options" size={22} color={hasActiveFilter ? '#fff' : '#D1D5DB'} />
@@ -420,9 +502,13 @@ export default function DiscoverPeopleScreen({ navigation }) {
       {hasActiveFilter && (
         <View style={styles.filterBadgeRow}>
           <View style={styles.filterBadge}>
-            <Ionicons name="location" size={14} color="#8B5CF6" />
+            <Ionicons name="options" size={14} color="#8B5CF6" />
             <Text style={styles.filterBadgeText}>
-              {[selectedCity, selectedCountry].filter(Boolean).join(', ')}
+              {[
+                selectedGender ? ({ male: 'Erkek', female: 'Kadın', other: 'Diğer' }[selectedGender] || selectedGender) : '',
+                selectedCity,
+                selectedCountry,
+              ].filter(Boolean).join(', ')}
             </Text>
             <TouchableOpacity onPress={clearFilter} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close-circle" size={18} color="#9CA3AF" />
@@ -431,12 +517,33 @@ export default function DiscoverPeopleScreen({ navigation }) {
         </View>
       )}
 
-      {/* Users FlatList - Reels style */}
+      {/* Web: single-user full-screen view */}
+      {Platform.OS === 'web' && (
+        <View style={{ flex: 1 }}>
+          {users.length === 0 ? (
+            <View style={styles.center}>
+              <Ionicons name="people-outline" size={64} color="#8B5CF6" />
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', marginTop: 16 }}>
+                {apiError ? 'Bağlantı hatası' : hasActiveFilter ? 'Bu bölgede kullanıcı bulunamadı' : 'Henüz kullanıcı yok'}
+              </Text>
+              <Text style={{ color: '#9CA3AF', fontSize: 14, marginTop: 8 }}>
+                {apiError || (hasActiveFilter ? 'Farklı bir filtre deneyin' : 'Daha sonra tekrar kontrol edin')}
+              </Text>
+            </View>
+          ) : (
+            renderUser({ item: users[activeIndex], index: activeIndex })
+          )}
+        </View>
+      )}
+
+      {/* Native: FlatList pagingEnabled */}
+      {Platform.OS !== 'web' && (
       <FlatList
         ref={flatListRef}
+        style={{ flex: 1 }}
         data={users}
         renderItem={renderUser}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         pagingEnabled
         showsVerticalScrollIndicator={false}
         decelerationRate="fast"
@@ -447,36 +554,20 @@ export default function DiscoverPeopleScreen({ navigation }) {
         initialNumToRender={3}
         maxToRenderPerBatch={3}
         windowSize={5}
-        removeClippedSubviews={true}
-        getItemLayout={(_, index) => ({
-          length: ITEM_HEIGHT,
-          offset: ITEM_HEIGHT * index,
-          index,
-        })}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" />
-        }
+        removeClippedSubviews
+        getItemLayout={(_, index) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index })}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" />}
         onEndReached={onEndReached}
         onEndReachedThreshold={0.5}
-        ListFooterComponent={
-          loadingMore ? (
-            <View style={[styles.footerLoader, { height: ITEM_HEIGHT * 0.3 }]}>
-              <ActivityIndicator size="small" color="#8B5CF6" />
-            </View>
-          ) : null
-        }
+        ListFooterComponent={loadingMore ? <View style={[styles.footerLoader, { height: ITEM_HEIGHT * 0.3 }]}><ActivityIndicator size="small" color="#8B5CF6" /></View> : null}
         ListEmptyComponent={
           <View style={[styles.emptyContainer, { height: ITEM_HEIGHT }]}>
-            <Ionicons name="people-outline" size={64} color="#4B5563" />
-            <Text style={styles.emptyTitle}>
-              {hasActiveFilter
-                ? (t('discover.noUsersInRegion') || 'No users found in this region')
-                : (t('discover.noUsersFound') || 'No users to discover')}
+            <Ionicons name="people-outline" size={64} color="#8B5CF6" />
+            <Text style={[styles.emptyTitle, { color: '#fff' }]}>
+              {apiError ? 'Bağlantı hatası' : hasActiveFilter ? 'Bu bölgede kullanıcı bulunamadı' : 'Henüz kullanıcı yok'}
             </Text>
-            <Text style={styles.emptySubtitle}>
-              {hasActiveFilter
-                ? (t('discover.tryDifferentFilter') || 'Try a different country or city')
-                : (t('discover.checkBackLater') || 'Check back later for new people')}
+            <Text style={[styles.emptySubtitle, { color: '#9CA3AF' }]}>
+              {apiError || (hasActiveFilter ? 'Farklı bir filtre deneyin' : 'Daha sonra tekrar kontrol edin')}
             </Text>
             {hasActiveFilter && (
               <TouchableOpacity style={styles.clearFilterBtn} onPress={clearFilter}>
@@ -486,10 +577,11 @@ export default function DiscoverPeopleScreen({ navigation }) {
           </View>
         }
       />
+      )}
 
-      {/* Country/City Filter Modal */}
-      <Modal visible={filterVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      {/* Country/City Filter Modal — Web */}
+      {Platform.OS === 'web' && filterVisible && (
+        <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 9999, justifyContent: 'flex-end' }}>
           <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.modalHandle} />
 
@@ -500,69 +592,119 @@ export default function DiscoverPeopleScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
+            {/* Gender Filter */}
+            <Text style={styles.filterLabel}>Cinsiyet</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+              {[
+                { value: '', label: 'Tümü', icon: 'people-outline' },
+                { value: 'male', label: 'Erkek', icon: 'person-outline' },
+                { value: 'female', label: 'Kadın', icon: 'person-outline' },
+              ].map((item) => (
+                <TouchableOpacity
+                  key={item.value || 'all'}
+                  onPress={() => setTempGender(item.value)}
+                  style={[styles.genderChip, tempGender === item.value && styles.genderChipActive]}
+                >
+                  <Ionicons name={item.icon} size={15} color={tempGender === item.value ? '#fff' : '#9CA3AF'} />
+                  <Text style={[styles.genderChipText, tempGender === item.value && styles.genderChipTextActive]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             {/* Country Selection */}
-            <Text style={styles.filterLabel}>{t('discover.country') || 'Country'}</Text>
-            <ScrollView
-              horizontal={false}
-              style={styles.countryList}
-              showsVerticalScrollIndicator={true}
-            >
-              <TouchableOpacity
-                style={[styles.countryItem, !tempCountry && styles.countryItemActive]}
-                onPress={() => setTempCountry('')}
-              >
+            <Text style={styles.filterLabel}>Ülke</Text>
+            <ScrollView style={styles.countryList} showsVerticalScrollIndicator>
+              <TouchableOpacity style={[styles.countryItem, !tempCountry && styles.countryItemActive]} onPress={() => setTempCountry('')}>
                 <Ionicons name="globe-outline" size={20} color={!tempCountry ? '#8B5CF6' : '#9CA3AF'} />
-                <Text style={[styles.countryItemText, !tempCountry && styles.countryItemTextActive]}>
-                  {t('discover.allCountries') || 'All Countries'}
-                </Text>
+                <Text style={[styles.countryItemText, !tempCountry && styles.countryItemTextActive]}>Tüm Ülkeler</Text>
                 {!tempCountry && <Ionicons name="checkmark" size={20} color="#8B5CF6" />}
               </TouchableOpacity>
-              {countries.map((c) => (
-                <TouchableOpacity
-                  key={c}
-                  style={[styles.countryItem, tempCountry === c && styles.countryItemActive]}
-                  onPress={() => setTempCountry(c)}
-                >
-                  <CountryFlag country={c} />
-                  <Text style={[styles.countryItemText, tempCountry === c && styles.countryItemTextActive]}>
-                    {c}
-                  </Text>
-                  {tempCountry === c && <Ionicons name="checkmark" size={20} color="#8B5CF6" />}
+              {COUNTRIES.map((c) => (
+                <TouchableOpacity key={c.code} style={[styles.countryItem, tempCountry === c.name && styles.countryItemActive]} onPress={() => setTempCountry(c.name)}>
+                  <Text style={{ fontSize: 20 }}>{c.flag}</Text>
+                  <Text style={[styles.countryItemText, tempCountry === c.name && styles.countryItemTextActive]}>{c.name}</Text>
+                  {tempCountry === c.name && <Ionicons name="checkmark" size={20} color="#8B5CF6" />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
 
-            {/* City Input (simple - just show if country selected) */}
-            {tempCountry ? (
-              <View style={styles.citySection}>
-                <Text style={styles.filterLabel}>{t('discover.city') || 'City'}</Text>
-                <TouchableOpacity
-                  style={[styles.countryItem, !tempCity && styles.countryItemActive]}
-                  onPress={() => setTempCity('')}
-                >
-                  <Ionicons name="business-outline" size={20} color={!tempCity ? '#8B5CF6' : '#9CA3AF'} />
-                  <Text style={[styles.countryItemText, !tempCity && styles.countryItemTextActive]}>
-                    {t('discover.allCities') || 'All Cities'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-
             {/* Apply Button */}
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.clearBtn} onPress={() => { setTempCountry(''); setTempCity(''); }}>
-                <Text style={styles.clearBtnText}>{t('common.clear') || 'Clear'}</Text>
+              <TouchableOpacity style={styles.clearBtn} onPress={() => { setTempCountry(''); setTempCity(''); setTempGender(''); }}>
+                <Text style={styles.clearBtnText}>Temizle</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.applyBtn} onPress={applyFilter}>
-                <Text style={styles.applyBtnText}>{t('common.apply') || 'Apply'}</Text>
+                <Text style={styles.applyBtnText}>Uygula</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      </Modal>
+      )}
+
+      {/* Country/City Filter Modal — Native */}
+      {Platform.OS !== 'web' && (
+        <Modal visible={filterVisible} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
+              <View style={styles.modalHandle} />
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Filtrele</Text>
+                <TouchableOpacity onPress={() => setFilterVisible(false)}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.filterLabel}>Cinsiyet</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+                {[
+                  { value: '', label: 'Tümü', icon: 'people-outline' },
+                  { value: 'male', label: 'Erkek', icon: 'person-outline' },
+                  { value: 'female', label: 'Kadın', icon: 'person-outline' },
+                ].map((item) => (
+                  <TouchableOpacity
+                    key={item.value || 'all'}
+                    onPress={() => setTempGender(item.value)}
+                    style={[styles.genderChip, tempGender === item.value && styles.genderChipActive]}
+                  >
+                    <Ionicons name={item.icon} size={15} color={tempGender === item.value ? '#fff' : '#9CA3AF'} />
+                    <Text style={[styles.genderChipText, tempGender === item.value && styles.genderChipTextActive]}>
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.filterLabel}>{t('discover.country') || 'Ülke'}</Text>
+              <ScrollView style={styles.countryList} showsVerticalScrollIndicator>
+                <TouchableOpacity style={[styles.countryItem, !tempCountry && styles.countryItemActive]} onPress={() => setTempCountry('')}>
+                  <Ionicons name="globe-outline" size={20} color={!tempCountry ? '#8B5CF6' : '#9CA3AF'} />
+                  <Text style={[styles.countryItemText, !tempCountry && styles.countryItemTextActive]}>Tüm Ülkeler</Text>
+                  {!tempCountry && <Ionicons name="checkmark" size={20} color="#8B5CF6" />}
+                </TouchableOpacity>
+                {COUNTRIES.map((c) => (
+                  <TouchableOpacity key={c.code} style={[styles.countryItem, tempCountry === c.name && styles.countryItemActive]} onPress={() => setTempCountry(c.name)}>
+                    <Text style={{ fontSize: 20 }}>{c.flag}</Text>
+                    <Text style={[styles.countryItemText, tempCountry === c.name && styles.countryItemTextActive]}>{c.name}</Text>
+                    {tempCountry === c.name && <Ionicons name="checkmark" size={20} color="#8B5CF6" />}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.clearBtn} onPress={() => { setTempCountry(''); setTempCity(''); setTempGender(''); }}>
+                  <Text style={styles.clearBtnText}>{t('common.clear') || 'Temizle'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.applyBtn} onPress={applyFilter}>
+                  <Text style={styles.applyBtnText}>{t('common.apply') || 'Uygula'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
+
 
 const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
@@ -591,8 +733,34 @@ const createStyles = (colors) => StyleSheet.create({
   filterBadgeText: { color: '#D1D5DB', fontSize: 13, fontWeight: '500' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
+  webDots: {
+    position: 'absolute', bottom: 20, left: 0, right: 0,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6,
+    zIndex: 20,
+  },
+  webDot: {
+    width: 6, height: 6, borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  webDotActive: {
+    width: 20, height: 6, borderRadius: 3,
+    backgroundColor: '#8B5CF6',
+  },
+  webCard: {
+    flex: 1,
+    overflow: 'hidden',
+    backgroundColor: '#0A0A0B',
+  },
+  webCardInner: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingTop: 70,
+    paddingBottom: 80,
+  },
   userCard: {
-    width: SCREEN_WIDTH,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -725,6 +893,14 @@ const createStyles = (colors) => StyleSheet.create({
   countryItemText: { color: '#D1D5DB', fontSize: 15, flex: 1 },
   countryItemTextActive: { color: '#A78BFA', fontWeight: '600' },
   citySection: { marginBottom: 16 },
+  genderChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, marginRight: 8,
+    backgroundColor: '#1F2937', borderWidth: 1, borderColor: '#374151',
+  },
+  genderChipActive: { backgroundColor: '#8B5CF6', borderColor: '#8B5CF6' },
+  genderChipText: { color: '#9CA3AF', fontSize: 14, fontWeight: '600' },
+  genderChipTextActive: { color: '#fff' },
   modalActions: {
     flexDirection: 'row', gap: 12, marginTop: 8,
   },

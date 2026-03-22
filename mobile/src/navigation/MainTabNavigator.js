@@ -14,6 +14,7 @@ import DashboardScreen     from '../screens/DashboardScreen';
 import PlaylistsScreen     from '../screens/PlaylistsScreen';
 import ARMusicScreen       from '../screens/ARMusicScreen';
 import ListeningRoomScreen from '../screens/ListeningRoomScreen';
+import ProfileScreen       from '../screens/ProfileScreen';
 import { useTheme }        from '../contexts/ThemeContext';
 
 const Tab = createBottomTabNavigator();
@@ -23,6 +24,7 @@ const TABS = [
   { name: 'Library', label: 'Library', icon: 'library', iconOff: 'library-outline' },
   { name: 'AR',      label: 'AR',      icon: 'scan',    iconOff: 'scan-outline'    },
   { name: 'Rooms',   label: 'Rooms',   icon: 'radio',   iconOff: 'radio-outline'   },
+  { name: 'Profile', label: 'Profil',  icon: 'person',  iconOff: 'person-outline'  },
 ];
 
 function AnimatedTabIcon({ name, iconOn, iconOff, focused, colors }) {
@@ -119,6 +121,7 @@ export default function MainTabNavigator() {
       <Tab.Screen name="Library" component={PlaylistsScreen}     />
       <Tab.Screen name="AR"      component={ARMusicScreen}       />
       <Tab.Screen name="Rooms"   component={ListeningRoomScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarStyle: { display: 'none' } }} />
     </Tab.Navigator>
   );
 }

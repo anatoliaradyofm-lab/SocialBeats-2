@@ -15,7 +15,6 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { getApiUrl } from '../services/api';
 import ProfileStoriesHighlights from '../components/profile/ProfileStoriesHighlights';
-import VerifiedBadge from '../components/VerifiedBadge';
 import RichText from '../components/RichText';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -41,58 +40,19 @@ const mediaUri = (uri) => {
   return uri.startsWith('/') ? `${base}${uri}` : `${base}/api/${uri}`;
 };
 
-/* ── Graphical genre bar ── */
-function GenreBar({ label, pct, color }) {
-  const w = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(w, { toValue: pct, duration: 900, delay: 200, useNativeDriver: false }).start();
-  }, [pct]);
-  return (
-    <View style={gb.row}>
-      <Text style={gb.label}>{label}</Text>
-      <View style={gb.track}>
-        <Animated.View style={[gb.fill, { backgroundColor: color, width: w.interpolate({ inputRange:[0,100], outputRange:['0%','100%'] }) }]} />
-      </View>
-      <Text style={gb.pct}>{pct}%</Text>
-    </View>
-  );
+function getMusicPersonality(genres) {
+  if (!genres || genres.length === 0) return null;
+  const top = (genres[0]?.label || genres[0]?.genre || '').toLowerCase();
+  if (['electronic','house','techno','edm','dance'].some(g => top.includes(g))) return { label:'Enerji Ustası',   icon:'flash',       color:'#FB923C' };
+  if (['hip-hop','hip hop','trap','rap'].some(g => top.includes(g)))             return { label:'Ritim Avcısı',   icon:'mic',         color:'#C084FC' };
+  if (['classical','jazz','blues'].some(g => top.includes(g)))                   return { label:'Melodi Filozofu',icon:'leaf',        color:'#34D399' };
+  if (['pop'].some(g => top.includes(g)))                                        return { label:'Trend Takipçisi',icon:'star',        color:'#FBBF24' };
+  if (['indie','alternative','folk'].some(g => top.includes(g)))                 return { label:'Müzik Kaşifi',   icon:'compass',     color:'#60A5FA' };
+  if (['rock','metal','punk'].some(g => top.includes(g)))                        return { label:'Güç Simgesi',    icon:'thunderstorm',color:'#F87171' };
+  if (['r&b','rnb','soul'].some(g => top.includes(g)))                           return { label:'Duygu Ustası',   icon:'heart',       color:'#F472B6' };
+  return { label:'Müzik Kaşifi', icon:'compass', color:'#60A5FA' };
 }
-const gb = StyleSheet.create({
-  row:   { flexDirection:'row', alignItems:'center', gap:10, marginBottom:9 },
-  label: { width:72, fontSize:12, color:'rgba(248,248,248,0.55)', fontWeight:'500' },
-  track: { flex:1, height:6, backgroundColor:'rgba(255,255,255,0.07)', borderRadius:3, overflow:'hidden' },
-  fill:  { height:'100%', borderRadius:3 },
-  pct:   { width:30, fontSize:11, color:'rgba(248,248,248,0.35)', textAlign:'right' },
-});
 
-/* ── Weekly bars ── */
-const DAYS = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
-function WeeklyBars({ data }) {
-  const max = Math.max(...data, 1);
-  return (
-    <View style={wb.wrap}>
-      {data.map((v, i) => {
-        const h = Math.max(4, (v / max) * 56);
-        const isToday = i === new Date().getDay() - 1;
-        return (
-          <View key={i} style={wb.col}>
-            <View style={wb.barTrack}>
-              <View style={[wb.bar, { height: h, backgroundColor: isToday ? '#C084FC' : 'rgba(192,132,252,0.35)' }]} />
-            </View>
-            <Text style={[wb.day, isToday && { color:'#C084FC' }]}>{DAYS[i]}</Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-const wb = StyleSheet.create({
-  wrap:     { flexDirection:'row', justifyContent:'space-between', alignItems:'flex-end', paddingTop:8 },
-  col:      { alignItems:'center', gap:6, flex:1 },
-  barTrack: { height:56, justifyContent:'flex-end' },
-  bar:      { width:10, borderRadius:5 },
-  day:      { fontSize:10, color:'rgba(248,248,248,0.3)', fontWeight:'500' },
-});
 
 export default function UserProfileScreen({ navigation, route }) {
   const { colors }                = useTheme();
@@ -101,14 +61,18 @@ export default function UserProfileScreen({ navigation, route }) {
   const { token, user: authUser } = useAuth();
   const { username }              = route.params || {};
 
-  const [user,       setUser]       = useState(null);
-  const [loading,    setLoading]    = useState(true);
-  const [isMuted,    setIsMuted]    = useState(false);
-  const [nowPlaying, setNowPlaying] = useState(null);
-  const [tasteMatch, setTasteMatch] = useState(null);
-  const [listenStats,setListenStats]= useState(null);
-  const [showMenu,   setShowMenu]   = useState(false);
-  const [showReport, setShowReport] = useState(false);
+  const [user,           setUser]           = useState(null);
+  const [loading,        setLoading]        = useState(true);
+  const [isMuted,        setIsMuted]        = useState(false);
+  const [nowPlaying,     setNowPlaying]     = useState(null);
+  const [tasteMatch,     setTasteMatch]     = useState(null);
+  const [listenStats,    setListenStats]    = useState(null);
+  const [playlists,      setPlaylists]      = useState([]);
+  const [mutualFollowers,setMutualFollowers]= useState([]);
+  const [recentTracks,   setRecentTracks]   = useState([]);
+  const [showMenu,       setShowMenu]       = useState(false);
+  const [showReport,     setShowReport]     = useState(false);
+  const [showAvatar,     setShowAvatar]     = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
 
   const isOwnProfile = authUser?.username === username;
@@ -135,6 +99,13 @@ export default function UserProfileScreen({ navigation, route }) {
     if (!isOwnProfile && token)
       api.get(`/users/${user.id}/taste-match`, token)
         .then(setTasteMatch).catch(() => {});
+    api.get(`/playlists/user/${user.id}?limit=6`, token)
+      .then(r => setPlaylists(r?.playlists || [])).catch(() => {});
+    api.get(`/users/${user.id}/recent-tracks?limit=5`, token)
+      .then(r => setRecentTracks(r?.tracks || [])).catch(() => {});
+    if (!isOwnProfile && token)
+      api.get(`/social/mutual-followers/${user.id}?limit=5`, token)
+        .then(r => setMutualFollowers(r?.users || [])).catch(() => {});
   }, [user?.id, token, isOwnProfile]);
 
   if (loading || !user) {
@@ -155,24 +126,13 @@ export default function UserProfileScreen({ navigation, route }) {
   const avatar     = user.avatar_url || `https://i.pravatar.cc/200?u=${user.username}`;
   const isFollowing = user.is_following || false;
 
-  /* Demo stats fallback */
-  const genres  = listenStats?.top_genres  || [
-    { label:'Electronic', pct:72, color:'#C084FC' },
-    { label:'Hip-Hop',    pct:55, color:'#FB923C' },
-    { label:'Indie',      pct:38, color:'#34D399' },
-    { label:'R&B',        pct:28, color:'#F472B6' },
-    { label:'Classical',  pct:14, color:'#60A5FA' },
-  ];
-  const topArtists = listenStats?.top_artists || [
-    { name:'The Weeknd',  img:'https://picsum.photos/seed/a1/80/80', plays:142 },
-    { name:'Billie Eilish',img:'https://picsum.photos/seed/a2/80/80',plays:98  },
-    { name:'Tame Impala', img:'https://picsum.photos/seed/a3/80/80', plays:87  },
-  ];
-  const weeklyHours = listenStats?.weekly_minutes_per_day
-    ? listenStats.weekly_minutes_per_day.map(m => m / 60)
-    : [1.2, 2.5, 0.8, 3.1, 2.0, 4.2, 1.8];
-  const totalHours = listenStats?.total_hours_this_week
-    ?? Math.round(weeklyHours.reduce((a, b) => a + b, 0));
+  const genres = listenStats?.top_genres || [];
+
+  const displayFavArtists    = user.favorite_artists?.length > 0 ? user.favorite_artists : [];
+  const displayPlaylists     = playlists;
+  const displayRecentTracks  = recentTracks;
+  const displayBadges        = user.badges?.length > 0 ? user.badges : [];
+  const displayMutualFollowers = mutualFollowers;
 
   const tasteColor = tasteMatch?.match_percentage >= 60 ? '#34D399'
     : tasteMatch?.match_percentage >= 30 ? '#FBBF24' : '#F87171';
@@ -232,19 +192,18 @@ export default function UserProfileScreen({ navigation, route }) {
         {/* ── Identity block ── */}
         <View style={s.identityBlock}>
           {/* Avatar */}
-          <View style={s.avatarRing}>
+          <TouchableOpacity style={s.avatarRing} activeOpacity={0.9} onPress={() => setShowAvatar(true)}>
             <Image source={{ uri: avatar }} style={s.avatar} />
             {nowPlaying && (
               <View style={s.nowDot}>
                 <Ionicons name="musical-note" size={7} color="#fff" />
               </View>
             )}
-          </View>
+          </TouchableOpacity>
 
           {/* Name + handle */}
           <View style={s.nameGroup}>
             <Text style={s.displayName}>{user.display_name || user.username}</Text>
-            {user.is_verified && <VerifiedBadge size={16} />}
           </View>
           <Text style={s.handle}>@{user.username}</Text>
 
@@ -270,6 +229,28 @@ export default function UserProfileScreen({ navigation, route }) {
             </View>
           ) : null}
 
+          {/* Social links */}
+          {(user.instagram || user.twitter || user.social_links?.instagram || user.social_links?.twitter) ? (
+            <View style={s.socialRow}>
+              {(user.instagram || user.social_links?.instagram) ? (() => { const ig = (user.instagram || user.social_links?.instagram).replace('@',''); return (
+                <TouchableOpacity style={s.socialBtn} onPress={() => Linking.openURL(`https://instagram.com/${ig}`)}>
+                  <View style={[s.socialIcon, { backgroundColor:'rgba(225,48,108,0.15)', borderColor:'rgba(225,48,108,0.3)' }]}>
+                    <Ionicons name="logo-instagram" size={16} color="#E1306C" />
+                  </View>
+                  <Text style={s.socialTx}>@{ig}</Text>
+                </TouchableOpacity>
+              ); })() : null}
+              {(user.twitter || user.social_links?.twitter) ? (() => { const tw = (user.twitter || user.social_links?.twitter).replace('@',''); return (
+                <TouchableOpacity style={s.socialBtn} onPress={() => Linking.openURL(`https://x.com/${tw}`)}>
+                  <View style={[s.socialIcon, { backgroundColor:'rgba(29,161,242,0.15)', borderColor:'rgba(29,161,242,0.3)' }]}>
+                    <Ionicons name="logo-twitter" size={16} color="#1DA1F2" />
+                  </View>
+                  <Text style={s.socialTx}>@{tw}</Text>
+                </TouchableOpacity>
+              ); })() : null}
+            </View>
+          ) : null}
+
           {/* Stats */}
           <View style={s.statsCard}>
             <TouchableOpacity style={s.statItem}
@@ -283,11 +264,6 @@ export default function UserProfileScreen({ navigation, route }) {
               <Text style={s.statNum}>{(user.following_count ?? 0).toLocaleString()}</Text>
               <Text style={s.statLabel}>Takip</Text>
             </TouchableOpacity>
-            <View style={s.statLine} />
-            <View style={s.statItem}>
-              <Text style={s.statNum}>{listenStats?.total_tracks_played ?? '—'}</Text>
-              <Text style={s.statLabel}>Dinleme</Text>
-            </View>
           </View>
 
           {/* CTA buttons */}
@@ -343,6 +319,79 @@ export default function UserProfileScreen({ navigation, route }) {
             }
           }}
         />
+
+        {/* ── Müzik Kişilik Tipi ── */}
+        {(() => { const p = getMusicPersonality(genres); return p ? (
+          <View style={s.section}>
+            <View style={s.personalityCard}>
+              <LinearGradient colors={[p.color+'22','transparent']} style={StyleSheet.absoluteFill} start={{x:0,y:0}} end={{x:1,y:1}} />
+              <View style={[s.personalityIcon, { backgroundColor: p.color+'22', borderColor: p.color+'44' }]}>
+                <Ionicons name={p.icon} size={22} color={p.color} />
+              </View>
+              <View style={{flex:1}}>
+                <Text style={s.personalityLabel}>MÜZİK KİŞİLİĞİ</Text>
+                <Text style={[s.personalityType, { color: p.color }]}>{p.label}</Text>
+              </View>
+            </View>
+          </View>
+        ) : null; })()}
+
+        {/* ── Favori Sanatçılar ── */}
+        {displayFavArtists.length > 0 ? (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Favori Sanatçılar</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginHorizontal:-4}}>
+              {displayFavArtists.slice(0,8).map((artist, i) => {
+                const name = typeof artist === 'string' ? artist : (artist.name || artist);
+                const img  = (typeof artist === 'object' && artist.image_url) || `https://picsum.photos/seed/${name}/80/80`;
+                return (
+                  <TouchableOpacity key={i} style={s.favArtistItem} activeOpacity={0.75}
+                    onPress={() => navigation.navigate('Search', { query: name })}>
+                    <Image source={{ uri: img }} style={s.favArtistAvatar} />
+                    <Text style={s.favArtistName} numberOfLines={1}>{name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        {/* ── Herkese Açık Playlistler ── */}
+        {displayPlaylists.length > 0 ? (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Playlistler</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginHorizontal:-4}}>
+              {displayPlaylists.map((pl, i) => (
+                <TouchableOpacity key={i} style={s.plCard}
+                  onPress={() => navigation.navigate('PlaylistDetail', { playlistId: pl.id })}>
+                  <Image source={{ uri: pl.cover_url || `https://picsum.photos/seed/pl${pl.id}/120/120` }} style={s.plCover} />
+                  <LinearGradient colors={['transparent','rgba(8,6,15,0.85)']} style={StyleSheet.absoluteFill} />
+                  <Text style={s.plName} numberOfLines={2}>{pl.name}</Text>
+                  <Text style={s.plCount}>{pl.track_count ?? 0} şarkı</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        {/* ── Ortak Takipçiler ── */}
+        {!isOwnProfile && displayMutualFollowers.length > 0 ? (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Ortak Takipçiler</Text>
+            <View style={s.mutualCard}>
+              <View style={s.mutualAvatars}>
+                {displayMutualFollowers.slice(0,4).map((u,i) => (
+                  <Image key={i} source={{ uri: u.avatar_url || `https://i.pravatar.cc/40?u=${u.username}` }}
+                    style={[s.mutualAvatar, { marginLeft: i === 0 ? 0 : -10, zIndex: 4-i }]} />
+                ))}
+              </View>
+              <Text style={s.mutualTx} numberOfLines={2}>
+                <Text style={s.mutualName}>{displayMutualFollowers[0]?.display_name || displayMutualFollowers[0]?.username}</Text>
+                {displayMutualFollowers.length > 1 ? ` ve ${displayMutualFollowers.length - 1} kişi daha takip ediyor` : ' takip ediyor'}
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {/* ── Now Playing ── */}
         {nowPlaying ? (
@@ -402,54 +451,66 @@ export default function UserProfileScreen({ navigation, route }) {
           </View>
         ) : null}
 
-        {/* ── Listening Stats ── */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Dinleme İstatistikleri</Text>
 
-          {/* Weekly hours card */}
-          <View style={s.statsBox}>
-            <View style={s.statsBoxHeader}>
-              <View>
-                <Text style={s.statsBoxLabel}>Bu Hafta</Text>
-                <Text style={s.statsBoxValue}>{totalHours} <Text style={s.statsBoxUnit}>saat</Text></Text>
-              </View>
-              <View style={s.statsChip}>
-                <Ionicons name="trending-up" size={12} color="#34D399" />
-                <Text style={s.statsChipTx}>+12%</Text>
-              </View>
-            </View>
-            <WeeklyBars data={weeklyHours} />
-          </View>
-
-          {/* Top genres */}
-          <View style={s.statsBox}>
-            <Text style={s.statsBoxLabel} style={[s.statsBoxLabel, { marginBottom: 14 }]}>En Çok Dinlenen Türler</Text>
-            {genres.map((g, i) => (
-              <GenreBar key={i} label={g.label || g.genre} pct={g.pct || g.percentage || 0} color={g.color || '#C084FC'} />
-            ))}
-          </View>
-
-          {/* Top artists */}
-          <View style={s.statsBox}>
-            <Text style={[s.statsBoxLabel, { marginBottom: 14 }]}>En Çok Dinlenen Sanatçılar</Text>
-            {topArtists.map((a, i) => (
-              <View key={i} style={s.artistRow}>
-                <Text style={s.artistRank}>{i + 1}</Text>
-                <Image
-                  source={{ uri: a.img || a.image_url || `https://picsum.photos/seed/${a.name}/80/80` }}
-                  style={s.artistAvatar}
-                />
-                <Text style={s.artistName} numberOfLines={1}>{a.name || a.artist_name}</Text>
-                <View style={s.artistPlays}>
-                  <Ionicons name="headset-outline" size={12} color="rgba(248,248,248,0.3)" />
-                  <Text style={s.artistPlaysTx}>{a.plays || a.play_count || 0}</Text>
+        {/* ── Son Dinlenenler ── */}
+        {displayRecentTracks.length > 0 ? (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Son Dinlenenler</Text>
+            <View style={s.statsBox}>
+              {displayRecentTracks.map((track, i) => (
+                <View key={i} style={[s.recentRow, i === displayRecentTracks.length-1 && {borderBottomWidth:0}]}>
+                  <Image source={{ uri: track.cover_url || track.thumbnail || `https://picsum.photos/seed/${track.id}/60/60` }}
+                    style={s.recentCover} />
+                  <View style={{flex:1}}>
+                    <Text style={s.recentTitle} numberOfLines={1}>{track.title}</Text>
+                    <Text style={s.recentArtist} numberOfLines={1}>{track.artist || track.artist_name}</Text>
+                  </View>
+                  <Ionicons name="musical-note-outline" size={16} color="rgba(192,132,252,0.4)" />
                 </View>
-              </View>
-            ))}
+              ))}
+            </View>
           </View>
-        </View>
+        ) : null}
+
+        {/* ── Müzik Rozetleri ── */}
+        {displayBadges.length > 0 ? (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Rozetler</Text>
+            <View style={s.badgesWrap}>
+              {displayBadges.map((badge, i) => {
+                const badgeMap = {
+                  new_user:    { icon:'sparkles',        color:'#FBBF24', label:'Yeni Üye' },
+                  early_bird:  { icon:'sunny',           color:'#FB923C', label:'Erken Kuş' },
+                  social:      { icon:'people',          color:'#60A5FA', label:'Sosyal Kelebek' },
+                  music_lover: { icon:'heart',           color:'#F472B6', label:'Müzik Aşığı' },
+                  explorer:    { icon:'compass',         color:'#34D399', label:'Kaşif' },
+                  night_owl:   { icon:'moon',            color:'#C084FC', label:'Gece Kuşu' },
+                  top_listener:{ icon:'headset',         color:'#FB923C', label:'Top Dinleyici' },
+                  veteran:     { icon:'shield-checkmark',color:'#34D399', label:'Veteran' },
+                };
+                const b = badgeMap[badge] || { icon:'ribbon', color:'#C084FC', label: badge };
+                return (
+                  <View key={i} style={[s.badge, { borderColor: b.color+'44', backgroundColor: b.color+'11' }]}>
+                    <Ionicons name={b.icon} size={18} color={b.color} />
+                    <Text style={[s.badgeTx, { color: b.color }]}>{b.label}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
 
       </Animated.ScrollView>
+
+      {/* ── Avatar fullscreen ── */}
+      <Modal visible={showAvatar} transparent animationType="fade" statusBarTranslucent>
+        <TouchableOpacity style={s.avatarOverlay} activeOpacity={1} onPress={() => setShowAvatar(false)}>
+          <Image source={{ uri: avatar }} style={s.avatarFull} resizeMode="contain" />
+          <TouchableOpacity style={s.avatarClose} onPress={() => setShowAvatar(false)}>
+            <Ionicons name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* ── More menu ── */}
       <Modal visible={showMenu} transparent animationType="fade">
@@ -530,7 +591,7 @@ const s = StyleSheet.create({
   stickyName:   { flex:1, color:'#F8F8F8', fontSize:16, fontWeight:'700', letterSpacing:-0.3 },
   stickyMore:   { padding:4 },
 
-  floatBar:     { position:'absolute', left:0, right:0, zIndex:15, flexDirection:'row', justifyContent:'space-between', paddingHorizontal:16 },
+  floatBar:     { position:'absolute', left:0, right:0, zIndex:30, flexDirection:'row', justifyContent:'space-between', paddingHorizontal:16 },
   floatBtn:     { width:34, height:34, borderRadius:17, backgroundColor:'rgba(0,0,0,0.5)',
                   alignItems:'center', justifyContent:'center', borderWidth:1, borderColor:'rgba(255,255,255,0.14)' },
 
@@ -540,7 +601,7 @@ const s = StyleSheet.create({
   /* Identity */
   identityBlock:{ paddingHorizontal:20, marginTop:-46, paddingBottom:8 },
   avatarRing:   { width:90, height:90, borderRadius:45, borderWidth:3, borderColor:'#C084FC',
-                  marginBottom:14, position:'relative',
+                  marginBottom:14, position:'relative', zIndex:20, elevation:20,
                   shadowColor:'#C084FC', shadowOpacity:0.55, shadowRadius:14, shadowOffset:{width:0,height:0} },
   avatar:       { width:'100%', height:'100%', borderRadius:45 },
   nowDot:       { position:'absolute', bottom:1, right:1, width:20, height:20, borderRadius:10,
@@ -644,4 +705,62 @@ const s = StyleSheet.create({
                   backgroundColor:'rgba(255,255,255,0.04)', marginBottom:6,
                   borderWidth:1, borderColor:'rgba(255,255,255,0.06)' },
   reportRowTx:  { fontSize:14, color:'#F8F8F8' },
+
+  /* Social links */
+  socialRow:    { flexDirection:'row', flexWrap:'wrap', gap:8, marginBottom:16 },
+  socialBtn:    { flexDirection:'row', alignItems:'center', gap:7,
+                  backgroundColor:'rgba(255,255,255,0.05)', borderRadius:20,
+                  paddingHorizontal:12, paddingVertical:7,
+                  borderWidth:1, borderColor:'rgba(255,255,255,0.08)' },
+  socialIcon:   { width:26, height:26, borderRadius:13, alignItems:'center', justifyContent:'center',
+                  borderWidth:1 },
+  socialTx:     { fontSize:13, color:'rgba(248,248,248,0.7)', fontWeight:'500' },
+
+  /* Music personality */
+  personalityCard: { flexDirection:'row', alignItems:'center', gap:14, borderRadius:18, padding:16,
+                     overflow:'hidden', borderWidth:1, borderColor:'rgba(255,255,255,0.08)', marginBottom:4 },
+  personalityIcon: { width:46, height:46, borderRadius:23, alignItems:'center', justifyContent:'center', borderWidth:1 },
+  personalityLabel:{ fontSize:9, fontWeight:'700', color:'rgba(248,248,248,0.35)', letterSpacing:1.2, textTransform:'uppercase', marginBottom:4 },
+  personalityType: { fontSize:18, fontWeight:'800', letterSpacing:-0.4 },
+
+  /* Favorite artists */
+  favArtistItem:  { alignItems:'center', marginHorizontal:8, width:64 },
+  favArtistAvatar:{ width:58, height:58, borderRadius:29, marginBottom:7,
+                    borderWidth:2, borderColor:'rgba(192,132,252,0.3)' },
+  favArtistName:  { fontSize:11, color:'rgba(248,248,248,0.6)', textAlign:'center', fontWeight:'500' },
+
+  /* Playlists */
+  plCard:       { width:120, height:150, borderRadius:16, overflow:'hidden', marginHorizontal:5,
+                  justifyContent:'flex-end', padding:10 },
+  plCover:      { ...StyleSheet.absoluteFillObject, width:'100%', height:'100%' },
+  plName:       { fontSize:12, fontWeight:'700', color:'#F8F8F8', letterSpacing:-0.2, marginBottom:2 },
+  plCount:      { fontSize:10, color:'rgba(248,248,248,0.45)' },
+
+  /* Mutual followers */
+  mutualCard:   { flexDirection:'row', alignItems:'center', gap:14,
+                  backgroundColor:'rgba(255,255,255,0.04)', borderRadius:18, padding:16,
+                  borderWidth:1, borderColor:'rgba(255,255,255,0.07)' },
+  mutualAvatars:{ flexDirection:'row' },
+  mutualAvatar: { width:36, height:36, borderRadius:18, borderWidth:2, borderColor:'#08060F' },
+  mutualTx:     { flex:1, fontSize:13, color:'rgba(248,248,248,0.5)', lineHeight:18 },
+  mutualName:   { color:'#F8F8F8', fontWeight:'700' },
+
+  /* Recent tracks */
+  recentRow:    { flexDirection:'row', alignItems:'center', gap:12, paddingVertical:10,
+                  borderBottomWidth:1, borderBottomColor:'rgba(255,255,255,0.05)' },
+  recentCover:  { width:42, height:42, borderRadius:10 },
+  recentTitle:  { fontSize:14, fontWeight:'600', color:'#F8F8F8', marginBottom:2 },
+  recentArtist: { fontSize:12, color:'rgba(248,248,248,0.4)' },
+
+  /* Badges */
+  badgesWrap:   { flexDirection:'row', flexWrap:'wrap', gap:8 },
+  badge:        { flexDirection:'row', alignItems:'center', gap:7,
+                  paddingHorizontal:14, paddingVertical:9, borderRadius:24, borderWidth:1 },
+  badgeTx:      { fontSize:12, fontWeight:'700' },
+
+  /* Avatar fullscreen */
+  avatarOverlay:{ flex:1, backgroundColor:'rgba(0,0,0,0.92)', alignItems:'center', justifyContent:'center' },
+  avatarFull:   { width:'90%', height:'90%' },
+  avatarClose:  { position:'absolute', top:56, right:20, width:40, height:40, borderRadius:20,
+                  backgroundColor:'rgba(255,255,255,0.15)', alignItems:'center', justifyContent:'center' },
 });

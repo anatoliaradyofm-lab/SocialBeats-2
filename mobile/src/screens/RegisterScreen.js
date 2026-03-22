@@ -16,8 +16,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { COUNTRIES } from '../lib/countries';
 
-const STEPS = ['Account', 'Profile', 'Done'];
+const STEPS = ['Account', 'Profile', 'Identity', 'Done'];
 
 // ── InputField — defined OUTSIDE component so it never remounts ─────────────
 // Note: use `inputRef` prop (not `ref`) — React strips `ref` from function components
@@ -94,6 +95,9 @@ export default function RegisterScreen({ navigation }) {
   const [confirm, setConfirm]   = useState('');
   const [username, setUsername] = useState('');
   const [name, setName]         = useState('');
+  const [gender, setGender]     = useState('');
+  const [country, setCountry]   = useState('');
+  const [countrySearch, setCountrySearch] = useState('');
   const [loading, setLoading]   = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [errors, setErrors]     = useState({});
@@ -129,9 +133,18 @@ export default function RegisterScreen({ navigation }) {
     return Object.keys(e).length === 0;
   };
 
+  const validateStep2 = () => {
+    const e = {};
+    if (!gender) e.gender = 'Cinsiyet seçimi zorunludur';
+    if (!country) e.country = 'Ülke seçimi zorunludur';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
   const nextStep = () => {
     if (step === 0 && !validateStep0()) return;
     if (step === 1 && !validateStep1()) return;
+    if (step === 2) { if (!validateStep2()) return; handleRegister(); return; }
     setStep(s => s + 1);
   };
 
@@ -145,8 +158,10 @@ export default function RegisterScreen({ navigation }) {
         password,
         username: cleanUsername,
         name: name.trim(),
+        gender: gender || undefined,
+        country: country || undefined,
       });
-      setStep(2);
+      setStep(3);
     } catch (err) {
       const msg = err?.data?.detail;
       const detail = Array.isArray(msg) ? msg.map(m => m.msg || m).join(', ') : (msg || err?.message || 'Please try again');
@@ -258,11 +273,70 @@ export default function RegisterScreen({ navigation }) {
                   <InputField label="DISPLAY NAME" value={name} onChange={setName} placeholder="Your name (optional)"
                     inputRef={nameRef} field="name" icon="person-outline" {...inputShared} />
 
-                  <TouchableOpacity onPress={handleRegister} disabled={loading} activeOpacity={0.85} style={s.btnWrap}>
+                  <TouchableOpacity onPress={nextStep} activeOpacity={0.85} style={s.btnWrap}>
+                    <LinearGradient colors={colors.gradPrimary} start={{ x:0,y:0 }} end={{ x:1,y:1 }} style={s.btn}>
+                      <Text style={s.btnText}>Devam Et</Text>
+                      <Ionicons name="arrow-forward" size={18} color="#FFF" />
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {step === 2 && (
+                <>
+                  <Text style={[s.cardTitle, { color: colors.text }]}>Kimliğin</Text>
+                  <Text style={[s.cardSub, { color: colors.textMuted }]}>Seni daha iyi tanıyalım</Text>
+
+                  {/* Gender */}
+                  <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>CİNSİYET <Text style={{ color: colors.error }}>*</Text></Text>
+                  <View style={s.genderRow}>
+                    {[{ key: 'male', label: 'Erkek', icon: 'male' }, { key: 'female', label: 'Kadın', icon: 'female' }].map(g => (
+                      <TouchableOpacity
+                        key={g.key}
+                        onPress={() => { setGender(g.key); setErrors(e => ({ ...e, gender: null })); }}
+                        style={[s.genderBtn, { borderColor: gender === g.key ? colors.primary : (errors.gender ? colors.error : colors.inputBorder), backgroundColor: gender === g.key ? colors.primaryGlow : colors.inputBg }]}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name={g.icon} size={22} color={gender === g.key ? colors.primary : colors.textMuted} />
+                        <Text style={[s.genderBtnText, { color: gender === g.key ? colors.primary : colors.textMuted }]}>{g.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {errors.gender && <Text style={{ color: colors.error, fontSize: 12, marginBottom: 8 }}>{errors.gender}</Text>}
+
+                  {/* Country */}
+                  <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>ÜLKE <Text style={{ color: colors.error }}>*</Text></Text>
+                  <View style={[s.countrySearchWrap, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+                    <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+                    <TextInput
+                      style={[s.countrySearchInput, { color: colors.text }]}
+                      placeholder="Ülke ara..."
+                      placeholderTextColor={colors.textGhost}
+                      value={countrySearch}
+                      onChangeText={setCountrySearch}
+                    />
+                  </View>
+                  <ScrollView style={[s.countryList, errors.country && { borderWidth: 1, borderColor: colors.error, borderRadius: 12 }]} showsVerticalScrollIndicator nestedScrollEnabled>
+                    {COUNTRIES.filter(c => c.name.toLowerCase().includes(countrySearch.toLowerCase())).map(c => (
+                      <TouchableOpacity
+                        key={c.code}
+                        onPress={() => { setCountry(c.name); setErrors(e => ({ ...e, country: null })); }}
+                        style={[s.countryItem, country === c.name && { backgroundColor: colors.primaryGlow }]}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={{ fontSize: 20 }}>{c.flag}</Text>
+                        <Text style={[s.countryItemText, { color: country === c.name ? colors.primary : colors.text }]}>{c.name}</Text>
+                        {country === c.name && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  {errors.country && <Text style={{ color: colors.error, fontSize: 12, marginTop: 4, marginBottom: 4 }}>{errors.country}</Text>}
+
+                  <TouchableOpacity onPress={nextStep} disabled={loading} activeOpacity={0.85} style={s.btnWrap}>
                     <LinearGradient colors={colors.gradPrimary} start={{ x:0,y:0 }} end={{ x:1,y:1 }} style={[s.btn, loading && { opacity:0.7 }]}>
                       {loading ? <ActivityIndicator color="#FFF" /> : (
                         <>
-                          <Text style={s.btnText}>Create account</Text>
+                          <Text style={s.btnText}>Hesap Oluştur</Text>
                           <Ionicons name="checkmark-circle" size={18} color="#FFF" />
                         </>
                       )}
@@ -271,20 +345,20 @@ export default function RegisterScreen({ navigation }) {
                 </>
               )}
 
-              {step === 2 && (
+              {step === 3 && (
                 <View style={s.successWrap}>
                   <LinearGradient colors={colors.gradPrimary} start={{ x:0,y:0 }} end={{ x:1,y:1 }} style={s.successIcon}>
                     <Ionicons name="checkmark-circle" size={48} color="#FFF" />
                   </LinearGradient>
-                  <Text style={[s.successTitle, { color: colors.text }]}>You're in! 🎉</Text>
-                  <Text style={[s.successSub, { color: colors.textMuted }]}>Welcome to SocialBeats</Text>
+                  <Text style={[s.successTitle, { color: colors.text }]}>Hoş geldin! 🎉</Text>
+                  <Text style={[s.successSub, { color: colors.textMuted }]}>SocialBeats'e katıldın</Text>
                   <TouchableOpacity
                     onPress={() => navigation.navigate('Login')}
                     activeOpacity={0.85}
                     style={[s.btnWrap, { width: '100%' }]}
                   >
                     <LinearGradient colors={colors.gradPrimary} start={{ x:0,y:0 }} end={{ x:1,y:1 }} style={s.btn}>
-                      <Text style={s.btnText}>Sign In</Text>
+                      <Text style={s.btnText}>Giriş Yap</Text>
                       <Ionicons name="arrow-forward" size={18} color="#FFF" />
                     </LinearGradient>
                   </TouchableOpacity>
@@ -292,7 +366,7 @@ export default function RegisterScreen({ navigation }) {
               )}
             </View>
 
-            {step < 2 && (
+            {step < 3 && (
               <View style={s.footer}>
                 <Text style={[s.footerText, { color: colors.textMuted }]}>Already have an account? </Text>
                 <TouchableOpacity onPress={() => navigation.navigate('Login')}>
@@ -397,5 +471,25 @@ function createStyles(colors, insets) {
     footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
     footerText: { fontSize: 14 },
     footerLink: { fontSize: 14, fontWeight: '700' },
+
+    // Identity step
+    fieldLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginTop: 8, marginBottom: 6 },
+    genderRow: { flexDirection: 'row', gap: 12, marginBottom: 4 },
+    genderBtn: {
+      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+      gap: 8, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5,
+    },
+    genderBtnText: { fontSize: 15, fontWeight: '700' },
+    countrySearchWrap: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, marginBottom: 6,
+    },
+    countrySearchInput: { flex: 1, fontSize: 14 },
+    countryList: { maxHeight: 200, borderRadius: 12 },
+    countryItem: {
+      flexDirection: 'row', alignItems: 'center', gap: 10,
+      paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10,
+    },
+    countryItemText: { flex: 1, fontSize: 14, fontWeight: '500' },
   });
 }

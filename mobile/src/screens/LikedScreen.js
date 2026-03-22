@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import NativeAdSlot from '../components/ads/NativeAdSlot';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getLikedTracks, toggleLike, subscribe as likedSubscribe } from '../lib/likedStore';
@@ -100,6 +101,7 @@ export default function LikedScreen({ navigation }) {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366F1" />
         }
+        ListFooterComponent={<NativeAdSlot colors={colors} />}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="heart-outline" size={64} color="#555" />
