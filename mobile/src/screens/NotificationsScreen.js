@@ -3,6 +3,7 @@
  * Transparent modal bottom sheet — matches screenshot exactly
  */
 import React, { useState, useCallback, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
   RefreshControl, ActivityIndicator, Dimensions,
@@ -16,50 +17,74 @@ const { height: SCREEN_H } = Dimensions.get('window');
 
 // Demo data — shown when API returns empty (web preview)
 const DEMO_NOTIFS = [
-  { id:'n1', type:'follow',  user:'DJ Aurora',    avatar:'https://i.pravatar.cc/80?u=dj1',  time:'5 dk',   read:false, preview:null, reference_id:null, actor_username:'djauroramusic' },
-  { id:'n2', type:'like',    user:'beatmaker99',   avatar:'https://i.pravatar.cc/80?u=bm2',  time:'12 dk',  read:false, preview:null, reference_id:'post1', actor_username:'beatmaker99' },
-  { id:'n3', type:'release', user:'The Midnight',  avatar:'https://picsum.photos/seed/alb/80/80', time:'1 sa', read:false, preview:'Heroes', reference_id:null, actor_username:'themidnight' },
-  { id:'n4', type:'message', user:'melodica_tr',   avatar:'https://i.pravatar.cc/80?u=ml3',  time:'2 sa',   read:true,  preview:null, reference_id:null, actor_username:'melodica_tr' },
-  { id:'n5', type:'playlist',user:'Discover',      avatar:'https://picsum.photos/seed/disc/80/80', time:'1 gün', read:true, preview:'Haftalık keşif listeniz güncellendi', reference_id:null, actor_username:null },
-  { id:'n6', type:'follow',  user:'techno.vibes',  avatar:'https://i.pravatar.cc/80?u=tv4',  time:'1 gün',  read:true,  preview:'ve 2 kişi daha', reference_id:null, actor_username:'technovibes' },
-  { id:'n7', type:'like',    user:'Paylaşımın',    avatar:'https://picsum.photos/seed/post3/80/80', time:'2 gün', read:true, preview:'142 beğeni aldı 🔥', reference_id:'post3', actor_username:null },
+  { id:'n1',  type:'follow_request', user:'nova.beats',    avatar:'https://i.pravatar.cc/80?u=nb1',  time:'2 dk',  read:false, preview:null, reference_id:'req1', actor_username:'nova.beats' },
+  { id:'n2',  type:'follow',         user:'DJ Aurora',     avatar:'https://i.pravatar.cc/80?u=dj1',  time:'5 dk',  read:false, preview:null, reference_id:null,   actor_username:'djauroramusic' },
+  { id:'n3',  type:'like',           user:'beatmaker99',   avatar:'https://i.pravatar.cc/80?u=bm2',  time:'12 dk', read:false, preview:null, reference_id:'post1', actor_username:'beatmaker99' },
+  { id:'n4',  type:'comment',        user:'melodica_tr',   avatar:'https://i.pravatar.cc/80?u=ml3',  time:'30 dk', read:false, preview:'Harika bir parça 🔥', reference_id:'post1', actor_username:'melodica_tr' },
+  { id:'n5',  type:'mention',        user:'synthwave_fan', avatar:'https://i.pravatar.cc/80?u=sw5',  time:'1 sa',  read:false, preview:'bu parçayı mutlaka dinle', reference_id:'post2', actor_username:'synthwave_fan' },
+  { id:'n6',  type:'follow_accepted',user:'The Midnight',  avatar:'https://picsum.photos/seed/tm/80/80', time:'2 sa', read:true, preview:null, reference_id:null, actor_username:'themidnight' },
+  { id:'n7',  type:'release',        user:'The Midnight',  avatar:'https://picsum.photos/seed/alb/80/80', time:'3 sa', read:true, preview:'Heroes', reference_id:null, actor_username:'themidnight' },
+  { id:'n8',  type:'message',        user:'techno.vibes',  avatar:'https://i.pravatar.cc/80?u=tv4',  time:'1 gün', read:true,  preview:null, reference_id:null, actor_username:'technovibes' },
+  { id:'n9',  type:'playlist',       user:'Discover',      avatar:'https://picsum.photos/seed/disc/80/80', time:'1 gün', read:true, preview:'Haftalık keşif listeniz güncellendi', reference_id:null, actor_username:null },
+  { id:'n10', type:'story_react',    user:'kara.müzik',    avatar:'https://i.pravatar.cc/80?u=km6',  time:'2 gün', read:true,  preview:null, reference_id:null, actor_username:'karamuzik' },
 ];
 
 const TYPE_META = {
-  like:        { icon: 'heart',               colorKey: 'iconCoral'   },
-  comment:     { icon: 'chatbubble',          colorKey: 'iconViolet'  },
-  follow:      { icon: 'person-add',          colorKey: 'iconCyan'    },
-  mention:     { icon: 'at',                  colorKey: 'iconAmber'   },
-  share:       { icon: 'share-social',        colorKey: 'iconGreen'   },
-  playlist:    { icon: 'musical-notes',       colorKey: 'iconBlue'    },
-  live:        { icon: 'radio',               colorKey: 'iconPink'    },
-  release:     { icon: 'disc',               colorKey: 'iconViolet'  },
-  story_react: { icon: 'heart-circle',        colorKey: 'iconCoral'   },
-  story_reply: { icon: 'chatbubble-ellipses', colorKey: 'iconViolet'  },
-  message:     { icon: 'mail',               colorKey: 'iconGreen'   },
+  like:            { icon: 'heart',               colorKey: 'iconCoral'   },
+  comment:         { icon: 'chatbubble',           colorKey: 'iconViolet'  },
+  reply:           { icon: 'return-down-forward',  colorKey: 'iconViolet'  },
+  follow:          { icon: 'person-add',           colorKey: 'iconCyan'    },
+  follow_request:  { icon: 'person-add-outline',   colorKey: 'iconAmber'   },
+  follow_accepted: { icon: 'checkmark-circle',     colorKey: 'iconGreen'   },
+  friend_request:  { icon: 'person-add-outline',   colorKey: 'iconAmber'   },
+  friend_accepted: { icon: 'checkmark-circle',     colorKey: 'iconGreen'   },
+  mention:         { icon: 'at',                   colorKey: 'iconAmber'   },
+  share:           { icon: 'share-social',         colorKey: 'iconGreen'   },
+  playlist:        { icon: 'musical-notes',        colorKey: 'iconBlue'    },
+  live:            { icon: 'radio',                colorKey: 'iconPink'    },
+  release:         { icon: 'disc',                 colorKey: 'iconViolet'  },
+  story_react:     { icon: 'heart-circle',         colorKey: 'iconCoral'   },
+  story_reaction:  { icon: 'heart-circle',         colorKey: 'iconCoral'   }, // backend alias
+  story_reply:     { icon: 'chatbubble-ellipses',  colorKey: 'iconViolet'  },
+  message:         { icon: 'mail',                 colorKey: 'iconGreen'   },
+  new_message:     { icon: 'mail',                 colorKey: 'iconGreen'   },
 };
 
 const TYPE_LABEL = {
-  like:        'paylaşımını beğendi',
-  comment:     'gönderine yorum yaptı',
-  follow:      'seni takip etmeye başladı',
-  mention:     'senden bahsetti',
-  share:       'parçanı paylaştı',
-  playlist:    '',   // preview used directly
-  live:        'canlı yayına başladı',
-  release:     'yeni albüm yayınladı:',
-  story_react: 'hikayene tepki verdi',
-  story_reply: 'hikayeni yanıtladı',
-  message:     'sana mesaj attı',
+  like:            'paylaşımını beğendi',
+  comment:         'gönderine yorum yaptı',
+  reply:           'yorumuna yanıt verdi',
+  follow:          'seni takip etmeye başladı',
+  follow_request:  'seni takip etmek istiyor',
+  follow_accepted: 'takip isteğini kabul etti',
+  friend_request:  'sana arkadaşlık isteği gönderdi',
+  friend_accepted: 'arkadaşlık isteğini kabul etti',
+  mention:         'senden bahsetti',
+  share:           'parçanı paylaştı',
+  playlist:        '',
+  live:            'canlı yayına başladı',
+  release:         'yeni albüm yayınladı:',
+  story_react:     'hikayene tepki verdi',
+  story_reaction:  'hikayene tepki verdi',
+  story_reply:     'hikayeni yanıtladı',
+  message:         'sana mesaj attı',
+  new_message:     'sana mesaj attı',
 };
 
 function resolveNavigation(notif, navigation) {
   const { type, reference_id: refId, actor_username: username } = notif;
   switch (type) {
+    case 'follow_request':
+    case 'friend_request':
+      if (username) navigation.navigate('UserProfile', { username, requestId: refId, notifId: notif.id });
+      break;
     case 'follow':
+    case 'follow_accepted':
+    case 'friend_accepted':
     case 'live':
       if (username) navigation.navigate('UserProfile', { username });
       break;
+    case 'reply':
     case 'like':
     case 'comment':
     case 'mention':
@@ -74,36 +99,84 @@ function resolveNavigation(notif, navigation) {
     case 'story_reply':
       navigation.navigate('StoryArchive');
       break;
+    case 'message':
+    case 'new_message':
+      if (refId) navigation.navigate('ChatDetail', { conversationId: refId });
+      else if (username) navigation.navigate('UserProfile', { username });
+      break;
     default:
       if (username) navigation.navigate('UserProfile', { username });
   }
 }
 
+function timeAgo(iso) {
+  if (!iso) return '';
+  try {
+    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (diff < 60)   return `${diff} sn`;
+    if (diff < 3600) return `${Math.floor(diff / 60)} dk`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} sa`;
+    return `${Math.floor(diff / 86400)} gün`;
+  } catch { return ''; }
+}
+
+// Types where body = "username action" full sentence — don't use as preview
+const LABEL_TYPES = new Set(['follow','follow_request','follow_accepted','friend_request','friend_accepted','live','release','story_react','story_reaction','story_reply','message','new_message','playlist']);
+
 function normaliseNotif(n) {
+  const username = n.actor_username || n.from_username || n.from_user?.username || n.user || 'user';
+  const rawTime  = n.time_ago || (n.created_at ? timeAgo(n.created_at) : '');
+  const type     = n.type || n.notification_type || 'like';
+  // Only use body as supplementary preview for content types (comment, like, mention, reply)
+  // For other types body IS the full sentence — skip it to avoid duplication
+  const bodyAsPreview = LABEL_TYPES.has(type) ? null : (n.body || null);
+  const preview  = n.content || n.preview || bodyAsPreview || null;
   return {
     id:             n.id || n._id || String(Math.random()),
-    type:           n.type || n.notification_type || 'like',
-    user:           n.actor_username || n.from_user?.username || n.user || 'user',
-    avatar:         n.actor_avatar || n.from_user?.avatar_url || `https://i.pravatar.cc/80?u=${n.actor_username || n.id}`,
-    time:           n.time_ago || n.created_at || '',
+    type,
+    user:           username,
+    avatar:         n.actor_avatar || n.from_avatar || n.from_user?.avatar_url || `https://i.pravatar.cc/80?u=${username}`,
+    time:           rawTime,
     read:           n.is_read ?? n.read ?? false,
-    preview:        n.content || n.preview || null,
+    preview,
     reference_id:   n.reference_id || n.ref_id || null,
-    actor_username: n.actor_username || null,
+    actor_username: username,
   };
 }
 
-function NotifItem({ item, colors, onPress }) {
+function NotifItem({ item, colors, onPress, token, onUpdate, navigation }) {
   const meta      = TYPE_META[item.type]  || TYPE_META.like;
-  const label     = TYPE_LABEL[item.type] || 'bildirdi';
+  const label     = TYPE_LABEL[item.type] ?? 'bildirdi';
   const iconColor = colors[meta.colorKey] || colors.primary;
   const isUnread  = !item.read;
+  const [reqState, setReqState] = React.useState('pending'); // pending | accepted | rejected | loading
 
-  const message = item.preview && !label
-    ? item.preview                                       // playlist type — preview is the full message
-    : item.preview && label
-    ? `${item.user} ${label} "${item.preview}"`
-    : `${item.user} ${label}`;
+
+  const handleAccept = async () => {
+    if (!item.reference_id) return;
+    setReqState('loading');
+    try {
+      await api.post(`/social/follow-request/${item.reference_id}/accept`, {}, token);
+      try { await api.delete(`/notifications/${item.id}`, token); } catch {}
+      setReqState('accepted');
+      onUpdate?.(item.id, 'accepted');
+    } catch {
+      setReqState('pending');
+    }
+  };
+
+  const handleReject = async () => {
+    if (!item.reference_id) return;
+    setReqState('loading');
+    try {
+      await api.post(`/social/follow-request/${item.reference_id}/reject`, {}, token);
+      try { await api.delete(`/notifications/${item.id}`, token); } catch {}
+      setReqState('rejected');
+      onUpdate?.(item.id, 'rejected');
+    } catch {
+      setReqState('pending');
+    }
+  };
 
   return (
     <TouchableOpacity
@@ -115,27 +188,56 @@ function NotifItem({ item, colors, onPress }) {
       onPress={() => onPress(item)}
       activeOpacity={0.7}
     >
-      {/* Avatar + badge */}
-      <View style={ni.avatarWrap}>
+      {/* Avatar + badge — tıklanınca profil */}
+      <TouchableOpacity
+        style={ni.avatarWrap}
+        onPress={() => item.actor_username && navigation.navigate('UserProfile', { username: item.actor_username })}
+        activeOpacity={0.8}
+      >
         <Image source={{ uri: item.avatar }} style={ni.avatar} />
         <View style={[ni.badge, { backgroundColor: iconColor, borderColor: '#0D0A1A' }]}>
           <Ionicons name={meta.icon} size={10} color="#FFF" />
         </View>
-      </View>
+      </TouchableOpacity>
 
-      {/* Text */}
+      {/* Text + actions */}
       <View style={ni.content}>
         <Text
           style={[
             ni.msg,
             { color: isUnread ? colors.text : colors.textSecondary,
-              fontWeight: isUnread ? '600' : '400' },
+              fontWeight: isUnread ? '400' : '400' },
           ]}
           numberOfLines={2}
         >
-          {message}
+          <Text
+            style={{ fontWeight: '700', color: isUnread ? colors.text : colors.textSecondary }}
+            onPress={() => item.actor_username && navigation.navigate('UserProfile', { username: item.actor_username })}
+          >{item.user}</Text>
+          {label ? ` ${label}` : ''}
+          {item.preview ? `: "${item.preview}"` : ''}
         </Text>
         <Text style={[ni.time, { color: colors.textMuted }]}>{item.time} önce</Text>
+
+        {item.type === 'follow_request' && reqState === 'pending' && (
+          <View style={ni.reqActions}>
+            <TouchableOpacity style={ni.acceptBtn} onPress={handleAccept}>
+              <Text style={ni.acceptTx}>Kabul Et</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={ni.rejectBtn} onPress={handleReject}>
+              <Text style={ni.rejectTx}>Reddet</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {item.type === 'follow_request' && reqState === 'loading' && (
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 8 }} />
+        )}
+        {item.type === 'follow_request' && reqState === 'accepted' && (
+          <Text style={[ni.reqDone, { color: colors.iconGreen || '#4ADE80' }]}>Kabul edildi</Text>
+        )}
+        {item.type === 'follow_request' && reqState === 'rejected' && (
+          <Text style={[ni.reqDone, { color: colors.textMuted }]}>Reddedildi</Text>
+        )}
       </View>
 
       {/* Unread dot */}
@@ -145,14 +247,20 @@ function NotifItem({ item, colors, onPress }) {
 }
 
 const ni = StyleSheet.create({
-  row:       { flexDirection:'row', alignItems:'center', paddingHorizontal:20, paddingVertical:14, gap:12, borderBottomWidth:1 },
-  avatarWrap:{ position:'relative', flexShrink:0 },
-  avatar:    { width:46, height:46, borderRadius:23 },
-  badge:     { position:'absolute', bottom:-2, right:-2, width:20, height:20, borderRadius:10, alignItems:'center', justifyContent:'center', borderWidth:2 },
-  content:   { flex:1 },
-  msg:       { fontSize:13, lineHeight:19 },
-  time:      { fontSize:11, marginTop:4 },
-  dot:       { width:8, height:8, borderRadius:4, flexShrink:0, alignSelf:'center' },
+  row:        { flexDirection:'row', alignItems:'center', paddingHorizontal:20, paddingVertical:14, gap:12, borderBottomWidth:1 },
+  avatarWrap: { position:'relative', flexShrink:0 },
+  avatar:     { width:46, height:46, borderRadius:23 },
+  badge:      { position:'absolute', bottom:-2, right:-2, width:20, height:20, borderRadius:10, alignItems:'center', justifyContent:'center', borderWidth:2 },
+  content:    { flex:1 },
+  msg:        { fontSize:13, lineHeight:19 },
+  time:       { fontSize:11, marginTop:4 },
+  dot:        { width:8, height:8, borderRadius:4, flexShrink:0, alignSelf:'center' },
+  reqActions: { flexDirection:'row', gap:8, marginTop:8 },
+  acceptBtn:  { paddingHorizontal:16, paddingVertical:6, borderRadius:20, backgroundColor:'#C084FC' },
+  acceptTx:   { fontSize:12, fontWeight:'700', color:'#fff' },
+  rejectBtn:  { paddingHorizontal:16, paddingVertical:6, borderRadius:20, backgroundColor:'rgba(255,255,255,0.08)', borderWidth:1, borderColor:'rgba(255,255,255,0.12)' },
+  rejectTx:   { fontSize:12, fontWeight:'600', color:'rgba(248,248,248,0.6)' },
+  reqDone:    { fontSize:12, fontWeight:'600', marginTop:6 },
 });
 
 export default function NotificationsScreen({ navigation }) {
@@ -178,6 +286,8 @@ export default function NotificationsScreen({ navigation }) {
 
   useEffect(() => { loadNotifications(); }, [loadNotifications]);
 
+  useFocusEffect(useCallback(() => { loadNotifications(); }, [loadNotifications]));
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadNotifications();
@@ -198,6 +308,13 @@ export default function NotificationsScreen({ navigation }) {
     markRead(item.id);
     resolveNavigation(item, navigation);
   }, [markRead, navigation]);
+
+  const handleRequestUpdate = useCallback((notifId, result) => {
+    // Kısa gecikme — kullanıcı "Kabul edildi / Reddedildi" yazısını görsün
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== notifId));
+    }, result === 'accepted' ? 1200 : 600);
+  }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -239,7 +356,7 @@ export default function NotificationsScreen({ navigation }) {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => (
-              <NotifItem item={item} colors={colors} onPress={handlePress} />
+              <NotifItem item={item} colors={colors} onPress={handlePress} token={token} onUpdate={handleRequestUpdate} navigation={navigation} />
             )}
             ListEmptyComponent={
               <View style={s.empty}>

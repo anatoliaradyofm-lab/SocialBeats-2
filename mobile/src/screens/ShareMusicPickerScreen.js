@@ -66,7 +66,7 @@ export default function ShareMusicPickerScreen({ route, navigation }) {
   }, [loadDiscover]);
 
   const shareMusic = async (song) => {
-    const songId = song.id || song.song_id || song.video_id || song.youtube_id;
+    const songId = song.id || song.song_id;
     if (!token || !conversationId || !songId || sending) return;
     setSending(true);
     try {

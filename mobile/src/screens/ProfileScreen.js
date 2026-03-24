@@ -276,11 +276,18 @@ export default function ProfileScreen({ navigation }) {
               <Ionicons name="create-outline" size={15} color="#F8F8F8" />
               <Text style={s.editTx}>Profili Düzenle</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.insightBtn} onPress={() => navigation.navigate('ProfileStats')}>
-              <Ionicons name="bar-chart-outline" size={18} color="#C084FC" />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.insightBtn} onPress={() => navigation.navigate('ProfileQR')}>
-              <Ionicons name="qr-code-outline" size={18} color="#C084FC" />
+            <TouchableOpacity style={s.statsBtn} onPress={() => navigation.navigate('ProfileStats')}>
+              <LinearGradient
+                colors={['#C084FC', '#A855F7']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={s.statsBtnGrad}
+              >
+                <View style={s.miniChart}>
+                  {[0.45, 1, 0.65, 0.85].map((h, i) => (
+                    <View key={i} style={[s.miniBar, { height: 13 * h, opacity: i === 1 ? 1 : 0.6 }]} />
+                  ))}
+                </View>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         </View>
@@ -382,7 +389,7 @@ export default function ProfileScreen({ navigation }) {
               <View style={s.sheetHandle} />
               {[
                 { icon: 'settings-outline',  color: '#C084FC', label: 'Ayarlar',      nav: 'Settings'      },
-                { icon: 'bar-chart-outline', color: '#34D399', label: 'İstatistikler', nav: 'ProfileStats'  },
+                { icon: 'trending-up-outline', color: '#C084FC', label: 'İstatistikler', nav: 'ProfileStats'  },
               ].map(item => (
                 <TouchableOpacity key={item.nav} style={s.menuRow} onPress={() => { setMenuVisible(false); navigation.navigate(item.nav); }}>
                   <View style={[s.menuIcon, { backgroundColor: item.color + '22' }]}>
@@ -411,7 +418,7 @@ export default function ProfileScreen({ navigation }) {
               <View style={s.sheetHandle} />
               {[
                 { icon: 'settings-outline',  color: '#C084FC', label: 'Ayarlar',      nav: 'Settings'      },
-                { icon: 'bar-chart-outline', color: '#34D399', label: 'İstatistikler', nav: 'ProfileStats'  },
+                { icon: 'trending-up-outline', color: '#C084FC', label: 'İstatistikler', nav: 'ProfileStats'  },
               ].map(item => (
                 <TouchableOpacity key={item.nav} style={s.menuRow} onPress={() => { setMenuVisible(false); navigation.navigate(item.nav); }}>
                   <View style={[s.menuIcon, { backgroundColor: item.color + '22' }]}>
@@ -488,8 +495,13 @@ const s = StyleSheet.create({
                 backgroundColor: 'rgba(255,255,255,0.07)', paddingVertical: 12, borderRadius: 24,
                 borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
   editTx:     { color: '#F8F8F8', fontSize: 14, fontWeight: '600' },
-  insightBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(192,132,252,0.10)',
-                alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(192,132,252,0.25)' },
+  insightBtn:   { width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(192,132,252,0.10)',
+                  alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(192,132,252,0.25)' },
+  statsBtn:     { width: 46, height: 46, borderRadius: 16, overflow: 'hidden',
+                  shadowColor: '#C084FC', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.45, shadowRadius: 10, elevation: 8 },
+  statsBtnGrad: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  miniChart:    { flexDirection: 'row', alignItems: 'flex-end', gap: 3 },
+  miniBar:      { width: 4, borderRadius: 2, backgroundColor: '#fff' },
 
   /* Highlights */
   highlightsContent: { paddingHorizontal: 20, gap: 16 },

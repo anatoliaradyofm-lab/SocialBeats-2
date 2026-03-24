@@ -121,19 +121,21 @@ async def _sc_search(q: str, limit: int, _retried: bool = False) -> list:
                     continue
 
                 track_id = str(t["id"])
-                # Cache transcoding URL in Redis so /stream/{id} can resolve it later
-                await redis_client.set(f"sc_transcoding:{track_id}", tc["url"], ex=3600)  # 1h
+                title  = t.get("title", "")
+                artist = t.get("user", {}).get("username", "")
+                # Cache transcoding URL + meta in Redis so /stream/{id} can resolve later
+                await redis_client.set(f"sc_transcoding:{track_id}", tc["url"], ex=3600)
+                await redis_client.set(f"sc_meta:{track_id}", json.dumps({"title": title, "artist": artist}), ex=3600)
 
                 tracks.append({
                     "id":          track_id,
-                    "title":       t.get("title", ""),
-                    "artist":      t.get("user", {}).get("username", ""),
-                    "artist_name": t.get("user", {}).get("username", ""),
+                    "title":       title,
+                    "artist":      artist,
+                    "artist_name": artist,
                     "cover_url":   (t.get("artwork_url") or "").replace("-large", "-t500x500"),
                     "thumbnail":   (t.get("artwork_url") or "").replace("-large", "-t500x500"),
                     "duration":    t.get("duration", 0) // 1000,
                     "source":      "soundcloud",
-                    # Relative URL — mobile PlayerContext resolves this to CDN URL at play time
                     "audio_url":   f"/music-hybrid/stream/{track_id}",
                 })
                 if len(tracks) >= limit:
@@ -194,40 +196,59 @@ async def _audius_search(q: str, limit: int = 15) -> list:
 @music_hybrid_router.get("/stream/{track_id}")
 async def get_stream_url(track_id: str):
     """
-    Resolves a SoundCloud track_id → CDN audio URL.
-    Flow: Redis transcoding_url cache → SC v2 API → CDN URL → Redis 5min cache → return
+    Resolves audio URL for a track.
+    Flow: Redis CDN cache → SC transcoding → SC retry (fresh client_id) → Audius fallback
     """
     # Fast path: CDN URL already cached
     cdn_key = f"sc_cdn:{track_id}"
     cached_cdn = await redis_client.get(cdn_key)
     if cached_cdn:
-        return {"url": cached_cdn}
+        return {"url": cached_cdn, "source": "soundcloud"}
 
     # Get the transcoding URL stored during search
     transcoding_url = await redis_client.get(f"sc_transcoding:{track_id}")
-    if not transcoding_url:
-        raise HTTPException(
-            status_code=404,
-            detail="Track not in cache. Search for it again to refresh."
-        )
 
-    cid = await sc_scraper.get_client_id()
-    if not cid:
-        raise HTTPException(503, detail="SoundCloud client unavailable")
+    if transcoding_url:
+        cid = await sc_scraper.get_client_id()
+        cdn_url = None
 
-    cdn_url = await _resolve_transcoding(transcoding_url, cid)
-
-    if cdn_url is None:
-        # client_id might have expired — refresh and retry once
-        cid = await sc_scraper.invalidate_and_refresh()
         if cid:
             cdn_url = await _resolve_transcoding(transcoding_url, cid)
 
-    if not cdn_url:
-        raise HTTPException(502, detail="Could not resolve audio stream from SoundCloud")
+        if cdn_url is None:
+            # client_id might have expired — refresh and retry once
+            cid = await sc_scraper.invalidate_and_refresh()
+            if cid:
+                cdn_url = await _resolve_transcoding(transcoding_url, cid)
 
-    await redis_client.set(cdn_key, cdn_url, ex=300)  # 5 min (CDN URLs expire ~1h, safe margin)
-    return {"url": cdn_url}
+        if cdn_url:
+            await redis_client.set(cdn_key, cdn_url, ex=300)
+            return {"url": cdn_url, "source": "soundcloud"}
+
+        logger.warning(f"[stream] SC failed for {track_id}, trying Audius fallback")
+
+    # ── Audius fallback ──────────────────────────────────────────────────────
+    # Use cached title+artist to search Audius for the same track
+    meta_raw = await redis_client.get(f"sc_meta:{track_id}")
+    if meta_raw:
+        try:
+            meta = json.loads(meta_raw)
+            query = f"{meta.get('title', '')} {meta.get('artist', '')}".strip()
+            if query:
+                audius_results = await _audius_search(query, limit=3)
+                if audius_results:
+                    best = audius_results[0]
+                    # Cache the Audius URL briefly so repeated plays are fast
+                    await redis_client.set(cdn_key, best["audio_url"], ex=300)
+                    logger.info(f"[stream] Audius fallback OK for '{query}'")
+                    return {"url": best["audio_url"], "source": "audius"}
+        except Exception as e:
+            logger.error(f"[stream] Audius fallback error: {e}")
+
+    if not transcoding_url:
+        raise HTTPException(404, detail="Track not in cache. Search for it again to refresh.")
+
+    raise HTTPException(502, detail="Could not resolve audio stream from SoundCloud or Audius")
 
 
 async def _resolve_transcoding(transcoding_url: str, client_id: str) -> str | None:

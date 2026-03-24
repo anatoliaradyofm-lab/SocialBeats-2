@@ -57,7 +57,6 @@ import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import AdSettingsScreen from '../screens/AdSettingsScreen';
 import LyricsScreen from '../screens/LyricsScreen';
 import ListeningHistoryScreen from '../screens/ListeningHistoryScreen';
-import ProfileQRScreen from '../screens/ProfileQRScreen';
 import LiveStreamScreen from '../screens/LiveStreamScreen';
 import EventsScreen from '../screens/EventsScreen';
 import AchievementsScreen from '../screens/AchievementsScreen';
@@ -186,7 +185,6 @@ function AppStack() {
           <Stack.Screen name="FindContacts" component={FindContactsScreen} />
           <Stack.Screen name="Lyrics" component={LyricsScreen} options={modalScreenOptions} />
           <Stack.Screen name="ListeningHistory" component={ListeningHistoryScreen} />
-          <Stack.Screen name="ProfileQR" component={ProfileQRScreen} options={modalScreenOptions} />
           <Stack.Screen name="LiveStream" component={LiveStreamScreen} options={modalScreenOptions} />
           <Stack.Screen name="Events" component={EventsScreen} />
           <Stack.Screen name="Achievements" component={AchievementsScreen} />

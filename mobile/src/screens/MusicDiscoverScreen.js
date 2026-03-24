@@ -97,14 +97,15 @@ export default function MusicDiscoverScreen({ navigation }) {
   };
 
   const toTrack = (item) => ({
-    id: item.id || item.youtube_id,
-    youtube_id: item.youtube_id || item.id?.replace?.(/^yt_/, '') || item.id,
-    title: item.title || item.name,
-    artist: item.artist || item.channel_title || '',
-    thumbnail: item.thumbnail || item.cover_url,
-    duration: item.duration || item.duration_seconds || 0,
+    id:         item.id,
+    title:      item.title || item.name,
+    artist:     item.artist || item.artist_name || '',
+    thumbnail:  item.thumbnail || item.cover_url,
+    cover_url:  item.cover_url || item.thumbnail,
+    audio_url:  item.audio_url || item.stream_url || null,
+    source:     item.source || '',
+    duration:   item.duration || item.duration_seconds || 0,
     view_count: item.view_count || item.viewCount || 0,
-    embed_url: item.embed_url || `https://www.youtube.com/embed/${item.youtube_id || item.id}`,
   });
 
   const renderTrack = ({ item, index }) => {

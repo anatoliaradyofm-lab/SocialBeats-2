@@ -2,11 +2,12 @@
  * UserProfileScreen — AURORA Design 2026
  * Music-first social profile · No photo/video posts · Follow system only
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
-  ActivityIndicator, Alert, Modal, Linking, Dimensions, Animated,
+  ActivityIndicator, Alert, Modal, Linking, Dimensions, Animated, RefreshControl, Share,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -59,7 +60,7 @@ export default function UserProfileScreen({ navigation, route }) {
   const { t }                     = useTranslation();
   const insets                    = useSafeAreaInsets();
   const { token, user: authUser } = useAuth();
-  const { username }              = route.params || {};
+  const { username, requestId, notifId } = route.params || {};
 
   const [user,           setUser]           = useState(null);
   const [loading,        setLoading]        = useState(true);
@@ -73,16 +74,29 @@ export default function UserProfileScreen({ navigation, route }) {
   const [showMenu,       setShowMenu]       = useState(false);
   const [showReport,     setShowReport]     = useState(false);
   const [showAvatar,     setShowAvatar]     = useState(false);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [reqStatus,      setReqStatus]      = useState(null); // null | 'loading_accept' | 'loading_reject' | 'accepted' | 'rejected'
   const scrollY = useRef(new Animated.Value(0)).current;
 
   const isOwnProfile = authUser?.username === username;
 
-  useEffect(() => {
+  const loadUser = useCallback(() => {
     if (!username) { setLoading(false); return; }
     api.get(`/user/${username}`, token)
       .then(setUser).catch(() => setUser(null))
       .finally(() => setLoading(false));
-  }, [username]);
+  }, [username, token]);
+
+  useEffect(() => { loadUser(); }, [loadUser]);
+
+  useFocusEffect(useCallback(() => {
+    if (!loading) loadUser();
+  }, [loadUser, loading]));
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadUser(); } finally { setRefreshing(false); }
+  }, [loadUser]);
 
   useEffect(() => {
     if (!user?.id || !token || isOwnProfile) return;
@@ -92,6 +106,8 @@ export default function UserProfileScreen({ navigation, route }) {
 
   useEffect(() => {
     if (!user?.id) return;
+    const locked = user.is_private && !user.is_following && authUser?.username !== username;
+    if (locked) return;
     api.get(`/users/${user.id}/now-playing`, token)
       .then(r => setNowPlaying(r?.now_playing || null)).catch(() => {});
     api.get(`/users/${user.id}/listening-stats`, token)
@@ -124,7 +140,9 @@ export default function UserProfileScreen({ navigation, route }) {
   }
 
   const avatar     = user.avatar_url || `https://i.pravatar.cc/200?u=${user.username}`;
-  const isFollowing = user.is_following || false;
+  const isFollowing  = user.is_following || false;
+  const isLocked     = user.is_locked || (user.is_private && !isFollowing && !isOwnProfile);
+  const requestStatus = user.friend_request_status || 'none';
 
   const genres = listenStats?.top_genres || [];
 
@@ -152,17 +170,11 @@ export default function UserProfileScreen({ navigation, route }) {
         style={StyleSheet.absoluteFill}
       />
 
-      {/* ── Sticky header (on scroll) ── */}
+      {/* ── Sticky header (on scroll) — sadece isim göster, butonlar floatBar'da sabit ── */}
       <Animated.View style={[s.stickyHdr, { paddingTop: insets.top, opacity: headerOpacity }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.stickyBack}>
-          <Ionicons name="chevron-back" size={22} color="#F8F8F8" />
-        </TouchableOpacity>
+        <View style={s.stickyBack} />
         <Text style={s.stickyName} numberOfLines={1}>{user.display_name || user.username}</Text>
-        {!isOwnProfile && (
-          <TouchableOpacity onPress={() => setShowMenu(true)} style={s.stickyMore}>
-            <Ionicons name="ellipsis-horizontal" size={20} color="#F8F8F8" />
-          </TouchableOpacity>
-        )}
+        <View style={s.stickyMore} />
       </Animated.View>
 
       {/* ── Floating buttons (before scroll) ── */}
@@ -170,11 +182,18 @@ export default function UserProfileScreen({ navigation, route }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.floatBtn}>
           <Ionicons name="chevron-back" size={20} color="#F8F8F8" />
         </TouchableOpacity>
-        {!isOwnProfile && (
-          <TouchableOpacity onPress={() => setShowMenu(true)} style={s.floatBtn}>
-            <Ionicons name="ellipsis-horizontal" size={20} color="#F8F8F8" />
+        <View style={s.floatRight}>
+          <TouchableOpacity style={s.floatBtn} onPress={() => {
+            Share.share({ message: `SocialBeats'te ${user.display_name || user.username} profilini gör: @${user.username}` }).catch(() => {});
+          }}>
+            <Ionicons name="share-outline" size={20} color="#F8F8F8" />
           </TouchableOpacity>
-        )}
+          {!isOwnProfile && (
+            <TouchableOpacity onPress={() => setShowMenu(true)} style={s.floatBtn}>
+              <Ionicons name="ellipsis-horizontal" size={20} color="#F8F8F8" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <Animated.ScrollView
@@ -185,6 +204,10 @@ export default function UserProfileScreen({ navigation, route }) {
         )}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh}
+            tintColor="#C084FC" colors={['#C084FC']} />
+        }
       >
         {/* hero gradient spacer */}
         <View style={s.heroBg} />
@@ -266,26 +289,98 @@ export default function UserProfileScreen({ navigation, route }) {
             </TouchableOpacity>
           </View>
 
+          {/* ── Takip isteği Kabul/Reddet (bildirimden gelince) ── */}
+          {requestId && reqStatus !== 'accepted' && reqStatus !== 'rejected' && (
+            <View style={s.reqRow}>
+              <View style={s.reqInfo}>
+                <Ionicons name="person-add-outline" size={16} color="#FBBF24" />
+                <Text style={s.reqTx}>Seni takip etmek istiyor</Text>
+              </View>
+              <View style={s.reqBtns}>
+                <TouchableOpacity
+                  style={[s.reqAccept, reqStatus === 'loading_accept' && { opacity: 0.6 }]}
+                  disabled={!!reqStatus}
+                  onPress={async () => {
+                    setReqStatus('loading_accept');
+                    try {
+                      await api.post(`/social/follow-request/${requestId}/accept`, {}, token);
+                      if (notifId) await api.delete(`/notifications/${notifId}`, token).catch(() => {});
+                      setReqStatus('accepted');
+                      setUser(u => ({ ...u, followers_count: (u.followers_count || 0) + 1 }));
+                    } catch (e) {
+                      setReqStatus(null);
+                      Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed'));
+                    }
+                  }}
+                >
+                  {reqStatus === 'loading_accept'
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={s.reqAcceptTx}>Kabul Et</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.reqReject, reqStatus === 'loading_reject' && { opacity: 0.6 }]}
+                  disabled={!!reqStatus}
+                  onPress={async () => {
+                    setReqStatus('loading_reject');
+                    try {
+                      await api.post(`/social/follow-request/${requestId}/reject`, {}, token);
+                      if (notifId) await api.delete(`/notifications/${notifId}`, token).catch(() => {});
+                      setReqStatus('rejected');
+                    } catch (e) {
+                      setReqStatus(null);
+                      Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed'));
+                    }
+                  }}
+                >
+                  {reqStatus === 'loading_reject'
+                    ? <ActivityIndicator size="small" color="#F87171" />
+                    : <Text style={s.reqRejectTx}>Reddet</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+          {requestId && reqStatus === 'accepted' && (
+            <View style={s.reqDone}>
+              <Ionicons name="checkmark-circle" size={16} color="#4ADE80" />
+              <Text style={[s.reqTx, { color:'#4ADE80' }]}>Takip isteği kabul edildi</Text>
+            </View>
+          )}
+          {requestId && reqStatus === 'rejected' && (
+            <View style={s.reqDone}>
+              <Ionicons name="close-circle" size={16} color="rgba(248,248,248,0.35)" />
+              <Text style={[s.reqTx, { color:'rgba(248,248,248,0.35)' }]}>Takip isteği reddedildi</Text>
+            </View>
+          )}
+
           {/* CTA buttons */}
           {!isOwnProfile && authUser && (
             <View style={s.ctaRow}>
               <TouchableOpacity
-                style={[s.followBtn, isFollowing && s.followBtnActive]}
+                style={[s.followBtn, isFollowing && s.followBtnActive, requestStatus === 'sent' && s.followBtnPending]}
+                disabled={requestStatus === 'sent'}
                 onPress={async () => {
                   try {
                     if (isFollowing) {
                       await api.delete(`/social/follow/${user.id}`, token);
                       setUser(u => ({ ...u, is_following: false, followers_count: (u.followers_count || 1) - 1 }));
                     } else {
-                      await api.post(`/social/follow/${user.id}`, {}, token);
-                      setUser(u => ({ ...u, is_following: true, followers_count: (u.followers_count || 0) + 1 }));
+                      const res = await api.post(`/social/follow/${user.id}`, {}, token);
+                      if (res?.status === 'request_sent') {
+                        setUser(u => ({ ...u, friend_request_status: 'sent' }));
+                      } else {
+                        setUser(u => ({ ...u, is_following: true, followers_count: (u.followers_count || 0) + 1 }));
+                      }
                     }
                   } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
                 }}
               >
-                <Ionicons name={isFollowing ? 'checkmark' : 'person-add-outline'} size={15} color={isFollowing ? '#C084FC' : '#fff'} />
+                <Ionicons
+                  name={isFollowing ? 'checkmark' : requestStatus === 'sent' ? 'time-outline' : isLocked ? 'lock-closed-outline' : 'person-add-outline'}
+                  size={15}
+                  color={isFollowing ? '#C084FC' : '#fff'}
+                />
                 <Text style={[s.followTx, isFollowing && s.followTxActive]}>
-                  {isFollowing ? 'Takip Ediliyor' : 'Takip Et'}
+                  {isFollowing ? 'Takip Ediliyor' : requestStatus === 'sent' ? 'İstek Gönderildi' : isLocked ? 'İstek Gönder' : 'Takip Et'}
                 </Text>
               </TouchableOpacity>
 
@@ -302,8 +397,23 @@ export default function UserProfileScreen({ navigation, route }) {
           )}
         </View>
 
+        {/* ── Private lock screen ── */}
+        {isLocked && (
+          <View style={s.privateLock}>
+            <View style={s.privateLockIcon}>
+              <Ionicons name="lock-closed" size={32} color="#C084FC" />
+            </View>
+            <Text style={s.privateLockTitle}>Bu hesap gizlidir</Text>
+            <Text style={s.privateLockSub}>
+              {requestStatus === 'sent'
+                ? 'Takip isteğiniz gönderildi, onay bekleniyor.'
+                : 'Paylaşımlarını görmek için takip isteği gönder.'}
+            </Text>
+          </View>
+        )}
+
         {/* ── Story highlights ── */}
-        <ProfileStoriesHighlights
+        {!isLocked && <ProfileStoriesHighlights
           userId={user?.id} username={user?.username} token={token}
           isOwnProfile={isOwnProfile}
           onNavigate={async (type, hl) => {
@@ -318,7 +428,37 @@ export default function UserProfileScreen({ navigation, route }) {
               } catch {}
             }
           }}
-        />
+        />}
+
+        {/* ── Taste Match (other users) ── */}
+        {!isOwnProfile && tasteMatch?.match_percentage != null ? (
+          <View style={s.section}>
+            <View style={s.tasteCard}>
+              <LinearGradient
+                colors={['rgba(192,132,252,0.12)', 'rgba(251,146,60,0.06)']}
+                style={StyleSheet.absoluteFill} />
+              <View style={[s.tasteGauge, { borderColor: tasteColor }]}>
+                <Text style={[s.tastePct, { color: tasteColor }]}>{tasteMatch.match_percentage}%</Text>
+                <Text style={s.tasteSub}>uyum</Text>
+              </View>
+              <View style={s.tasteRight}>
+                <Text style={s.tasteTitle}>🎶 Müzik Zevki Uyumu</Text>
+                {tasteMatch.common_genres?.length > 0 && (
+                  <View style={s.tagRow}>
+                    {tasteMatch.common_genres.slice(0, 3).map((g, i) => (
+                      <View key={i} style={s.tag}><Text style={s.tagTx}>{g}</Text></View>
+                    ))}
+                  </View>
+                )}
+                {tasteMatch.common_artists?.length > 0 && (
+                  <Text style={s.tasteArtistsTx} numberOfLines={1}>
+                    {tasteMatch.common_artists.slice(0, 3).join(' · ')}
+                  </Text>
+                )}
+              </View>
+            </View>
+          </View>
+        ) : null}
 
         {/* ── Müzik Kişilik Tipi ── */}
         {(() => { const p = getMusicPersonality(genres); return p ? (
@@ -337,7 +477,7 @@ export default function UserProfileScreen({ navigation, route }) {
         ) : null; })()}
 
         {/* ── Favori Sanatçılar ── */}
-        {displayFavArtists.length > 0 ? (
+        {!isLocked && displayFavArtists.length > 0 ? (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Favori Sanatçılar</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginHorizontal:-4}}>
@@ -419,38 +559,6 @@ export default function UserProfileScreen({ navigation, route }) {
             </View>
           </View>
         ) : null}
-
-        {/* ── Taste Match (other users) ── */}
-        {!isOwnProfile && tasteMatch?.match_percentage != null ? (
-          <View style={s.section}>
-            <View style={s.tasteCard}>
-              <LinearGradient
-                colors={['rgba(192,132,252,0.12)', 'rgba(251,146,60,0.06)']}
-                style={StyleSheet.absoluteFill} />
-              {/* Circular gauge */}
-              <View style={[s.tasteGauge, { borderColor: tasteColor }]}>
-                <Text style={[s.tastePct, { color: tasteColor }]}>{tasteMatch.match_percentage}%</Text>
-                <Text style={s.tasteSub}>uyum</Text>
-              </View>
-              <View style={s.tasteRight}>
-                <Text style={s.tasteTitle}>🎶 Müzik Zevki Uyumu</Text>
-                {tasteMatch.common_genres?.length > 0 && (
-                  <View style={s.tagRow}>
-                    {tasteMatch.common_genres.slice(0, 3).map((g, i) => (
-                      <View key={i} style={s.tag}><Text style={s.tagTx}>{g}</Text></View>
-                    ))}
-                  </View>
-                )}
-                {tasteMatch.common_artists?.length > 0 && (
-                  <Text style={s.tasteArtistsTx} numberOfLines={1}>
-                    {tasteMatch.common_artists.slice(0, 3).join(' · ')}
-                  </Text>
-                )}
-              </View>
-            </View>
-          </View>
-        ) : null}
-
 
         {/* ── Son Dinlenenler ── */}
         {displayRecentTracks.length > 0 ? (
@@ -591,7 +699,8 @@ const s = StyleSheet.create({
   stickyName:   { flex:1, color:'#F8F8F8', fontSize:16, fontWeight:'700', letterSpacing:-0.3 },
   stickyMore:   { padding:4 },
 
-  floatBar:     { position:'absolute', left:0, right:0, zIndex:30, flexDirection:'row', justifyContent:'space-between', paddingHorizontal:16 },
+  floatBar:     { position:'absolute', left:0, right:0, zIndex:30, flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingHorizontal:16 },
+  floatRight:   { flexDirection:'row', gap:8 },
   floatBtn:     { width:34, height:34, borderRadius:17, backgroundColor:'rgba(0,0,0,0.5)',
                   alignItems:'center', justifyContent:'center', borderWidth:1, borderColor:'rgba(255,255,255,0.14)' },
 
@@ -610,6 +719,20 @@ const s = StyleSheet.create({
 
   nameGroup:    { flexDirection:'row', alignItems:'center', gap:6, marginBottom:3 },
   displayName:  { fontSize:23, fontWeight:'800', color:'#F8F8F8', letterSpacing:-0.5 },
+
+  reqRow:       { backgroundColor:'rgba(251,191,36,0.08)', borderWidth:1, borderColor:'rgba(251,191,36,0.2)',
+                  borderRadius:16, padding:14, marginBottom:14, gap:10 },
+  reqInfo:      { flexDirection:'row', alignItems:'center', gap:8 },
+  reqTx:        { color:'rgba(248,248,248,0.7)', fontSize:13, fontWeight:'500' },
+  reqBtns:      { flexDirection:'row', gap:10 },
+  reqAccept:    { flex:1, backgroundColor:'#C084FC', borderRadius:12, paddingVertical:10,
+                  alignItems:'center', justifyContent:'center' },
+  reqAcceptTx:  { color:'#fff', fontSize:14, fontWeight:'700' },
+  reqReject:    { flex:1, backgroundColor:'rgba(248,113,113,0.12)', borderWidth:1, borderColor:'rgba(248,113,113,0.3)',
+                  borderRadius:12, paddingVertical:10, alignItems:'center', justifyContent:'center' },
+  reqRejectTx:  { color:'#F87171', fontSize:14, fontWeight:'600' },
+  reqDone:      { flexDirection:'row', alignItems:'center', gap:8, marginBottom:14,
+                  backgroundColor:'rgba(255,255,255,0.04)', borderRadius:12, padding:12 },
   handle:       { fontSize:14, color:'rgba(248,248,248,0.38)', marginBottom:10 },
   bio:          { fontSize:14, color:'rgba(248,248,248,0.62)', lineHeight:21, marginBottom:12 },
 
@@ -628,9 +751,16 @@ const s = StyleSheet.create({
   ctaRow:       { flexDirection:'row', gap:10 },
   followBtn:    { flex:1, flexDirection:'row', alignItems:'center', justifyContent:'center', gap:7,
                   backgroundColor:'#C084FC', paddingVertical:13, borderRadius:24 },
-  followBtnActive:{ backgroundColor:'rgba(192,132,252,0.12)', borderWidth:1.5, borderColor:'rgba(192,132,252,0.4)' },
+  followBtnActive: { backgroundColor:'rgba(192,132,252,0.12)', borderWidth:1.5, borderColor:'rgba(192,132,252,0.4)' },
+  followBtnPending:{ backgroundColor:'rgba(251,146,60,0.12)', borderWidth:1.5, borderColor:'rgba(251,146,60,0.4)' },
   followTx:     { color:'#fff', fontSize:14, fontWeight:'700' },
   followTxActive:{ color:'#C084FC' },
+
+  privateLock:      { alignItems:'center', paddingVertical:40, paddingHorizontal:32 },
+  privateLockIcon:  { width:64, height:64, borderRadius:32, backgroundColor:'rgba(192,132,252,0.12)',
+                      borderWidth:1.5, borderColor:'rgba(192,132,252,0.3)', alignItems:'center', justifyContent:'center', marginBottom:16 },
+  privateLockTitle: { fontSize:17, fontWeight:'700', color:'#F8F8F8', marginBottom:8 },
+  privateLockSub:   { fontSize:13, color:'rgba(248,248,248,0.45)', textAlign:'center', lineHeight:19 },
   msgBtn:       { flexDirection:'row', alignItems:'center', gap:7, paddingVertical:13, paddingHorizontal:20,
                   borderRadius:24, backgroundColor:'rgba(192,132,252,0.1)', borderWidth:1.5, borderColor:'rgba(192,132,252,0.3)' },
   msgTx:        { color:'#C084FC', fontSize:14, fontWeight:'600' },

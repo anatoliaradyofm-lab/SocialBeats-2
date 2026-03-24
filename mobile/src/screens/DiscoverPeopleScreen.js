@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
   Dimensions, ActivityIndicator, Modal, ScrollView, Animated,
-  RefreshControl, StatusBar, Platform,
+  RefreshControl, StatusBar, Platform, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -93,6 +93,15 @@ export default function DiscoverPeopleScreen({ navigation }) {
   const [tempCity, setTempCity] = useState('');
   const [tempGender, setTempGender] = useState('');
 
+  // User search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchFollowing, setSearchFollowing] = useState({});
+  const searchDebounceRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const [headerHeight, setHeaderHeight] = useState(108);
+
   const flatListRef = useRef(null);
   const followAnimations = useRef({});
   const touchStartY = useRef(0);
@@ -105,7 +114,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
 
   const ITEM_HEIGHT = Platform.OS === 'web'
     ? containerHeight
-    : SCREEN_HEIGHT - insets.top - insets.bottom;
+    : SCREEN_HEIGHT - insets.top - insets.bottom - headerHeight;
 
   const loadingMoreRef = useRef(false);
   const offsetRef      = useRef(0);
@@ -121,7 +130,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
     const { country, city, gender } = filtersRef.current;
     const currentOffset = reset ? 0 : offsetRef.current;
 
-    if (reset) { setLoading(true); offsetRef.current = 0; }
+    if (reset) { setLoading(true); setUsers([]); setActiveIndex(0); offsetRef.current = 0; }
     else { setLoadingMore(true); loadingMoreRef.current = true; }
 
     try {
@@ -152,6 +161,56 @@ export default function DiscoverPeopleScreen({ navigation }) {
     }
   }, [token]);
 
+  // User search
+  const runUserSearch = useCallback(async (q) => {
+    const trimmed = q.trim();
+    if (!trimmed || trimmed.length < 2) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const enc = encodeURIComponent(trimmed);
+      const res = await api.get(`/search?q=${enc}&type=users&limit=20`, token);
+      const list = res?.users || [];
+      const followMap = {};
+      list.forEach(u => { followMap[u.id] = u.is_following ?? false; });
+      setSearchFollowing(prev => ({ ...prev, ...followMap }));
+      setSearchResults(list);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+    if (searchQuery.trim().length >= 2) setSearchLoading(true);
+    searchDebounceRef.current = setTimeout(() => runUserSearch(searchQuery), 280);
+    return () => clearTimeout(searchDebounceRef.current);
+  }, [searchQuery]);
+
+  const handleSearchFollow = async (userId) => {
+    const isFollowing = searchFollowing[userId];
+    setSearchFollowing(prev => ({ ...prev, [userId]: !isFollowing }));
+    try {
+      if (isFollowing) {
+        await api.delete(`/social/follow/${userId}`, token);
+      } else {
+        await api.post(`/social/follow/${userId}`, {}, token);
+      }
+    } catch {
+      setSearchFollowing(prev => ({ ...prev, [userId]: isFollowing }));
+    }
+  };
+
   // İlk yükleme ve filtre değişimlerinde yeniden yükle
   useEffect(() => {
     if (!token) return;
@@ -179,7 +238,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
 
   const handleFollow = async (userId) => {
     try {
-      await api.post(`/social/friend-request/${userId}`, {}, token);
+      await api.post(`/social/follow/${userId}`, {}, token);
       setFollowedIds(prev => new Set([...prev, userId]));
 
       if (!followAnimations.current[userId]) {
@@ -212,6 +271,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 }).current;
 
   const applyFilter = () => {
+    setActiveIndex(0);
     setSelectedCountry(tempCountry);
     setSelectedCity(tempCity);
     setSelectedGender(tempGender);
@@ -219,6 +279,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
   };
 
   const clearFilter = () => {
+    setActiveIndex(0);
     setTempCountry('');
     setTempCity('');
     setTempGender('');
@@ -466,11 +527,13 @@ export default function DiscoverPeopleScreen({ navigation }) {
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <StatusBar barStyle="light-content" />
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('discover.suggestedUsers') || 'Discover People'}</Text>
-          <View style={{ width: 40 }} />
+          <View style={styles.headerRow}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>{t('discover.suggestedUsers') || 'Discover People'}</Text>
+            <View style={{ width: 40 }} />
+          </View>
         </View>
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#8B5CF6" />
@@ -483,23 +546,46 @@ export default function DiscoverPeopleScreen({ navigation }) {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('discover.suggestedUsers') || 'Discover People'}</Text>
-        <TouchableOpacity
-          onPress={() => { setTempCountry(selectedCountry); setTempCity(selectedCity); setTempGender(selectedGender); setFilterVisible(true); }}
-          style={[styles.filterBtn, hasActiveFilter && styles.filterBtnActive]}
-        >
-          <Ionicons name="options" size={22} color={hasActiveFilter ? '#fff' : '#D1D5DB'} />
-          {hasActiveFilter && <View style={styles.filterDot} />}
-        </TouchableOpacity>
+      {/* Header + Search — unified block */}
+      <View style={styles.header} onLayout={e => setHeaderHeight(e.nativeEvent.layout.height)}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t('discover.suggestedUsers') || 'Discover People'}</Text>
+          <TouchableOpacity
+            onPress={() => { setTempCountry(selectedCountry); setTempCity(selectedCity); setTempGender(selectedGender); setFilterVisible(true); }}
+            style={[styles.filterBtn, hasActiveFilter && styles.filterBtnActive]}
+          >
+            <Ionicons name="options" size={22} color={hasActiveFilter ? '#fff' : '#D1D5DB'} />
+            {hasActiveFilter && <View style={styles.filterDot} />}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.searchBarWrap}>
+          <Ionicons name="search" size={17} color={searchQuery.length > 0 ? '#C084FC' : '#6B7280'} />
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchBarInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Kullanıcı ara..."
+            placeholderTextColor="#6B7280"
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+          {searchLoading && <ActivityIndicator size="small" color="#C084FC" />}
+          {searchQuery.length > 0 && !searchLoading && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
+              <Ionicons name="close-circle" size={17} color="#6B7280" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      {/* Active filter badge */}
-      {hasActiveFilter && (
+      {/* Active filter badge — hidden during search */}
+      {hasActiveFilter && !searchQuery && (
         <View style={styles.filterBadgeRow}>
           <View style={styles.filterBadge}>
             <Ionicons name="options" size={14} color="#8B5CF6" />
@@ -517,8 +603,61 @@ export default function DiscoverPeopleScreen({ navigation }) {
         </View>
       )}
 
-      {/* Web: single-user full-screen view */}
-      {Platform.OS === 'web' && (
+      {/* Search results — shown when searchQuery >= 2 */}
+      {searchQuery.trim().length >= 2 && (
+        <View style={styles.searchResultsWrap}>
+          {searchLoading && searchResults.length === 0 ? (
+            <View style={styles.searchCenter}>
+              <ActivityIndicator size="large" color="#C084FC" />
+            </View>
+          ) : searchResults.length === 0 ? (
+            <View style={styles.searchCenter}>
+              <Ionicons name="people-outline" size={44} color="#4B5563" />
+              <Text style={styles.searchEmpty}>"{searchQuery}" için kullanıcı bulunamadı</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={searchResults}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={{ paddingVertical: 8 }}
+              renderItem={({ item }) => {
+                const isFollowed = searchFollowing[item.id] ?? (item.is_following ?? false);
+                return (
+                  <TouchableOpacity
+                    style={styles.searchUserRow}
+                    activeOpacity={0.8}
+                    onPress={() => navigation.navigate('UserProfile', { username: item.username })}
+                  >
+                    <Image
+                      source={{ uri: item.avatar_url || `https://i.pravatar.cc/80?u=${item.id}` }}
+                      style={styles.searchUserAvatar}
+                    />
+                    <View style={styles.searchUserInfo}>
+                      <Text style={styles.searchUserName} numberOfLines={1}>
+                        {item.display_name || item.username}
+                      </Text>
+                      <Text style={styles.searchUserSub} numberOfLines={1}>
+                        @{item.username}{item.followers_count ? ` · ${item.followers_count} takipçi` : ''}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.searchFollowBtn, isFollowed && styles.searchFollowBtnActive]}
+                      onPress={() => handleSearchFollow(item.id)}
+                    >
+                      <Text style={[styles.searchFollowBtnText, isFollowed && { color: '#9CA3AF' }]}>
+                        {isFollowed ? 'Takipte' : 'Takip Et'}
+                      </Text>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          )}
+        </View>
+      )}
+
+      {/* Web: single-user full-screen view — hidden during search */}
+      {Platform.OS === 'web' && !searchQuery && (
         <View style={{ flex: 1 }}>
           {users.length === 0 ? (
             <View style={styles.center}>
@@ -531,13 +670,13 @@ export default function DiscoverPeopleScreen({ navigation }) {
               </Text>
             </View>
           ) : (
-            renderUser({ item: users[activeIndex], index: activeIndex })
+            renderUser({ item: users[Math.min(activeIndex, users.length - 1)], index: Math.min(activeIndex, users.length - 1) })
           )}
         </View>
       )}
 
-      {/* Native: FlatList pagingEnabled */}
-      {Platform.OS !== 'web' && (
+      {/* Native: FlatList pagingEnabled — hidden during search */}
+      {Platform.OS !== 'web' && !searchQuery && (
       <FlatList
         ref={flatListRef}
         style={{ flex: 1 }}
@@ -623,7 +762,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
               </TouchableOpacity>
               {COUNTRIES.map((c) => (
                 <TouchableOpacity key={c.code} style={[styles.countryItem, tempCountry === c.name && styles.countryItemActive]} onPress={() => setTempCountry(c.name)}>
-                  <Text style={{ fontSize: 20 }}>{c.flag}</Text>
+                  <View style={styles.countryIcon}><Text style={{ fontSize: 20 }}>{c.flag}</Text></View>
                   <Text style={[styles.countryItemText, tempCountry === c.name && styles.countryItemTextActive]}>{c.name}</Text>
                   {tempCountry === c.name && <Ionicons name="checkmark" size={20} color="#8B5CF6" />}
                 </TouchableOpacity>
@@ -709,9 +848,11 @@ export default function DiscoverPeopleScreen({ navigation }) {
 const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: {
+    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10,
+    gap: 10,
+  },
+  headerRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'rgba(10,10,11,0.85)',
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
   },
   headerBtn: { padding: 6 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
@@ -722,7 +863,7 @@ const createStyles = (colors) => StyleSheet.create({
     borderRadius: 4, backgroundColor: '#EF4444',
   },
   filterBadgeRow: {
-    position: 'absolute', top: 52, left: 0, right: 0, zIndex: 10,
+    position: 'absolute', top: 104, left: 0, right: 0, zIndex: 10,
     paddingHorizontal: 16, paddingTop: 4,
   },
   filterBadge: {
@@ -873,7 +1014,7 @@ const createStyles = (colors) => StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContent: {
     backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingHorizontal: 20, paddingTop: 12, maxHeight: SCREEN_HEIGHT * 0.7,
+    paddingHorizontal: 20, paddingTop: 12, maxHeight: SCREEN_HEIGHT * 0.9,
   },
   modalHandle: {
     width: 40, height: 4, borderRadius: 2,
@@ -884,7 +1025,8 @@ const createStyles = (colors) => StyleSheet.create({
   },
   modalTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
   filterLabel: { fontSize: 14, fontWeight: '600', color: '#9CA3AF', marginBottom: 10, textTransform: 'uppercase' },
-  countryList: { maxHeight: 300, marginBottom: 16 },
+  countryList: { maxHeight: SCREEN_HEIGHT * 0.45, marginBottom: 16 },
+  countryIcon: { width: 28, alignItems: 'center' },
   countryItem: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 4,
@@ -914,4 +1056,42 @@ const createStyles = (colors) => StyleSheet.create({
     borderRadius: 24, backgroundColor: '#8B5CF6',
   },
   applyBtnText: { color: colors.text, fontSize: 16, fontWeight: '700' },
+
+  // Search bar — inside unified header block
+  searchBarWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
+    paddingHorizontal: 12, paddingVertical: 9,
+  },
+  searchBarInput: {
+    flex: 1, fontSize: 15, color: colors.text,
+  },
+  searchResultsWrap: {
+    flex: 1,
+  },
+  searchCenter: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60,
+  },
+  searchEmpty: {
+    color: '#6B7280', fontSize: 15, textAlign: 'center', marginTop: 8,
+  },
+  searchUserRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  searchUserAvatar: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  searchUserInfo: { flex: 1 },
+  searchUserName: { fontSize: 15, fontWeight: '600', color: colors.text },
+  searchUserSub: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  searchFollowBtn: {
+    paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20,
+    backgroundColor: '#C084FC',
+  },
+  searchFollowBtnActive: { backgroundColor: 'rgba(255,255,255,0.08)' },
+  searchFollowBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
 });

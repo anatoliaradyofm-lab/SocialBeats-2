@@ -14,7 +14,7 @@ export async function addToListeningHistory(track) {
             artist: track.artist || '',
             thumbnail: track.thumbnail || track.cover_url || '',
             playedAt: new Date().toISOString(),
-            source: track.source || 'youtube',
+            source: track.source || '',
         };
         history.unshift(entry);
         const trimmed = history.slice(0, MAX_HISTORY);

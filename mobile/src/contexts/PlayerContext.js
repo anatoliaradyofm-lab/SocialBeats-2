@@ -12,15 +12,15 @@ const MUSIC_API_BASE = process.env.EXPO_PUBLIC_MUSIC_API_URL || 'https://music-b
 function normalizeTrack(track) {
   if (!track) return null;
   return {
-    id: track.id || track.song_id,
-    title: track.title || track.name,
-    artist: track.artist || '',
+    id:        track.id || track.song_id,
+    title:     track.title || track.name,
+    artist:    track.artist || track.artist_name || '',
     thumbnail: track.thumbnail || track.cover_url,
-    // audio_url may be a relative path (/music-hybrid/stream/{id}) — resolved at play time
+    cover_url: track.cover_url || track.thumbnail,
     audio_url: track.audio_url || track.stream_url || null,
-    embedUrl: track.embed_url || `https://www.youtube.com/embed/${track.id || track.song_id}`,
-    youtubeUrl: track.youtube_url || `https://www.youtube.com/watch?v=${track.id || track.song_id}`,
-    source: track.source || null,
+    source:    track.source || null,
+    duration:  track.duration || 0,
+    genres:    track.genres || [],
   };
 }
 
@@ -30,15 +30,15 @@ function normalizeTrack(track) {
  */
 async function resolveAudioUrl(audioUrl) {
   if (!audioUrl) return null;
-  // Already absolute — use directly
+  // Already absolute (Audius direct URL or cached CDN) — use directly
   if (audioUrl.startsWith('https://') || audioUrl.startsWith('http://')) return audioUrl;
-  // Relative backend path — resolve to CDN URL
+  // Relative backend path — backend handles SC → Audius fallback internally
   if (audioUrl.startsWith('/music-hybrid/stream/') || audioUrl.startsWith('/stream/')) {
     try {
       const res = await fetch(`${MUSIC_API_BASE}${audioUrl}`);
       if (!res.ok) return null;
       const data = await res.json();
-      return data.url || null;
+      return data.url || null;  // url is CDN (SC) or direct Audius stream URL
     } catch (e) {
       return null;
     }
@@ -72,6 +72,7 @@ export function PlayerProvider({ children }) {
   // Crossfade (0=off, 2, 5, 8, 12 seconds)
   const [crossfadeDuration, setCrossfadeDuration] = useState(0);
   const crossfadeTriggeredRef = useRef(false);
+  const currentTrackRef = useRef(null); // ref copy — always up-to-date in callbacks
 
   // Progress state
   const [positionMillis, setPositionMillis] = useState(0);
@@ -118,9 +119,15 @@ export function PlayerProvider({ children }) {
     }
 
     if (status.didJustFinish) {
+      // Record completed track to backend
+      if (token && currentTrackRef.current) {
+        const t = currentTrackRef.current;
+        const dur = status.durationMillis ? Math.round(status.durationMillis / 1000) : (t.duration || 0);
+        api.post('/users/me/track-played', { track: { ...t, duration: dur } }, token).catch(() => {});
+      }
       advanceToNext();
     }
-  }, [queue, repeatMode, crossfadeDuration, advanceToNext]);
+  }, [queue, repeatMode, crossfadeDuration, advanceToNext, token]);
 
   useEffect(() => {
     audioService.setOnPlaybackStatusUpdate(onPlaybackStatusUpdate);
@@ -153,10 +160,14 @@ export function PlayerProvider({ children }) {
     return () => clearInterval(interval);
   }, [isPlaying, crossfadeDuration, advanceToNext]);
 
+  // Keep ref in sync with state for use in callbacks
+  useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
+
   const playTrackInternal = async (track, showFull = true) => {
     if (!track) return;
     const normalized = normalizeTrack(track);
     setCurrentTrack(normalized);
+    currentTrackRef.current = normalized;
     setIsPlaying(true);
     setPositionMillis(0);
     setDurationMillis(0);
@@ -197,6 +208,9 @@ export function PlayerProvider({ children }) {
     }
   }, [playbackSpeed]);
 
+  // Track the 30s play timer ref so we can cancel on skip
+  const playRecordTimerRef = useRef(null);
+
   const playTrack = async (track, trackList = null) => {
     if (!track) return;
     const normalized = normalizeTrack(track);
@@ -211,8 +225,21 @@ export function PlayerProvider({ children }) {
       setCurrentIndex(0);
     }
 
+    // Cancel any pending record timer from previous track
+    if (playRecordTimerRef.current) clearTimeout(playRecordTimerRef.current);
+
     await playTrackInternal(track, true);
-    addToListeningHistory(normalized).catch(() => { });
+    addToListeningHistory(normalized).catch(() => {});
+
+    // Record to backend after 30s (counts as a real play, not a skip)
+    if (token) {
+      playRecordTimerRef.current = setTimeout(() => {
+        const t = currentTrackRef.current;
+        if (t?.id === normalized.id) {
+          api.post('/users/me/track-played', { track: t }, token).catch(() => {});
+        }
+      }, 30000);
+    }
   };
 
   const togglePlay = async () => {

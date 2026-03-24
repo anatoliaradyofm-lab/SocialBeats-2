@@ -46,30 +46,60 @@ async def follow_user(user_id: str, current_user: dict = Depends(get_current_use
     
     now = datetime.now(timezone.utc).isoformat()
     
+    # Private account → send follow request instead of direct follow
+    if target_user.get("is_private"):
+        existing_req = await db.follow_requests.find_one({
+            "sender_id": current_user["id"], "receiver_id": user_id, "status": "pending"
+        })
+        if existing_req:
+            return {"status": "request_already_sent"}
+        req_id = str(uuid.uuid4())
+        await db.follow_requests.insert_one({
+            "id": req_id,
+            "sender_id": current_user["id"],
+            "receiver_id": user_id,
+            "status": "pending",
+            "created_at": now
+        })
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "sender_id": current_user["id"],
+            "actor_username": current_user.get("username"),
+            "type": "follow_request",
+            "title": "Takip İsteği",
+            "body": f"@{current_user['username']} seni takip etmek istiyor",
+            "reference_id": req_id,
+            "read": False,
+            "created_at": now
+        })
+        return {"status": "request_sent"}
+
     await db.follows.insert_one({
         "id": str(uuid.uuid4()),
         "follower_id": current_user["id"],
         "following_id": user_id,
         "created_at": now
     })
-    
+
     # Update counts
     await db.users.update_one({"id": current_user["id"]}, {"$inc": {"following_count": 1}})
     await db.users.update_one({"id": user_id}, {"$inc": {"followers_count": 1}})
-    
+
     # Create notification
     await db.notifications.insert_one({
         "id": str(uuid.uuid4()),
         "user_id": user_id,
         "sender_id": current_user["id"],
+        "actor_username": current_user.get("username"),
         "type": "follow",
         "title": "Yeni Takipçi",
         "body": f"@{current_user['username']} seni takip etmeye başladı",
         "read": False,
         "created_at": now
     })
-    
-    return {"message": "Successfully followed user"}
+
+    return {"message": "Successfully followed user", "status": "following"}
 
 @router.get("/follow-status/{user_id}")
 async def get_follow_status(user_id: str, current_user: dict = Depends(get_current_user)):
@@ -121,27 +151,90 @@ async def send_follow_request(user_id: str, current_user: dict = Depends(get_cur
     
     now = datetime.now(timezone.utc).isoformat()
     
+    req_id = str(uuid.uuid4())
     await db.follow_requests.insert_one({
-        "id": str(uuid.uuid4()),
+        "id": req_id,
         "sender_id": current_user["id"],
         "receiver_id": user_id,
         "status": "pending",
         "created_at": now
     })
-    
+
     # Create notification
     await db.notifications.insert_one({
         "id": str(uuid.uuid4()),
         "user_id": user_id,
         "sender_id": current_user["id"],
+        "actor_username": current_user.get("username"),
         "type": "follow_request",
         "title": "Takip İsteği",
         "body": f"@{current_user['username']} seni takip etmek istiyor",
+        "reference_id": req_id,
         "read": False,
         "created_at": now
     })
     
     return {"message": "Follow request sent"}
+
+@router.post("/follow-request/{request_id}/accept")
+async def accept_follow_request(request_id: str, current_user: dict = Depends(get_current_user)):
+    """Accept a follow request — adds sender to followers list"""
+    req = await db.follow_requests.find_one({
+        "id": request_id,
+        "receiver_id": current_user["id"],
+        "status": "pending"
+    })
+    if not req:
+        raise HTTPException(status_code=404, detail="Follow request not found")
+
+    sender_id = req["sender_id"]
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Add to follows
+    existing = await db.follows.find_one({"follower_id": sender_id, "following_id": current_user["id"]})
+    if not existing:
+        await db.follows.insert_one({
+            "id": str(uuid.uuid4()),
+            "follower_id": sender_id,
+            "following_id": current_user["id"],
+            "created_at": now
+        })
+        await db.users.update_one({"id": sender_id}, {"$inc": {"following_count": 1}})
+        await db.users.update_one({"id": current_user["id"]}, {"$inc": {"followers_count": 1}})
+
+    # Mark request accepted
+    await db.follow_requests.update_one({"id": request_id}, {"$set": {"status": "accepted"}})
+
+    # Notify sender
+    me = await db.users.find_one({"id": current_user["id"]})
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": sender_id,
+        "sender_id": current_user["id"],
+        "actor_username": current_user.get("username"),
+        "actor_avatar": me.get("avatar_url") if me else None,
+        "type": "follow_accepted",
+        "title": "Takip İsteği Kabul Edildi",
+        "body": f"@{current_user['username']} takip isteğini kabul etti",
+        "read": False,
+        "created_at": now
+    })
+
+    return {"status": "accepted"}
+
+
+@router.post("/follow-request/{request_id}/reject")
+async def reject_follow_request(request_id: str, current_user: dict = Depends(get_current_user)):
+    """Reject a follow request"""
+    result = await db.follow_requests.delete_one({
+        "id": request_id,
+        "receiver_id": current_user["id"],
+        "status": "pending"
+    })
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Follow request not found")
+    return {"status": "rejected"}
+
 
 @router.delete("/follow-request/{user_id}/cancel")
 async def cancel_follow_request(user_id: str, current_user: dict = Depends(get_current_user)):
@@ -164,14 +257,39 @@ async def unfollow_user(user_id: str, current_user: dict = Depends(get_current_u
         "follower_id": current_user["id"],
         "following_id": user_id
     })
-    
     if result.deleted_count == 0:
         raise HTTPException(status_code=400, detail="Not following this user")
-    
     await db.users.update_one({"id": current_user["id"]}, {"$inc": {"following_count": -1}})
     await db.users.update_one({"id": user_id}, {"$inc": {"followers_count": -1}})
-    
     return {"message": "Successfully unfollowed user"}
+
+@router.delete("/follow/{user_id}")
+async def unfollow_user_alias(user_id: str, current_user: dict = Depends(get_current_user)):
+    """Unfollow a user (alias for DELETE /unfollow/{user_id})"""
+    result = await db.follows.delete_one({
+        "follower_id": current_user["id"],
+        "following_id": user_id
+    })
+    if result.deleted_count == 0:
+        # Also cancel any pending follow request
+        await db.follow_requests.delete_one({"sender_id": current_user["id"], "receiver_id": user_id})
+        return {"message": "Unfollowed"}
+    await db.users.update_one({"id": current_user["id"]}, {"$inc": {"following_count": -1}})
+    await db.users.update_one({"id": user_id}, {"$inc": {"followers_count": -1}})
+    return {"message": "Successfully unfollowed user"}
+
+@router.delete("/follower/{user_id}")
+async def remove_follower(user_id: str, current_user: dict = Depends(get_current_user)):
+    """Remove a follower from your followers list"""
+    result = await db.follows.delete_one({
+        "follower_id": user_id,
+        "following_id": current_user["id"]
+    })
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Takipçi bulunamadı")
+    await db.users.update_one({"id": user_id}, {"$inc": {"following_count": -1}})
+    await db.users.update_one({"id": current_user["id"]}, {"$inc": {"followers_count": -1}})
+    return {"message": "Follower removed"}
 
 @router.get("/followers/{user_id}")
 async def get_followers(user_id: str, current_user: dict = Depends(get_current_user)):
@@ -252,12 +370,21 @@ async def get_unread_count(current_user: dict = Depends(get_current_user)):
     })
     return {"count": count}
 
+@router.post("/notifications/{notif_id}/read")
+async def mark_single_notification_read(notif_id: str, current_user: dict = Depends(get_current_user)):
+    """Mark a single notification as read"""
+    await db.notifications.update_one(
+        {"id": notif_id, "user_id": current_user["id"]},
+        {"$set": {"read": True, "is_read": True}}
+    )
+    return {"message": "Notification marked as read"}
+
 @router.post("/notifications/mark-read")
 async def mark_notifications_read(current_user: dict = Depends(get_current_user)):
     """Mark all notifications as read"""
     await db.notifications.update_many(
-        {"user_id": current_user["id"], "read": False},
-        {"$set": {"read": True}}
+        {"user_id": current_user["id"]},
+        {"$set": {"read": True, "is_read": True}}
     )
     return {"message": "Notifications marked as read"}
 

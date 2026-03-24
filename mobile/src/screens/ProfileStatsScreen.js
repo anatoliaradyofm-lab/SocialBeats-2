@@ -1,300 +1,361 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Platform
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  ActivityIndicator, Dimensions, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
-import { LineChart, BarChart } from 'react-native-chart-kit';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 import api from '../services/api';
 
 const { width } = Dimensions.get('window');
+const BG     = '#08060F';
+const SURF   = 'rgba(255,255,255,0.055)';
+const BORDER = 'rgba(255,255,255,0.09)';
+const PRI    = '#C084FC';
+const ACC    = '#FB923C';
+const RED    = '#F87171';
+const GREEN  = '#4ADE80';
+const BLUE   = '#60A5FA';
 
-const GLASS_COLORS = ['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.03)'];
-const ACCENT_COLOR = '#8B5CF6';
+const PERIODS = [
+  { key: 'week',  label: '7G',   folKey: '7d'   },
+  { key: 'month', label: '30G',  folKey: '30d'  },
+  { key: '90d',   label: '90G',  folKey: '90d'  },
+  { key: '180d',  label: '180G', folKey: '180d' },
+  { key: 'year',  label: '1 Yıl', folKey: 'all' },
+];
+
+function fmt(n) {
+  if (n == null) return '0';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';
+  return String(n);
+}
+function fmtMin(min) {
+  if (!min) return '0 dk';
+  if (min >= 60) return Math.floor(min / 60) + ' sa ' + (min % 60) + ' dk';
+  return min + ' dk';
+}
+
+function MiniBar({ value, max, color = PRI }) {
+  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  return (
+    <View style={mb.track}>
+      <View style={[mb.fill, { width: `${pct}%`, backgroundColor: color }]} />
+    </View>
+  );
+}
+const mb = StyleSheet.create({
+  track: { height: 5, borderRadius: 3, backgroundColor: BORDER, overflow: 'hidden', flex: 1 },
+  fill:  { height: '100%', borderRadius: 3 },
+});
+
+function Chip({ icon, label, value, color = PRI }) {
+  return (
+    <View style={ch.wrap}>
+      <View style={[ch.icon, { backgroundColor: color + '22' }]}>
+        <Ionicons name={icon} size={18} color={color} />
+      </View>
+      <Text style={ch.val}>{value}</Text>
+      <Text style={ch.lbl}>{label}</Text>
+    </View>
+  );
+}
+const ch = StyleSheet.create({
+  wrap: { flex: 1, alignItems: 'center', paddingVertical: 16 },
+  icon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  val:  { fontSize: 20, fontWeight: '800', color: '#fff' },
+  lbl:  { fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2, textAlign: 'center' },
+});
+
+function Card({ children, style }) {
+  return <View style={[cd.card, style]}>{children}</View>;
+}
+const cd = StyleSheet.create({
+  card: { backgroundColor: SURF, borderRadius: 20, borderWidth: 1, borderColor: BORDER, padding: 20, marginBottom: 14 },
+});
 
 export default function ProfileStatsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { t } = useTranslation();
   const { token } = useAuth();
-  const { colors } = useTheme();
 
-  const [loading, setLoading] = useState(true);
-  const [overview, setOverview] = useState(null);
-  const [listening, setListening] = useState(null);
-  const [audience, setAudience] = useState(null);
+  const [period, setPeriod]       = useState('month');
+  const [data, setData]           = useState(null);
+  const [followers, setFollowers] = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, []);
-
-  const fetchAnalytics = async () => {
-    setLoading(true);
+  const load = useCallback(async (p, showSpinner) => {
+    if (showSpinner) setLoading(true); else setRefreshing(true);
+    const periodCfg = PERIODS.find(x => x.key === p) || PERIODS[1];
     try {
-      const [ovData, listData, audData] = await Promise.all([
-        api.get('/profile/analytics/overview', token),
-        api.get('/profile/analytics/listening', token),
-        api.get('/profile/analytics/audience', token)
+      const [stats, fol] = await Promise.all([
+        api.get(`/stats/user?period=${p}`, token),
+        api.get(`/profile/analytics/followers?period=${periodCfg.folKey}`, token),
       ]);
-      setOverview(ovData);
-      setListening(listData);
-      setAudience(audData);
-    } catch (err) {
-      console.error('Error fetching analytics', err);
+      setData(stats);
+      setFollowers(fol);
+    } catch (e) {
+      console.warn('stats error', e);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [token]);
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: '#000' }]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Analytics</Text>
-          <View style={{ width: 44 }} />
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={ACCENT_COLOR} />
-          <Text style={styles.loadingText}>Analysing data...</Text>
-        </View>
-      </View>
-    );
-  }
+  useEffect(() => { load(period, true); }, [period]);
 
-  const chartConfig = {
-    backgroundGradientFrom: '#0A0A0A',
-    backgroundGradientTo: '#0A0A0A',
-    backgroundGradientFromOpacity: 0,
-    backgroundGradientToOpacity: 0,
-    color: (opacity = 1) => `rgba(139, 92, 246, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(156, 163, 175, ${opacity})`,
-    strokeWidth: 2,
-    barPercentage: 0.6,
-    useShadowColorFromDataset: false,
-    decimalPlaces: 0,
-    propsForDots: {
-      r: '5',
-      strokeWidth: '2',
-      stroke: ACCENT_COLOR
-    }
-  };
-
-  const StatCard = ({ label, value, icon, color }) => (
-    <LinearGradient
-      colors={GLASS_COLORS}
-      style={styles.statCard}
-    >
-      <View style={[styles.iconCircle, { backgroundColor: `${color}15` }]}>
-        <Ionicons name={icon} size={20} color={color} />
-      </View>
-      <View style={styles.statContent}>
-        <Text style={styles.statValue}>{value}</Text>
-        <Text style={styles.statLabel}>{label}</Text>
-      </View>
-    </LinearGradient>
-  );
+  const listening    = data?.listening   || {};
+  const social       = data?.social      || {};
+  const activity     = data?.activity    || {};
+  const folSummary   = followers?.summary || {};
+  const topFollowers = followers?.top_followers || [];
+  const topArtists   = listening.top_artists || [];
+  const topTracks    = listening.top_tracks  || [];
+  const maxArtistPlays = topArtists[0]?.play_count || 1;
 
   return (
-    <View style={[styles.container, { backgroundColor: '#000', paddingTop: insets.top }]}>
-      <LinearGradient colors={['#1F1F1F', '#000000']} style={StyleSheet.absoluteFill} />
-
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color="#fff" />
+    <View style={[s.root, { paddingTop: insets.top }]}>
+      {/* ── Header ── */}
+      <View style={s.hdr}>
+        <TouchableOpacity style={s.hdrBtn} onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile Stats</Text>
-        <TouchableOpacity style={styles.refreshBtn} onPress={fetchAnalytics}>
-          <Ionicons name="refresh" size={20} color="#fff" />
+        <Text style={s.hdrTitle}>İstatistikler</Text>
+        <TouchableOpacity style={s.hdrBtn} onPress={() => load(period, false)}>
+          <Ionicons name={refreshing ? 'hourglass-outline' : 'refresh'} size={20} color="#fff" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      {/* ── Period pills ── */}
+      <View style={s.pills}>
+        {PERIODS.map(p => (
+          <TouchableOpacity
+            key={p.key}
+            style={[s.pill, period === p.key && s.pillActive]}
+            onPress={() => setPeriod(p.key)}
+          >
+            <Text style={[s.pillTx, period === p.key && s.pillTxActive]}>{p.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-        {/* TOP METRICS */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Overview</Text>
-          <View style={styles.periodBadge}>
-            <Text style={styles.periodText}>LAST 30 DAYS</Text>
-          </View>
+      {loading ? (
+        <View style={s.loader}>
+          <ActivityIndicator color={PRI} size="large" />
+          <Text style={s.loaderTx}>Veriler yükleniyor…</Text>
         </View>
-
-        <View style={styles.grid}>
-          <StatCard label="Followers" value={overview?.total_followers || 0} icon="people" color="#8B5CF6" />
-          <StatCard label="Likes" value={overview?.total_likes_received || 0} icon="heart" color="#EC4899" />
-          <StatCard label="Posts" value={overview?.total_posts || 0} icon="layers" color="#3B82F6" />
-          <StatCard label="Reached" value={overview?.reach || '2.4k'} icon="eye" color="#10B981" />
-        </View>
-
-        <View style={styles.spacer} />
-
-        {/* PERFORMANCE CARD */}
-        <Text style={styles.sectionTitle}>Performance</Text>
-        <LinearGradient colors={['rgba(139, 92, 246, 0.1)', 'transparent']} style={styles.performanceCard}>
-          <View style={styles.performanceHeader}>
-            <View>
-              <Text style={styles.performanceLabel}>Total Listening Time</Text>
-              <Text style={styles.performanceValue}>
-                {(listening?.total_listening_minutes / 60).toFixed(1)} <Text style={styles.unitText}>HOURS</Text>
-              </Text>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ padding: 16, paddingBottom: Math.max(insets.bottom, 16) + 32 }}
+        >
+          {/* ── Özet ── */}
+          <Text style={s.sec}>Özet</Text>
+          <Card>
+            <View style={{ flexDirection: 'row' }}>
+              <Chip icon="people"     label="Takipçi"    value={fmt(folSummary.total_followers)}          color={PRI}     />
+              <View style={s.vDiv} />
+              <Chip icon="person-add" label="Yeni Takip" value={`+${fmt(folSummary.new_followers || 0)}`} color={GREEN}   />
+              <View style={s.vDiv} />
+              <Chip icon="flash"      label="Aktif Gün"  value={fmt(activity.days_active)}                color="#FACC15" />
             </View>
-            <Ionicons name="pulse" size={40} color={ACCENT_COLOR} />
-          </View>
+          </Card>
 
-          <View style={styles.divider} />
-
-          <View style={styles.performanceDetails}>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Top Artist</Text>
-              <Text style={styles.detailValue} numberOfLines={1}>{listening?.top_artist || '-'}</Text>
-            </View>
-            <View style={styles.verticalDivider} />
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Top Genre</Text>
-              <Text style={styles.detailValue}>{listening?.top_genre || '-'}</Text>
-            </View>
-          </View>
-        </LinearGradient>
-
-        <Text style={styles.chartTitle}>Activity (Minutes per Day)</Text>
-        <View style={styles.chartContainer}>
-          {listening?.activity_days && (
-            <BarChart
-              data={{
-                labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
-                datasets: [{ data: listening.activity_days }]
-              }}
-              width={width - 56}
-              height={200}
-              chartConfig={chartConfig}
-              style={styles.chart}
-              withInnerLines={false}
-              fromZero
-              showValuesOnTopOfBars
-            />
-          )}
-        </View>
-
-        <View style={styles.spacer} />
-
-        {/* AUDIENCE INSIGHTS */}
-        <Text style={styles.sectionTitle}>Audience</Text>
-        <View style={styles.audienceStats}>
-          <LinearGradient colors={['rgba(16, 185, 129, 0.15)', 'transparent']} style={styles.growthBadge}>
-            <Ionicons name="trending-up" size={16} color="#10B981" />
-            <Text style={styles.growthText}>+{audience?.follower_loss_gain?.gained || 0} Gained</Text>
-          </LinearGradient>
-          <LinearGradient colors={['rgba(239, 68, 68, 0.15)', 'transparent']} style={styles.growthBadge}>
-            <Ionicons name="trending-down" size={16} color="#EF4444" />
-            <Text style={styles.growthText}>-{audience?.follower_loss_gain?.lost || 0} Lost</Text>
-          </LinearGradient>
-        </View>
-
-        <Text style={styles.chartTitle}>Follower Growth</Text>
-        <View style={styles.chartContainer}>
-          {audience?.follower_growth && (
-            <LineChart
-              data={{
-                labels: ['-6D', '-5', '-4', '-3', '-2', '-1', 'Today'],
-                datasets: [{ data: audience.follower_growth }]
-              }}
-              width={width - 56}
-              height={200}
-              chartConfig={{ ...chartConfig, color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})` }}
-              style={styles.chart}
-              bezier
-            />
-          )}
-        </View>
-
-        {/* DEMOGRAPHICS */}
-        <Text style={styles.chartTitle}>Age Demographics</Text>
-        <View style={styles.modernList}>
-          {audience?.demographics_age?.map((d, idx) => (
-            <View key={d.range} style={styles.modernRow}>
-              <View style={styles.modernRowTop}>
-                <Text style={styles.modernRowLabel}>{d.range}</Text>
-                <Text style={styles.modernRowValue}>{d.percentage}%</Text>
+          {/* ── Dinleme ── */}
+          <Text style={s.sec}>Dinleme</Text>
+          <Card>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <View>
+                <Text style={s.bigVal}>{fmtMin(listening.total_minutes)}</Text>
+                <Text style={s.bigLbl}>Toplam Dinleme Süresi</Text>
               </View>
-              <View style={styles.progressBase}>
-                <LinearGradient
-                  colors={['#8B5CF6', '#3B82F6']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[styles.progressFill, { width: `${d.percentage}%` }]}
-                />
+              <LinearGradient colors={[PRI + '33', 'transparent']} style={s.pulseCircle}>
+                <Ionicons name="musical-notes" size={28} color={PRI} />
+              </LinearGradient>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <View style={s.listenChip}>
+                <Ionicons name="disc-outline"  size={13} color={ACC}   />
+                <Text style={s.listenChipTx}>{fmt(listening.total_tracks)} şarkı</Text>
+              </View>
+              <View style={s.listenChip}>
+                <Ionicons name="mic-outline"   size={13} color={BLUE}  />
+                <Text style={s.listenChipTx}>{fmt(listening.unique_artists)} sanatçı</Text>
+              </View>
+              <View style={s.listenChip}>
+                <Ionicons name="time-outline"  size={13} color={GREEN} />
+                <Text style={s.listenChipTx}>{fmtMin(listening.daily_average)} / gün</Text>
               </View>
             </View>
-          ))}
-        </View>
+          </Card>
 
-        <Text style={styles.chartTitle}>Top Locations</Text>
-        <View style={[styles.modernList, { marginBottom: 60 }]}>
-          {audience?.top_locations?.map((loc, i) => (
-            <View key={i} style={[styles.modernRow, { paddingVertical: 14 }]}>
-              <View style={styles.modernRowTop}>
-                <View style={styles.locationWrap}>
-                  <Ionicons name="navigate-outline" size={14} color={ACCENT_COLOR} />
-                  <Text style={[styles.modernRowLabel, { marginLeft: 8 }]}>{loc.city}, {loc.country}</Text>
+          {/* ── En çok dinlenen sanatçılar ── */}
+          {topArtists.length > 0 && (
+            <>
+              <Text style={s.sec}>En Çok Dinlenen Sanatçılar</Text>
+              <Card>
+                {topArtists.map((a, i) => (
+                  <View key={i} style={{ marginBottom: i < topArtists.length - 1 ? 14 : 0 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={s.rank}>{i + 1}</Text>
+                        <Text style={s.artistName}>{a.name}</Text>
+                      </View>
+                      <Text style={s.playCount}>{a.play_count} oynatma</Text>
+                    </View>
+                    <MiniBar value={a.play_count} max={maxArtistPlays} color={PRI} />
+                  </View>
+                ))}
+              </Card>
+            </>
+          )}
+
+          {/* ── En çok dinlenen şarkılar ── */}
+          {topTracks.length > 0 && (
+            <>
+              <Text style={s.sec}>En Çok Dinlenen Şarkılar</Text>
+              <Card>
+                {topTracks.map((t, i) => (
+                  <View key={i} style={[s.trackRow, i < topTracks.length - 1 && { borderBottomWidth: 1, borderBottomColor: BORDER }]}>
+                    <View style={[s.trackNum, { backgroundColor: i === 0 ? PRI + '33' : SURF }]}>
+                      <Text style={[s.trackNumTx, { color: i === 0 ? PRI : 'rgba(255,255,255,0.4)' }]}>{i + 1}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.trackTitle}  numberOfLines={1}>{t.title}</Text>
+                      <Text style={s.trackArtist} numberOfLines={1}>{t.artist}</Text>
+                    </View>
+                    <View style={s.playBadge}>
+                      <Ionicons name="play" size={10} color={ACC} />
+                      <Text style={s.playBadgeTx}>{t.play_count}</Text>
+                    </View>
+                  </View>
+                ))}
+              </Card>
+            </>
+          )}
+
+          {/* ── Takipçi özeti ── */}
+          <Text style={s.sec}>Takipçiler</Text>
+          <Card>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+              {[
+                { val: fmt(folSummary.total_followers),  color: '#fff',  lbl: 'Toplam'    },
+                { val: `+${fmt(folSummary.new_followers  || 0)}`, color: GREEN, lbl: 'Kazanılan' },
+                { val: `-${fmt(folSummary.lost_followers || 0)}`, color: RED,   lbl: 'Kaybedilen'},
+                { val: (folSummary.net_growth >= 0 ? '+' : '') + fmt(folSummary.net_growth || 0),
+                  color: (folSummary.net_growth || 0) >= 0 ? GREEN : RED, lbl: 'Net Büyüme' },
+              ].map((item, i, arr) => (
+                <React.Fragment key={i}>
+                  <View style={s.folStat}>
+                    <Text style={[s.folVal, { color: item.color }]}>{item.val}</Text>
+                    <Text style={s.folLbl}>{item.lbl}</Text>
+                  </View>
+                  {i < arr.length - 1 && <View style={[s.vDiv, { height: 40 }]} />}
+                </React.Fragment>
+              ))}
+            </View>
+          </Card>
+
+          {/* ── Etkileşim kuran takipçiler ── */}
+          {topFollowers.length > 0 && (
+            <>
+              <Text style={s.sec}>Etkileşim Kuran Takipçiler</Text>
+              <Card style={{ padding: 8 }}>
+                {topFollowers.map((f, i) => (
+                  <TouchableOpacity
+                    key={f.id}
+                    style={[s.followerRow, i < topFollowers.length - 1 && { borderBottomWidth: 1, borderBottomColor: BORDER }]}
+                    onPress={() => navigation.navigate('UserProfile', { userId: f.id })}
+                  >
+                    {f.avatar_url
+                      ? <Image source={{ uri: f.avatar_url }} style={s.fAvatar} />
+                      : (
+                        <View style={[s.fAvatar, { backgroundColor: PRI + '33', justifyContent: 'center', alignItems: 'center' }]}>
+                          <Ionicons name="person" size={18} color={PRI} />
+                        </View>
+                      )
+                    }
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.fName}>{f.display_name || f.username}</Text>
+                      <Text style={s.fUser}>@{f.username}</Text>
+                    </View>
+                    <View style={s.engBadge}>
+                      <Ionicons name="pulse" size={11} color={GREEN} />
+                      <Text style={s.engTx}>{f.engagement_score}%</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </Card>
+            </>
+          )}
+
+          {/* ── Aktivite ── */}
+          <Text style={s.sec}>Aktivite</Text>
+          <Card>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              {[
+                { icon: 'calendar-outline', color: PRI,       val: activity.days_active    || 0, lbl: 'Aktif Gün'    },
+                { icon: 'flame-outline',    color: ACC,       val: activity.streak_days    || 0, lbl: 'Güncel Seri'  },
+                { icon: 'trophy-outline',   color: '#FACC15', val: activity.longest_streak || 0, lbl: 'En Uzun Seri' },
+              ].map((item, i) => (
+                <View key={i} style={s.actBox}>
+                  <Ionicons name={item.icon} size={20} color={item.color} />
+                  <Text style={s.actVal}>{item.val}</Text>
+                  <Text style={s.actLbl}>{item.lbl}</Text>
                 </View>
-                <Text style={[styles.modernRowValue, { color: '#9CA3AF' }]}>{loc.percentage}%</Text>
-              </View>
+              ))}
             </View>
-          ))}
-        </View>
+          </Card>
 
-      </ScrollView>
+        </ScrollView>
+      )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, height: 64 },
-  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' },
-  refreshBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: -1 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#6B7280', marginTop: 16, fontSize: 14, fontWeight: '600' },
-  scrollContent: { padding: 20 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  sectionTitle: { fontSize: 24, fontWeight: '900', color: '#fff', letterSpacing: -1 },
-  periodBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(139, 92, 246, 0.2)' },
-  periodText: { fontSize: 10, color: ACCENT_COLOR, fontWeight: '800' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  statCard: { width: (width - 50) / 2, padding: 20, borderRadius: 24, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  iconCircle: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  statValue: { fontSize: 22, fontWeight: '800', color: '#fff' },
-  statLabel: { fontSize: 12, color: '#9CA3AF', fontWeight: '600', marginTop: 2 },
-  performanceCard: { padding: 24, borderRadius: 32, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', marginBottom: 24 },
-  performanceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  performanceLabel: { fontSize: 14, color: '#9CA3AF', fontWeight: '600' },
-  performanceValue: { fontSize: 32, fontWeight: '900', color: '#fff', marginTop: 4 },
-  unitText: { fontSize: 14, color: ACCENT_COLOR, fontWeight: '800' },
-  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 20 },
-  performanceDetails: { flexDirection: 'row' },
-  detailItem: { flex: 1 },
-  detailLabel: { fontSize: 11, color: '#6B7280', fontWeight: '700', textTransform: 'uppercase', marginBottom: 4 },
-  detailValue: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  verticalDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginHorizontal: 20 },
-  chartTitle: { fontSize: 16, fontWeight: '800', color: '#fff', marginBottom: 16 },
-  chartContainer: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 28, padding: 12, alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  chart: { borderRadius: 20 },
-  audienceStats: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  growthBadge: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  growthText: { color: '#fff', fontSize: 14, fontWeight: '700', marginLeft: 8 },
-  modernList: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 28, padding: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  modernRow: { marginBottom: 20 },
-  modernRowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  modernRowLabel: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  modernRowValue: { fontSize: 15, fontWeight: '800', color: ACCENT_COLOR },
-  progressBase: { height: 6, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 3 },
-  locationWrap: { flexDirection: 'row', alignItems: 'center' },
-  spacer: { height: 12 }
+const s = StyleSheet.create({
+  root:         { flex: 1, backgroundColor: BG },
+  hdr:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 60 },
+  hdrBtn:       { width: 40, height: 40, borderRadius: 20, backgroundColor: SURF, justifyContent: 'center', alignItems: 'center' },
+  hdrTitle:     { fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+  pills:        { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 8, gap: 6 },
+  pill:         { flex: 1, paddingVertical: 8, borderRadius: 20, backgroundColor: SURF, borderWidth: 1, borderColor: BORDER, alignItems: 'center' },
+  pillActive:   { backgroundColor: PRI + '33', borderColor: PRI },
+  pillTx:       { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '600' },
+  pillTxActive: { color: PRI, fontWeight: '700' },
+  loader:       { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  loaderTx:     { color: 'rgba(255,255,255,0.4)', fontSize: 14 },
+  sec:          { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.35)', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 8, marginTop: 4 },
+  vDiv:         { width: 1, backgroundColor: BORDER, marginHorizontal: 4 },
+  hDiv:         { height: 1, backgroundColor: BORDER },
+  bigVal:       { fontSize: 28, fontWeight: '900', color: '#fff', letterSpacing: -1 },
+  bigLbl:       { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
+  pulseCircle:  { width: 58, height: 58, borderRadius: 29, justifyContent: 'center', alignItems: 'center' },
+  listenChip:   { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: SURF, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: BORDER },
+  listenChipTx: { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
+  rank:         { width: 22, height: 22, borderRadius: 11, backgroundColor: SURF, textAlign: 'center', lineHeight: 22, fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '700' },
+  artistName:   { fontSize: 14, fontWeight: '700', color: '#fff' },
+  playCount:    { fontSize: 12, color: 'rgba(255,255,255,0.4)' },
+  trackRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  trackNum:     { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  trackNumTx:   { fontSize: 13, fontWeight: '800' },
+  trackTitle:   { fontSize: 14, fontWeight: '700', color: '#fff' },
+  trackArtist:  { fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+  playBadge:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: ACC + '22', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  playBadgeTx:  { fontSize: 12, color: ACC, fontWeight: '700' },
+  folStat:      { alignItems: 'center', flex: 1 },
+  folVal:       { fontSize: 18, fontWeight: '800' },
+  folLbl:       { fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2, textAlign: 'center' },
+  followerRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 8 },
+  fAvatar:      { width: 42, height: 42, borderRadius: 21 },
+  fName:        { fontSize: 14, fontWeight: '700', color: '#fff' },
+  fUser:        { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 1 },
+  engBadge:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: GREEN + '22', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  engTx:        { fontSize: 12, color: GREEN, fontWeight: '700' },
+  actBox:       { flex: 1, backgroundColor: SURF, borderRadius: 16, borderWidth: 1, borderColor: BORDER, alignItems: 'center', paddingVertical: 16, gap: 6 },
+  actVal:       { fontSize: 22, fontWeight: '800', color: '#fff' },
+  actLbl:       { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
 });

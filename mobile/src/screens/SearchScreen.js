@@ -6,7 +6,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity,
-  FlatList, Image, ActivityIndicator, Dimensions, Alert,
+  Image, ActivityIndicator, Dimensions, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,8 +38,6 @@ const TRENDING_SEARCHES = [
   'olivia rodrigo', 'SZA', 'Peso Pluma', 'Morgan Wallen', 'Miley Cyrus',
 ];
 
-const TABS = ['Music', 'Users', 'Playlists', 'Posts'];
-
 export default function SearchScreen({ navigation }) {
   const { colors }        = useTheme();
   const { t }             = useTranslation();
@@ -48,16 +46,13 @@ export default function SearchScreen({ navigation }) {
   const insets            = useSafeAreaInsets();
   const inputRef          = useRef(null);
   const debounceRef       = useRef(null);
+  const lastQueryRef      = useRef('');
 
   const [query, setQuery]         = useState('');
   const [focused, setFocused]     = useState(false);
-  const [tab, setTab]             = useState('Music');
-  const [results, setResults]     = useState({ tracks: [], users: [], playlists: [], posts: [] });
+  const [tracks, setTracks]       = useState([]);
   const [loading, setLoading]     = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
-  // follow state: { [userId]: boolean }
-  const [following, setFollowing] = useState({});
-  const [followLoading, setFollowLoading] = useState({});
 
   // Load search history
   useEffect(() => {
@@ -67,53 +62,54 @@ export default function SearchScreen({ navigation }) {
     }).catch(() => {});
   }, []);
 
-  // Debounced multi-tab search
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!query.trim()) {
-      setResults({ tracks: [], users: [], playlists: [], posts: [] });
+  const runSearch = useCallback(async (q) => {
+    const trimmed = q.trim();
+    if (!trimmed || trimmed.length < 2) {
+      setTracks([]);
       setLoading(false);
       return;
     }
+    lastQueryRef.current = trimmed;
     setLoading(true);
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const q = encodeURIComponent(query.trim());
+    try {
+      const enc = encodeURIComponent(trimmed);
+      const musicRes = await api.get(`/music-hybrid/search?q=${enc}&limit=20`);
 
-        // Music tab: music-hybrid endpoint
-        const musicPromise = tab === 'Music'
-          ? api.get(`/music-hybrid/search?q=${q}&limit=20`)
-          : Promise.resolve(null);
+      // Ignore stale responses if query changed while awaiting
+      if (lastQueryRef.current !== trimmed) return;
 
-        // Unified social search for users/playlists/posts
-        const socialPromise = (tab === 'Users' || tab === 'Playlists' || tab === 'Posts')
-          ? api.get(`/search?q=${q}&limit=20`, token)
-          : Promise.resolve(null);
+      const list = Array.isArray(musicRes) ? musicRes : (musicRes?.tracks || musicRes?.results || []);
+      setTracks(list);
+    } catch {
+      setTracks([]);
+    } finally {
+      if (lastQueryRef.current === q.trim()) setLoading(false);
+    }
+  }, []);
 
-        const [musicRes, socialRes] = await Promise.all([musicPromise, socialPromise]);
-
-        const tracks    = musicRes ? (Array.isArray(musicRes) ? musicRes : (musicRes?.tracks || musicRes?.results || [])) : [];
-        const users     = socialRes?.users     || [];
-        const playlists = socialRes?.playlists || [];
-        const posts     = socialRes?.posts     || [];
-
-        // Initialise follow state from returned users
-        const followMap = {};
-        users.forEach(u => { followMap[u.id] = u.is_following ?? false; });
-        setFollowing(prev => ({ ...prev, ...followMap }));
-
-        setResults({ tracks, users, playlists, posts });
-
-        // Save to history
-        api.post('/search/history', { query: query.trim() }, token).catch(() => {});
-      } catch {
-        setResults({ tracks: [], users: [], playlists: [], posts: [] });
-      } finally {
-        setLoading(false);
-      }
-    }, 400);
+  // Debounced search as user types
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!query.trim()) {
+      setTracks([]);
+      setLoading(false);
+      return;
+    }
+    if (query.trim().length >= 2) setLoading(true); // instant loading indicator
+    debounceRef.current = setTimeout(() => runSearch(query), 280);
     return () => clearTimeout(debounceRef.current);
-  }, [query, tab]);
+  }, [query]);
+
+  // Save query to history on submit (Enter / explicit search)
+  const handleSubmit = useCallback(() => {
+    if (!query.trim() || query.trim().length < 2) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    runSearch(query);
+    api.post('/search/history', { query: query.trim() }, token).catch(() => {});
+    if (!recentSearches.includes(query.trim())) {
+      setRecentSearches(prev => [query.trim(), ...prev].slice(0, 6));
+    }
+  }, [query, runSearch, token, recentSearches]);
 
   const clear = () => { setQuery(''); setFocused(false); inputRef.current?.blur(); };
 
@@ -122,27 +118,6 @@ export default function SearchScreen({ navigation }) {
     setRecentSearches([]);
   };
 
-  // Toggle follow / unfollow
-  const handleFollow = useCallback(async (userId) => {
-    if (followLoading[userId]) return;
-    const isFollowing = following[userId];
-    setFollowLoading(prev => ({ ...prev, [userId]: true }));
-    // Optimistic update
-    setFollowing(prev => ({ ...prev, [userId]: !isFollowing }));
-    try {
-      if (isFollowing) {
-        await api.delete(`/social/follow/${userId}`, token);
-      } else {
-        await api.post(`/social/follow/${userId}`, {}, token);
-      }
-    } catch {
-      // Revert on error
-      setFollowing(prev => ({ ...prev, [userId]: isFollowing }));
-      Alert.alert(t('common.error'), t('common.tryAgain') || 'İşlem başarısız oldu.');
-    } finally {
-      setFollowLoading(prev => ({ ...prev, [userId]: false }));
-    }
-  }, [following, followLoading, token]);
 
   // Show track options
   const handleTrackMenu = useCallback((item) => {
@@ -156,8 +131,6 @@ export default function SearchScreen({ navigation }) {
       ]
     );
   }, [playTrack, navigation]);
-
-  const currentResults = results[{ Music: 'tracks', Users: 'users', Playlists: 'playlists', Posts: 'posts' }[tab]] || [];
 
   const s = createStyles(colors, insets);
 
@@ -189,99 +162,6 @@ export default function SearchScreen({ navigation }) {
     </TouchableOpacity>
   );
 
-  const renderUser = (item, idx) => {
-    const isFollowed = following[item.id] ?? (item.is_following ?? false);
-    const isLoading  = followLoading[item.id] ?? false;
-    return (
-      <TouchableOpacity
-        key={item.id || idx}
-        style={s.resultRow}
-        activeOpacity={0.8}
-        onPress={() => navigation.navigate('UserProfile', { username: item.username })}
-      >
-        <Image
-          source={{ uri: item.avatar_url || `https://i.pravatar.cc/80?u=${item.id}` }}
-          style={[s.resultCover, { borderRadius: 40 }]}
-        />
-        <View style={s.resultInfo}>
-          <Text style={[s.resultTitle, { color: colors.text }]} numberOfLines={1}>
-            {item.display_name || item.username}{item.is_verified ? '  ✓' : ''}
-          </Text>
-          <Text style={[s.resultSub, { color: colors.textMuted }]}>
-            @{item.username} · {item.followers_count ?? 0} followers
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={[
-            s.followBtn,
-            isFollowed
-              ? { backgroundColor: colors.surface, borderColor: colors.border }
-              : { backgroundColor: colors.primary, borderColor: colors.primary },
-          ]}
-          onPress={() => handleFollow(item.id)}
-          disabled={isLoading}
-        >
-          {isLoading
-            ? <ActivityIndicator size="small" color={isFollowed ? colors.primary : '#fff'} style={{ width: 44 }} />
-            : <Text style={[s.followBtnText, { color: isFollowed ? colors.textMuted : '#fff' }]}>
-                {isFollowed ? 'Takipte' : 'Takip Et'}
-              </Text>
-          }
-        </TouchableOpacity>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderPlaylist = (item, idx) => (
-    <TouchableOpacity
-      key={item.id || idx}
-      style={s.resultRow}
-      activeOpacity={0.8}
-      onPress={() => navigation.navigate('PlaylistDetail', { playlistId: item.id, playlist: item })}
-    >
-      <Image
-        source={{ uri: item.cover_url || item.thumbnail || `https://picsum.photos/seed/${item.id}/80/80` }}
-        style={s.resultCover}
-      />
-      <View style={s.resultInfo}>
-        <Text style={[s.resultTitle, { color: colors.text }]} numberOfLines={1}>{item.name}</Text>
-        <Text style={[s.resultSub, { color: colors.textMuted }]}>
-          {item.tracks_count ?? 0} tracks · {item.owner?.username || ''}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-    </TouchableOpacity>
-  );
-
-  const renderPost = (item, idx) => (
-    <TouchableOpacity
-      key={item.id || idx}
-      style={s.resultRow}
-      activeOpacity={0.8}
-      onPress={() => navigation.navigate('PostDetail', { postId: item.id })}
-    >
-      <Image
-        source={{ uri: item.user?.avatar_url || `https://i.pravatar.cc/80?u=${item.user_id}` }}
-        style={[s.resultCover, { borderRadius: 40 }]}
-      />
-      <View style={s.resultInfo}>
-        <Text style={[s.resultTitle, { color: colors.text }]} numberOfLines={1}>
-          @{item.user?.username || 'user'}
-        </Text>
-        <Text style={[s.resultSub, { color: colors.textMuted }]} numberOfLines={2}>{item.content}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const renderResult = (item, idx) => {
-    switch (tab) {
-      case 'Users':     return renderUser(item, idx);
-      case 'Playlists': return renderPlaylist(item, idx);
-      case 'Posts':     return renderPost(item, idx);
-      default:          return renderTrack(item, idx);
-    }
-  };
-
   // ─── UI ────────────────────────────────────────────────────
 
   return (
@@ -297,11 +177,14 @@ export default function SearchScreen({ navigation }) {
             style={s.searchInput}
             value={query}
             onChangeText={setQuery}
-            placeholder="Songs, artists, podcasts..."
+            placeholder="Şarkı, sanatçı ara..."
             placeholderTextColor={colors.textGhost}
             returnKeyType="search"
+            onSubmitEditing={handleSubmit}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
+            autoCorrect={false}
+            autoCapitalize="none"
           />
           {loading && <ActivityIndicator size="small" color={colors.primary} />}
           {query.length > 0 && !loading && (
@@ -310,17 +193,6 @@ export default function SearchScreen({ navigation }) {
             </TouchableOpacity>
           )}
         </View>
-
-        {/* Tabs */}
-        {(focused || query.length > 0) && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll} contentContainerStyle={s.tabsContent}>
-            {TABS.map(tb => (
-              <TouchableOpacity key={tb} onPress={() => setTab(tb)} style={[s.tab, tab === tb && s.tabActive]}>
-                <Text style={[s.tabText, { color: tab === tb ? colors.primary : colors.textMuted }]}>{tb}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
       </View>
 
       <ScrollView
@@ -328,6 +200,35 @@ export default function SearchScreen({ navigation }) {
         contentContainerStyle={s.scroll}
         keyboardShouldPersistTaps="handled"
       >
+        {/* ── Instant suggestions (while API loads) ── */}
+        {query.length >= 1 && query.length < 2 && (
+          <View style={s.section}>
+            <Text style={[s.hintText, { color: colors.textMuted }]}>En az 2 karakter gir</Text>
+          </View>
+        )}
+        {query.length >= 2 && loading && tracks.length === 0 && (() => {
+          const q = query.toLowerCase();
+          const suggestions = [
+            ...recentSearches.filter(r => r.toLowerCase().includes(q)),
+            ...TRENDING_SEARCHES.filter(t => t.toLowerCase().includes(q) && !recentSearches.includes(t)),
+          ].slice(0, 5);
+          if (!suggestions.length) return null;
+          return (
+            <View style={s.section}>
+              <Text style={[s.sectionTitle, { color: colors.text, marginBottom: 8 }]}>Öneriler</Text>
+              {suggestions.map((sug, i) => (
+                <TouchableOpacity key={i} style={s.recentRow} onPress={() => { setQuery(sug); handleSubmit(); }}>
+                  <View style={[s.recentIcon, { backgroundColor: colors.surface }]}>
+                    <Ionicons name="search-outline" size={16} color={colors.primary} />
+                  </View>
+                  <Text style={[s.recentText, { color: colors.textSecondary }]}>{sug}</Text>
+                  <Ionicons name="arrow-up-outline" size={16} color={colors.textGhost} style={{ transform:[{rotate:'45deg'}] }} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          );
+        })()}
+
         {query.length === 0 ? (
           <>
             {/* Recent Searches */}
@@ -385,7 +286,7 @@ export default function SearchScreen({ navigation }) {
                 <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={[s.emptyText, { color: colors.textMuted }]}>Searching...</Text>
               </View>
-            ) : currentResults.length === 0 ? (
+            ) : tracks.length === 0 ? (
               <View style={s.emptyWrap}>
                 <Ionicons name="search-outline" size={48} color={colors.textMuted} />
                 <Text style={[s.emptyText, { color: colors.textMuted }]}>No results for "{query}"</Text>
@@ -394,9 +295,9 @@ export default function SearchScreen({ navigation }) {
             ) : (
               <>
                 <Text style={[s.sectionTitle, { color: colors.text }]}>
-                  {currentResults.length} results for "{query}"
+                  {tracks.length} results for "{query}"
                 </Text>
-                {currentResults.map((item, idx) => renderResult(item, idx))}
+                {tracks.map((item, idx) => renderTrack(item, idx))}
               </>
             )}
           </View>
@@ -439,19 +340,6 @@ function createStyles(colors, insets) {
     },
     searchInput: { flex: 1, fontSize: 15, color: colors.text },
 
-    tabsScroll: { marginTop: 4 },
-    tabsContent: { gap: 8, paddingBottom: 4 },
-    tab: {
-      paddingHorizontal: 16,
-      paddingVertical: 7,
-      borderRadius: 20,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    tabActive: { backgroundColor: colors.primaryGlow, borderColor: colors.primary },
-    tabText: { fontSize: 13, fontWeight: '700' },
-
     scroll: { paddingTop: 8, paddingBottom: 120 },
     section: { paddingHorizontal: 20, marginBottom: 24 },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
@@ -484,16 +372,9 @@ function createStyles(colors, insets) {
     resultTitle: { fontSize: 15, fontWeight: '600' },
     resultSub: { fontSize: 13 },
 
-    followBtn: {
-      paddingHorizontal: 14, paddingVertical: 7,
-      borderRadius: 20, borderWidth: 1.5,
-      minWidth: 80,
-      alignItems: 'center',
-    },
-    followBtnText: { fontSize: 13, fontWeight: '700' },
-
     emptyWrap: { alignItems: 'center', paddingVertical: 48, gap: 12 },
     emptyText: { fontSize: 16, fontWeight: '600' },
     emptyHint: { fontSize: 14 },
+    hintText:  { fontSize: 13, textAlign: 'center', paddingVertical: 12 },
   });
 }

@@ -1826,6 +1826,10 @@ async def get_followers(
         raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
     if target.get("hide_followers_list") and user_id != current_user["id"]:
         raise HTTPException(status_code=403, detail="Bu liste gizli")
+    if target.get("is_private") and user_id != current_user["id"]:
+        is_viewer_following = await db.follows.find_one({"follower_id": current_user["id"], "following_id": user_id})
+        if not is_viewer_following:
+            raise HTTPException(status_code=403, detail="Bu hesap gizlidir")
     follows = await db.follows.find(
         {"following_id": user_id},
         {"follower_id": 1}
@@ -1860,6 +1864,10 @@ async def get_following(
         raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
     if target.get("hide_following_list") and user_id != current_user["id"]:
         raise HTTPException(status_code=403, detail="Bu liste gizli")
+    if target.get("is_private") and user_id != current_user["id"]:
+        is_viewer_following = await db.follows.find_one({"follower_id": current_user["id"], "following_id": user_id})
+        if not is_viewer_following:
+            raise HTTPException(status_code=403, detail="Bu hesap gizlidir")
     follows = await db.follows.find(
         {"follower_id": user_id},
         {"following_id": 1}
@@ -2756,7 +2764,9 @@ async def get_user_profile(username: str, current_user: dict = Depends(get_curre
         elif pending_from_them:
             friend_request_status = "received"
     
-    return {**dict(user), "is_following": is_following, "friend_request_status": friend_request_status}
+    is_own = current_user["id"] == user["id"]
+    is_locked = bool(user.get("is_private")) and not is_following and not is_own
+    return {**dict(user), "is_following": is_following, "friend_request_status": friend_request_status, "is_own": is_own, "is_locked": is_locked}
 
 @api_router.get("/user/{username}/activity")
 async def get_user_activity(username: str, limit: int = 20, current_user: dict = Depends(get_current_user)):
@@ -6309,15 +6319,26 @@ async def get_user_stats(
     total_minutes = sum(h.get("duration", 180) for h in play_history) // 60  # Default 3 min per track
     unique_artists = len(set(h.get("artist") for h in play_history if h.get("artist")))
     
-    # Top genres (mock for now)
+    # Top genres from play history
+    genre_counts = {}
+    for h in play_history:
+        for g in (h.get("genres") or []):
+            if g:
+                genre_counts[g] = genre_counts.get(g, 0) + 1
+    total_genre_plays = sum(genre_counts.values()) or 1
     top_genres = [
-        {"name": "Pop", "percentage": 35},
-        {"name": "Rock", "percentage": 25},
-        {"name": "Hip-Hop", "percentage": 20},
-        {"name": "Jazz", "percentage": 12},
-        {"name": "Klasik", "percentage": 8},
+        {"name": g, "percentage": round(c * 100 / total_genre_plays)}
+        for g, c in sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:5]
     ]
-    
+    # Fallback: try listening_stats collection
+    if not top_genres:
+        ls = await db.listening_stats.find_one({"user_id": current_user["id"]}, {"top_genres": 1})
+        if ls and ls.get("top_genres"):
+            top_genres = [
+                {"name": (g.get("name") or g.get("genre") if isinstance(g, dict) else g), "percentage": (g.get("percentage", 0) if isinstance(g, dict) else 0)}
+                for g in ls["top_genres"][:5]
+            ]
+
     # Top artists from play history
     artist_counts = {}
     for h in play_history:
@@ -7032,6 +7053,70 @@ async def update_now_playing(body: dict, current_user=Depends(get_current_user))
         )
     return {"status": "updated"}
 
+@api_router.post("/users/me/track-played")
+async def record_track_played(body: dict, current_user=Depends(get_current_user)):
+    """Record a played track to listening_history and update listening_stats."""
+    user_id = current_user["id"]
+    track = body.get("track", {})
+    if not track or not track.get("title"):
+        return {"status": "skipped"}
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    duration = int(track.get("duration", 0) or 0)  # seconds
+
+    # 1. Insert into listening_history
+    await db.listening_history.insert_one({
+        "user_id":    user_id,
+        "track_id":   track.get("id", ""),
+        "title":      track.get("title", ""),
+        "artist":     track.get("artist") or track.get("artist_name", ""),
+        "artist_name":track.get("artist") or track.get("artist_name", ""),
+        "cover_url":  track.get("cover_url") or track.get("thumbnail", ""),
+        "genres":     track.get("genres") or [],
+        "source":     track.get("source", ""),
+        "duration":   duration,
+        "played_at":  now_iso,
+    })
+
+    # 2. Upsert listening_stats — atomic increments
+    artist = track.get("artist") or track.get("artist_name", "")
+    genres = track.get("genres") or []
+
+    # Fetch current stats to merge top_artists / top_genres
+    stats = await db.listening_stats.find_one({"user_id": user_id}) or {}
+    top_artists = {a["name"]: a["count"] for a in stats.get("top_artists", []) if isinstance(a, dict) and a.get("name")}
+    top_genres  = {g["name"]: g["count"] for g in stats.get("top_genres", [])  if isinstance(g, dict) and g.get("name")}
+
+    if artist:
+        top_artists[artist] = top_artists.get(artist, 0) + 1
+    for g in genres:
+        if g:
+            top_genres[g] = top_genres.get(g, 0) + 1
+
+    sorted_artists = sorted(top_artists.items(), key=lambda x: x[1], reverse=True)[:20]
+    sorted_genres  = sorted(top_genres.items(),  key=lambda x: x[1], reverse=True)[:10]
+
+    await db.listening_stats.update_one(
+        {"user_id": user_id},
+        {"$inc": {"total_tracks": 1, "total_play_time": duration},
+         "$set": {
+             "top_artists":   [{"name": n, "count": c} for n, c in sorted_artists],
+             "top_genres":    [{"name": g, "count": c} for g, c in sorted_genres],
+             "last_played_at": now_iso,
+         }},
+        upsert=True,
+    )
+
+    # 3. Update unique_artists count
+    unique = len({a["name"] for a in [{"name": n} for n, _ in sorted_artists]})
+    await db.listening_stats.update_one(
+        {"user_id": user_id},
+        {"$set": {"unique_artists": unique}},
+    )
+
+    return {"status": "recorded"}
+
+
 @api_router.get("/users/{user_id}/now-playing")
 async def get_now_playing(user_id: str):
     user = await db.users.find_one({"id": user_id})
@@ -7187,6 +7272,72 @@ async def get_user_recent_tracks(user_id: str, limit: int = 5, current_user=Depe
             "played_at": h.get("played_at", ""),
         })
     return {"tracks": tracks}
+
+
+@api_router.get("/users/{user_id}/listening-stats")
+async def get_user_listening_stats(user_id: str, current_user=Depends(get_current_user)):
+    """Get another user's listening stats — top genres, top artists, total time."""
+    # Try pre-aggregated listening_stats collection first
+    ls = await db.listening_stats.find_one({"user_id": user_id}, {"_id": 0})
+
+    # Fallback: compute from listening_history
+    history = await db.listening_history.find(
+        {"user_id": user_id}, {"_id": 0}
+    ).sort("played_at", -1).limit(500).to_list(500)
+
+    # Also try play_history collection (some endpoints use this name)
+    if not history:
+        history = await db.play_history.find(
+            {"user_id": user_id}, {"_id": 0}
+        ).sort("played_at", -1).limit(500).to_list(500)
+
+    total_tracks = len(history)
+    total_minutes = sum(h.get("duration", 180) for h in history) // 60
+
+    # Top artists from history
+    artist_counts = {}
+    for h in history:
+        a = h.get("artist") or h.get("artist_name", "")
+        if a:
+            artist_counts[a] = artist_counts.get(a, 0) + 1
+    top_artists = [
+        {"name": name, "play_count": count}
+        for name, count in sorted(artist_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+    ]
+
+    # Top genres — from listening_stats if available, else from history
+    if ls and ls.get("top_genres"):
+        raw_genres = ls["top_genres"]
+        top_genres = []
+        for g in raw_genres[:6]:
+            if isinstance(g, dict):
+                top_genres.append({"genre": g.get("name") or g.get("genre", ""), "label": g.get("name") or g.get("genre", ""), "count": g.get("count", 0)})
+            else:
+                top_genres.append({"genre": g, "label": g, "count": 0})
+    else:
+        genre_counts = {}
+        for h in history:
+            for g in (h.get("genres") or []):
+                genre_counts[g] = genre_counts.get(g, 0) + 1
+        top_genres = [{"genre": g, "label": g, "count": c} for g, c in sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:6]]
+
+    # Merge pre-aggregated totals if available
+    if ls:
+        total_minutes = ls.get("total_play_time", total_minutes * 60) // 60
+        total_tracks  = ls.get("total_tracks", total_tracks)
+        if ls.get("top_artists") and not top_artists:
+            top_artists = [
+                {"name": (a.get("name") if isinstance(a, dict) else a), "play_count": (a.get("count", 0) if isinstance(a, dict) else 0)}
+                for a in ls["top_artists"][:5]
+            ]
+
+    return {
+        "total_minutes":  total_minutes,
+        "total_tracks":   total_tracks,
+        "unique_artists": len(artist_counts) or (ls.get("unique_artists", 0) if ls else 0),
+        "top_genres":     top_genres,
+        "top_artists":    top_artists,
+    }
 
 
 @api_router.get("/playlists/user/{user_id}")
@@ -12500,31 +12651,95 @@ async def get_analytics_overview(current_user: dict = Depends(get_current_user))
     total_followers = await db.follows.count_documents({"following_id": user_id})
     total_following = await db.follows.count_documents({"follower_id": user_id})
     
-    # Calculate mock total likes (since this isn't globally aggregated easily without aggregation pipeline)
-    # Mocking total likes based on posts
-    total_likes_received = total_posts * random.randint(5, 50) + random.randint(0, 100)
-    
+    # Sum likes from actual posts
+    posts = await db.posts.find({"user_id": user_id}, {"likes_count": 1, "_id": 0}).to_list(1000)
+    total_likes_received = sum(p.get("likes_count", 0) for p in posts)
+
+    # Total listening time from history
+    history = await db.play_history.find({"user_id": user_id}, {"duration": 1, "_id": 0}).to_list(5000)
+    if not history:
+        history = await db.listening_history.find({"user_id": user_id}, {"duration": 1, "_id": 0}).to_list(5000)
+    total_listening_minutes = sum(h.get("duration", 180) for h in history) // 60
+
     return {
         "total_posts": total_posts,
         "total_followers": total_followers,
         "total_following": total_following,
-        "total_likes_received": total_likes_received
+        "total_likes_received": total_likes_received,
+        "total_listening_minutes": total_listening_minutes,
     }
 
 @api_router.get("/profile/analytics/listening")
 async def get_listening_analytics(current_user: dict = Depends(get_current_user)):
     """Get user listening behavior and statistics"""
-    # Currently mocked as we don't have a robust play history tracking table yet
+    user_id = current_user["id"]
+
+    history = await db.play_history.find({"user_id": user_id}, {"_id": 0}).to_list(5000)
+    if not history:
+        history = await db.listening_history.find({"user_id": user_id}, {"_id": 0}).to_list(5000)
+
+    total_minutes = sum(h.get("duration", 180) for h in history) // 60
+
+    # Top artist
+    artist_counts = {}
+    for h in history:
+        a = h.get("artist") or h.get("artist_name", "")
+        if a:
+            artist_counts[a] = artist_counts.get(a, 0) + 1
+    top_artist = max(artist_counts, key=artist_counts.get) if artist_counts else None
+
+    # Top genre
+    genre_counts = {}
+    for h in history:
+        for g in (h.get("genres") or []):
+            if g:
+                genre_counts[g] = genre_counts.get(g, 0) + 1
+    top_genre = max(genre_counts, key=genre_counts.get) if genre_counts else None
+
+    # Top track
+    track_counts = {}
+    for h in history:
+        key = f"{h.get('title','')}"
+        if key:
+            track_counts[key] = track_counts.get(key, 0) + 1
+    top_track = max(track_counts, key=track_counts.get) if track_counts else None
+
+    # Activity by weekday (0=Mon)
+    from collections import defaultdict
+    day_minutes = defaultdict(int)
+    for h in history:
+        played_at = h.get("played_at", "")
+        if played_at:
+            try:
+                dt = datetime.fromisoformat(played_at.replace("Z", "+00:00"))
+                day_minutes[dt.weekday()] += h.get("duration", 180) // 60
+            except Exception:
+                pass
+    activity_days = [day_minutes[i] for i in range(7)]
+
+    # Monthly stats (current year)
+    from collections import defaultdict as dd2
+    month_minutes = dd2(int)
+    current_year = datetime.now(timezone.utc).year
+    for h in history:
+        played_at = h.get("played_at", "")
+        if played_at:
+            try:
+                dt = datetime.fromisoformat(played_at.replace("Z", "+00:00"))
+                if dt.year == current_year:
+                    month_minutes[dt.month] += h.get("duration", 180) // 60
+            except Exception:
+                pass
+    monthly_stats = [month_minutes[m] for m in range(1, 13)]
+
     return {
-        "total_listening_minutes": random.randint(1000, 50000),
-        "top_artist": fake.name() if random.random() > 0.5 else "The Weeknd",
-        "top_genre": random.choice(["Pop", "Hip Hop", "Rock", "R&B", "Electronic", "Jazz"]),
-        "yearly_top_track": fake.catch_phrase(),
-        "yearly_top_artist": fake.name(),
-        # Activity days (Mon-Sun minutes)
-        "activity_days": [random.randint(10, 120) for _ in range(7)],
-        # Monthly stats (Jan-Dec minutes)
-        "monthly_stats": [random.randint(500, 5000) for _ in range(12)]
+        "total_listening_minutes": total_minutes,
+        "top_artist":       top_artist,
+        "top_genre":        top_genre,
+        "yearly_top_track": top_track,
+        "yearly_top_artist": top_artist,
+        "activity_days":    activity_days,
+        "monthly_stats":    monthly_stats,
     }
 
 @api_router.get("/profile/analytics/audience")
