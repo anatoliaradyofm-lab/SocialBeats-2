@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
@@ -294,14 +295,20 @@ export default function NotificationsScreen({ navigation }) {
     setRefreshing(false);
   }, [loadNotifications]);
 
+  const emitNotifUpdate = () => {
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('sb:notif-read'));
+  };
+
   const markRead = useCallback(async (id) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     try { await api.post(`/notifications/${id}/read`, {}, token); } catch {}
+    emitNotifUpdate();
   }, [token]);
 
   const markAllRead = useCallback(async () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     try { await api.post('/notifications/read-all', {}, token); } catch {}
+    emitNotifUpdate();
   }, [token]);
 
   const handlePress = useCallback((item) => {
@@ -320,6 +327,12 @@ export default function NotificationsScreen({ navigation }) {
 
   return (
     <View style={s.overlay}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       {/* Blurred dim area — only the visible portion above sheet is blurred */}
       <TouchableOpacity
         style={s.dimArea}

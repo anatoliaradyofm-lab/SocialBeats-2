@@ -152,6 +152,9 @@ let _userDeltas       = _loadMap('_mock_user_deltas'); // id → {followers_coun
 let _acceptedFollowers  = _loadSet('_mock_accepted_followers', []); // user IDs accepted from follow requests
 let _deletedNotifIds    = _loadSet('_mock_deleted_notifs', []);    // silinen bildirim ID'leri
 let _readNotifIds       = _loadSet('_mock_read_notifs', []);       // okundu işaretlenen bildirim ID'leri
+let _readConvIds        = _loadSet('_mock_read_convs', []);        // okundu işaretlenen konuşma ID'leri
+
+const MOCK_UNREAD_CONVS = { c1: 3, c3: 1 }; // id → unreadCount (başlangıç)
 
 // Bildirim mock'undaki takip isteği sahiplerinin profil verisi
 const MOCK_NOTIF_USERS = {
@@ -213,6 +216,23 @@ const api = {
 
   // Fallback — SoundCloud hybrid for /search & /music/search, mock for the rest
   get: (url) => {
+    // Notification preferences
+    if (url === '/notifications/preferences') {
+      try {
+        const saved = localStorage.getItem('_mock_notif_prefs');
+        if (saved) return delay().then(() => JSON.parse(saved));
+      } catch {}
+      return delay().then(() => ({ push: true, messages: true, likes: true, comments: true, follows: true }));
+    }
+    // Data export
+    if (url === '/account/data-export') {
+      return delay(1200).then(() => ({ message: 'Dışa aktarma işleminiz hazırlandı. E-postanızı kontrol edin.' }));
+    }
+    // Blocked users list
+    if (url === '/social/blocked-users') {
+      const blocks = (() => { try { return JSON.parse(localStorage.getItem('_mock_blocked') || '[]'); } catch { return []; } })();
+      return delay(300).then(() => blocks);
+    }
     // Current user
     if (url === '/auth/me') {
       return delay(100).then(() => ({ ..._mockUser, following_count: _following.size, followers_count: _mockUser.followers_count }));
@@ -300,6 +320,21 @@ const api = {
         ],
       }));
     }
+    // User search
+    if (url.startsWith('/users/search')) {
+      const params = new URLSearchParams(url.includes('?') ? url.slice(url.indexOf('?') + 1) : '');
+      const q = (params.get('q') || '').toLowerCase().trim();
+      const limit = parseInt(params.get('limit') || '30', 10);
+      const allUsers = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS)];
+      const results = q
+        ? allUsers.filter(u =>
+            u.username?.toLowerCase().includes(q) ||
+            u.display_name?.toLowerCase().includes(q) ||
+            u.name?.toLowerCase().includes(q)
+          ).slice(0, limit)
+        : allUsers.slice(0, limit);
+      return delay(200).then(() => ({ users: results.map(u => ({ ...u, is_following: _following.has(u.id) })) }));
+    }
     // Discover countries
     if (url === '/users/discover/countries') {
       const countries = [...new Set(MOCK_DISCOVER_USERS.map(u => u.country).filter(Boolean))].sort();
@@ -317,7 +352,7 @@ const api = {
       if (country) list = list.filter(u => u.country?.toLowerCase().includes(country.toLowerCase()));
       if (gender)  list = list.filter(u => u.gender?.toLowerCase() === gender.toLowerCase());
       const page = list.slice(offset, offset + limit);
-      return delay(300).then(() => ({ users: page, total: list.length, has_more: offset + page.length < list.length }));
+      return delay(300).then(() => ({ users: page.map(u => ({ ...u, is_following: _following.has(u.id) })), total: list.length, has_more: offset + page.length < list.length }));
     }
     // Now playing for a user: /users/{id}/now-playing
     if (url.includes('/now-playing')) {
@@ -397,45 +432,100 @@ const api = {
         { id: 't5', title: 'Save Your Tears', artist: 'The Weeknd',  cover_url: 'https://picsum.photos/seed/syt/60/60'    },
       ]}));
     }
+    // /users/me/followers
+    if (url.startsWith('/users/me/followers')) {
+      const acceptedUsers = Object.values(MOCK_NOTIF_USERS).filter(u => _acceptedFollowers.has(u.id));
+      const followers = [
+        ...acceptedUsers,
+        ...MOCK_DISCOVER_USERS.filter(u => !_removedFollowers.has(u.id)),
+      ].map(u => ({ ...u, type: 'follower', is_following: _following.has(u.id) }));
+      return delay(200).then(() => ({ users: followers }));
+    }
+    // /users/me/following
+    if (url.startsWith('/users/me/following')) {
+      const ALL_USERS = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS)];
+      const following = ALL_USERS.filter(u => _following.has(u.id))
+        .map(u => ({ ...u, type: 'following', is_following: true }));
+      return delay(200).then(() => ({ users: following }));
+    }
     // Followers list: /users/{id}/followers
     if (/^\/users\/[^/]+\/followers/.test(url)) {
       const uid = url.split('/users/')[1].split('/')[0];
       let followers;
-      if (uid === 'preview-1' || uid === _mockUser.id) {
-        // My followers = all discover users except those I removed + accepted follow requests
+      const isOwnProfile = uid === 'preview-1' || uid === _mockUser.id;
+      if (isOwnProfile) {
+        // Benim takipçilerim = removed olmayanlar + kabul edilenler
         const acceptedUsers = Object.values(MOCK_NOTIF_USERS).filter(u => _acceptedFollowers.has(u.id));
         followers = [
           ...acceptedUsers,
           ...MOCK_DISCOVER_USERS.filter(u => !_removedFollowers.has(u.id)),
         ];
       } else {
-        followers = MOCK_DISCOVER_USERS.filter(u => u.id !== uid).slice(0, 5);
+        const baseFollowers = MOCK_DISCOVER_USERS.filter(u => u.id !== uid).slice(0, 5);
+        // Eğer mevcut kullanıcı (preview-1) bu kişiyi takip ediyorsa → kendi profilim de takipçiler arasında görünür
+        if (_following.has(uid)) {
+          const me = {
+            ..._mockUser,
+            id: _mockUser.id || 'preview-1',
+            follower_count: _mockUser.followers_count,
+          };
+          followers = [me, ...baseFollowers];
+        } else {
+          followers = baseFollowers;
+        }
       }
       const mapped = followers.map(u => ({
         ...u,
-        followers_count: (u.follower_count ?? 0) + (_userDeltas.get(u.id)?.followers_count ?? 0),
+        followers_count: (u.follower_count ?? u.followers_count ?? 0) + (_userDeltas.get(u.id)?.followers_count ?? 0),
         following_count: u.following_count ?? 0,
+        // is_following: mevcut kullanıcı bu takipçiyi takip ediyor mu?
         is_following: _following.has(u.id),
-        is_mutual: _following.has(u.id),
+        // is_mutual: kendi takipçi listesinde → ben de onları takip ediyorsam karşılıklı
+        is_mutual: isOwnProfile ? _following.has(u.id) : false,
       }));
       return delay(200).then(() => ({ users: mapped }));
     }
     // Following list: /users/{id}/following
     if (/^\/users\/[^/]+\/following/.test(url)) {
       const uid = url.split('/users/')[1].split('/')[0];
+      const isOwnProfile = uid === 'preview-1' || uid === _mockUser.id;
+      // Tüm kullanıcı havuzu (ben dahil)
+      const ALL_USERS = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS)];
       let followingList;
-      if (uid === 'preview-1' || uid === _mockUser.id) {
-        followingList = MOCK_DISCOVER_USERS.filter(u => _following.has(u.id));
+      if (isOwnProfile) {
+        // Benim takip ettiklerim → _following seti
+        followingList = ALL_USERS.filter(u => _following.has(u.id));
       } else {
-        followingList = MOCK_DISCOVER_USERS.filter(u => u.id !== uid).slice(0, 3);
+        // Başkasının (uid) takip ettikleri
+        // uid beni (preview-1) takip ediyor mu? → uid benim takipçilerimde ve kaldırılmamışsa evet
+        const uidFollowsMe = (
+          MOCK_DISCOVER_USERS.some(u => u.id === uid) && !_removedFollowers.has(uid)
+        ) || (
+          Object.values(MOCK_NOTIF_USERS).some(u => u.id === uid) && _acceptedFollowers.has(uid)
+        );
+        // Örnek takip listesi (uid hariç, ben hariç)
+        const base = ALL_USERS.filter(u => u.id !== uid && u.id !== (_mockUser.id || 'preview-1')).slice(0, 4);
+        // uid beni takip ediyorsa → listesine beni de ekle
+        if (uidFollowsMe) {
+          followingList = [{ ..._mockUser, follower_count: _mockUser.followers_count }, ...base];
+        } else {
+          followingList = base;
+        }
       }
-      const mapped = followingList.map(u => ({
-        ...u,
-        followers_count: (u.follower_count ?? 0) + (_userDeltas.get(u.id)?.followers_count ?? 0),
-        following_count: u.following_count ?? 0,
-        is_following: true,
-        is_mutual: !_removedFollowers.has(u.id),
-      }));
+      const mapped = followingList.map(u => {
+        const isMockUser = u.id === (_mockUser.id || 'preview-1');
+        return {
+          ...u,
+          followers_count: isMockUser
+            ? (_mockUser.followers_count || 0)
+            : (u.follower_count ?? u.followers_count ?? 0) + (_userDeltas.get(u.id)?.followers_count ?? 0),
+          following_count: isMockUser ? (_mockUser.following_count || 0) : (u.following_count ?? 0),
+          // is_following: mevcut kullanıcı (ben) bu kişiyi takip ediyor mu?
+          is_following: isMockUser ? false : _following.has(u.id),
+          // is_mutual: yalnızca kendi listesinde anlamlı
+          is_mutual: isOwnProfile ? (_following.has(u.id) && !_removedFollowers.has(u.id)) : false,
+        };
+      });
       return delay(200).then(() => ({ users: mapped }));
     }
     // Mutual followers
@@ -451,8 +541,26 @@ const api = {
       const uname = url.split('/user/')[1]?.split('?')[0];
       const found = MOCK_DISCOVER_USERS.find(u => u.username === uname)
         || MOCK_NOTIF_USERS[uname]
-        || (uname === _mockUser.username ? _mockUser : null);
-      if (!found) return delay(200).then(() => null);
+        || MOCK_DISCOVER_USERS.find(u => u.id === uname)
+        || Object.values(MOCK_NOTIF_USERS).find(u => u.id === uname)
+        || (uname === _mockUser.username || uname === _mockUser.id ? _mockUser : null);
+      if (!found) {
+        // Generate a basic profile for mock conversation users not in discover list
+        found = {
+          id: uname,
+          username: uname,
+          display_name: uname.charAt(0).toUpperCase() + uname.slice(1).replace(/_/g, ' '),
+          avatar_url: `https://i.pravatar.cc/300?u=${uname}`,
+          bio: 'Müzik severi 🎵',
+          music_genres: ['Pop', 'Electronic'],
+          country: '',
+          city: '',
+          follower_count: Math.floor(Math.random() * 500) + 50,
+          following_count: Math.floor(Math.random() * 200) + 20,
+          post_count: Math.floor(Math.random() * 30) + 1,
+          is_verified: false,
+        };
+      }
       const deltas = _userDeltas.get(found.id) || {};
       const isFollowing = _following.has(found.id);
       return delay(200).then(() => ({
@@ -477,11 +585,13 @@ const api = {
       if (!q) return Promise.resolve({ tracks: [], users: [], playlists: [], posts: [] });
       // User search
       if (type === 'users') {
-        const allUsers = Object.values(MOCK_NOTIF_USERS).filter(u =>
+        const allPool = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS)];
+        const allUsers = allPool.filter(u =>
           (u.username || '').toLowerCase().includes(q) ||
-          (u.display_name || '').toLowerCase().includes(q)
+          (u.display_name || '').toLowerCase().includes(q) ||
+          (u.name || '').toLowerCase().includes(q)
         ).slice(0, limit);
-        return delay(200).then(() => ({ users: allUsers.map(u => ({ ...u, is_following: false })) }));
+        return delay(200).then(() => ({ users: allUsers.map(u => ({ ...u, is_following: _following.has(u.id) })) }));
       }
       return musicHybridSearch(q, limit).then(tracks => ({ tracks, users: [], playlists: [], posts: [] }));
     }
@@ -514,14 +624,69 @@ const api = {
       );
     }
     // Unread count — _readNotifIds'e göre hesapla
+    // Chat messages for a conversation: GET /messages/{convId}
+    if (/^\/messages\/[^/?/]+(\?.*)?$/.test(url) && !url.includes('/unread-count') && !url.includes('/conversations')) {
+      const convId = url.split('/messages/')[1].split('?')[0];
+      const stored = (() => { try { return JSON.parse(localStorage.getItem(`_mock_msgs_${convId}`) || '[]'); } catch { return []; } })();
+      // Provide default messages only for non-group conversations
+      const isGroup = convId.startsWith('grp_');
+      const otherUser = MOCK_DISCOVER_USERS[0] || { id: 'u2', username: 'melodikbeat', display_name: 'MelodikBeat', avatar_url: 'https://i.pravatar.cc/80?u=u2' };
+      const base = stored.length ? stored : isGroup ? [] : [
+        { id: 'm1', content: 'Merhaba! 👋', content_type: 'TEXT', sender_id: otherUser.id, sender: { id: otherUser.id, username: otherUser.username, display_name: otherUser.display_name, avatar_url: otherUser.avatar_url }, created_at: new Date(Date.now() - 3600000).toISOString(), is_read: true },
+        { id: 'm2', content: 'Hey, nasılsın?', content_type: 'TEXT', sender_id: 'preview-1', sender: { id: 'preview-1', username: _mockUser.username, display_name: _mockUser.display_name, avatar_url: _mockUser.avatar_url }, created_at: new Date(Date.now() - 3500000).toISOString(), is_read: true },
+        { id: 'm3', content: 'İyiyim, teşekkürler 🎵', content_type: 'TEXT', sender_id: otherUser.id, sender: { id: otherUser.id, username: otherUser.username, display_name: otherUser.display_name, avatar_url: otherUser.avatar_url }, created_at: new Date(Date.now() - 600000).toISOString(), is_read: false },
+      ];
+      return delay(250).then(() => ({ messages: base, total: base.length }));
+    }
+    if (url === '/messages/unread-count') {
+      const count = Object.entries(MOCK_UNREAD_CONVS)
+        .filter(([id]) => !_readConvIds.has(id))
+        .reduce((sum, [, n]) => sum + n, 0);
+      return delay().then(() => ({ count }));
+    }
     if (url === '/notifications/unread-count') {
-      const allIds = ['n1','n2','n3','n4','n5','n6','n7','n8'];
+      const allIds = ['n1','n2','n3','n4','n5'];
       const count = allIds.filter(id => !_deletedNotifIds.has(id) && !_readNotifIds.has(id)).length;
       return delay().then(() => ({ count }));
     }
     return delay().then(() => ({}));
   },
   post:   (url, data) => {
+    // Send message: POST /messages (ChatScreen uses this endpoint)
+    if (url === '/messages') {
+      const convId = data?.conversation_id;
+      const newMsg = {
+        id: 'msg_' + Date.now(),
+        content: data?.content || '',
+        content_type: data?.content_type || 'TEXT',
+        sender_id: 'preview-1',
+        sender: { id: 'preview-1', username: _mockUser.username, display_name: _mockUser.display_name, avatar_url: _mockUser.avatar_url },
+        conversation_id: convId,
+        created_at: new Date().toISOString(),
+        is_read: false,
+      };
+      if (convId) {
+        try {
+          const key = `_mock_msgs_${convId}`;
+          const existing = JSON.parse(localStorage.getItem(key) || '[]');
+          localStorage.setItem(key, JSON.stringify([...existing, newMsg]));
+        } catch {}
+        // Update lastMsg in _mock_groups for group conversations
+        try {
+          const groups = JSON.parse(localStorage.getItem('_mock_groups') || '[]');
+          const updatedGroups = groups.map(g => g.id === convId
+            ? { ...g, lastMsg: data?.content || '📎 Medya', time: 'Şimdi' } : g);
+          localStorage.setItem('_mock_groups', JSON.stringify(updatedGroups));
+        } catch {}
+      }
+      return delay(200).then(() => newMsg);
+    }
+    if (url.match(/\/messages\/conversations\/(.+)\/read/)) {
+      const id = url.match(/\/messages\/conversations\/(.+)\/read/)[1];
+      _readConvIds.add(id);
+      try { localStorage.setItem('_mock_read_convs', JSON.stringify([..._readConvIds])); } catch {}
+      return delay().then(() => ({ status: 'ok' }));
+    }
     if (url.includes('/auth/login')) {
       if (!data?.email || !data?.password) return delay().then(() => Promise.reject(Object.assign(new Error('Invalid credentials'), { data: { detail: 'Email and password required' } })));
       return delay().then(() => MOCK_AUTH);
@@ -539,10 +704,107 @@ const api = {
       }
       return delay(100).then(() => ({ status: 'recorded' }));
     }
+    // Create group
+    if (url === '/messages/groups') {
+      const groupId = 'grp_' + Date.now();
+      const allUsers = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS), _mockUser];
+      const participants = (data?.participant_ids || [])
+        .map(id => allUsers.find(u => u.id === id))
+        .filter(Boolean)
+        .map(u => ({ id: u.id, username: u.username, display_name: u.display_name || u.name || u.username, avatar_url: u.avatar_url }));
+      const group = {
+        id: groupId,
+        name: data?.name || 'Grup',
+        group_name: data?.name || 'Grup',
+        is_group: true,
+        participants,
+        lastMsg: `Grup oluşturuldu · ${participants.length + 1} üye`,
+        time: 'Şimdi',
+        unread: 0,
+        online: false,
+        created_at: new Date().toISOString(),
+        last_message: null,
+      };
+      // Also persist to localStorage so ConversationsScreen can show it immediately
+      try {
+        const existing = JSON.parse(localStorage.getItem('_mock_groups') || '[]');
+        if (!existing.find(g => g.id === groupId)) {
+          localStorage.setItem('_mock_groups', JSON.stringify([group, ...existing]));
+        }
+      } catch {}
+      return delay(400).then(() => group);
+    }
     if (url.includes('/auth/register'))      return delay().then(() => MOCK_AUTH);
-    if (url.includes('/auth/google'))        return delay().then(() => MOCK_AUTH);
     if (url.includes('/auth/verify-token'))  return delay().then(() => MOCK_AUTH);
-    if (url.includes('/auth/forgot'))        return delay().then(() => ({ message: 'Reset link sent' }));
+    // Phone password reset (WhatsApp OTP)
+    if (url.includes('/auth/phone/reset-password/send-otp')) {
+      const phone = data?.phone || '';
+      const exists = phone.length >= 8; // mock: any valid phone is "found"
+      if (!exists) return delay(400).then(() => Promise.reject(Object.assign(new Error('Kayıtlı hesap yok'), { data: { detail: 'Bu telefon numarası ile kayıtlı hesap bulunamadı' } })));
+      try { localStorage.setItem('_mock_reset_otp', JSON.stringify({ phone, code: '123456', expires: Date.now() + 600000 })); } catch {}
+      return delay(600).then(() => ({ message: 'Şifre sıfırlama kodu WhatsApp\'a gönderildi', sent: true }));
+    }
+    if (url.includes('/auth/phone/reset-password/verify')) {
+      const stored = (() => { try { return JSON.parse(localStorage.getItem('_mock_reset_otp') || '{}'); } catch { return {}; } })();
+      const code = String(data?.code || '').trim();
+      if (code !== '123456' && code !== (stored.code || '123456')) {
+        return delay(400).then(() => Promise.reject(Object.assign(new Error('Geçersiz kod'), { data: { detail: 'Geçersiz kod' } })));
+      }
+      return delay(500).then(() => ({ message: 'Şifre başarıyla sıfırlandı' }));
+    }
+    // Phone auth (Evolution WhatsApp OTP)
+    if (url.includes('/auth/phone/send-otp')) {
+      const phone = data?.phone || '';
+      try { localStorage.setItem('_mock_phone_otp', JSON.stringify({ phone, code: '123456', expires: Date.now() + 600000 })); } catch {}
+      return delay(600).then(() => ({ message: 'Doğrulama kodu WhatsApp\'a gönderildi', sent: true }));
+    }
+    if (url.includes('/auth/phone/verify')) {
+      const stored = (() => { try { return JSON.parse(localStorage.getItem('_mock_phone_otp') || '{}'); } catch { return {}; } })();
+      const code = String(data?.code || '').trim();
+      if (code !== '123456' && code !== (stored.code || '123456')) {
+        return delay(400).then(() => Promise.reject(Object.assign(new Error('Geçersiz kod'), { data: { detail: 'Geçersiz kod' } })));
+      }
+      const isNew = !!(data?.username);
+      const mockUser = { ..._mockUser };
+      if (isNew) {
+        mockUser.username     = data.username || mockUser.username;
+        mockUser.display_name = data.display_name || mockUser.display_name;
+        mockUser.country      = data.country || null;
+        mockUser.gender       = data.gender || null;
+        _saveMockUser(mockUser);
+      }
+      return delay(500).then(() => ({ ...MOCK_AUTH, user: mockUser, is_new_user: isNew }));
+    }
+    // Freeze account
+    if (url.includes('/account/freeze')) {
+      try { localStorage.setItem('_mock_frozen', '1'); } catch {}
+      return delay(700).then(() => ({ message: 'Hesabınız donduruldu' }));
+    }
+    // Delete account — step 1: request code
+    if (url.includes('/account/delete/request')) {
+      try { localStorage.setItem('_mock_del_code', '654321'); } catch {}
+      return delay(600).then(() => ({ message: 'Doğrulama kodu e-posta adresinize gönderildi', step: 1 }));
+    }
+    // Delete account — step 2: verify code
+    if (url.includes('/account/delete/verify-code')) {
+      const codeParam = url.includes('?code=') ? decodeURIComponent(url.split('?code=')[1]) : String(data?.code || '');
+      const stored = (() => { try { return localStorage.getItem('_mock_del_code') || '654321'; } catch { return '654321'; } })();
+      if (codeParam !== stored && codeParam !== '654321') {
+        return delay(400).then(() => Promise.reject(Object.assign(new Error('Geçersiz kod'), { data: { detail: 'Geçersiz kod' } })));
+      }
+      return delay(400).then(() => ({ message: 'Kod doğrulandı', step: 2, code_verified: true }));
+    }
+    // Block user
+    if (/\/social\/block\/([^/]+)$/.test(url)) {
+      const uid = url.match(/\/social\/block\/([^/]+)$/)[1];
+      const blocks = (() => { try { return JSON.parse(localStorage.getItem('_mock_blocked') || '[]'); } catch { return []; } })();
+      if (!blocks.find(b => b.id === uid)) {
+        const bu = MOCK_DISCOVER_USERS.find(u => u.id === uid) || { id: uid, username: uid, display_name: uid };
+        blocks.push(bu);
+        try { localStorage.setItem('_mock_blocked', JSON.stringify(blocks)); } catch {}
+      }
+      return delay(300).then(() => ({ message: 'Kullanıcı engellendi' }));
+    }
     // Follow user: POST /social/follow/{id}
     if (/\/social\/follow\/([^/]+)$/.test(url)) {
       const uid = url.match(/\/social\/follow\/([^/]+)$/)[1];
@@ -589,10 +851,13 @@ const api = {
   },
   put: (url, data) => {
     if (url === '/user/profile' || url.includes('/user/profile')) {
-      /* Apply changes to mutable mock user and persist to localStorage */
       Object.assign(_mockUser, data || {});
       _saveMockUser(_mockUser);
       return delay().then(() => ({ ..._mockUser }));
+    }
+    if (url === '/notifications/preferences') {
+      try { localStorage.setItem('_mock_notif_prefs', JSON.stringify(data || {})); } catch {}
+      return delay().then(() => ({ success: true }));
     }
     return delay().then(() => ({}));
   },
@@ -621,6 +886,27 @@ const api = {
       _saveMockUser(_mockUser);
       return delay(200).then(() => ({ message: 'Follower removed' }));
     }
+    // Unblock user: DELETE /social/unblock/{id}
+    if (/\/social\/unblock\/([^/]+)$/.test(url)) {
+      const uid = url.match(/\/social\/unblock\/([^/]+)$/)[1];
+      const blocks = (() => { try { return JSON.parse(localStorage.getItem('_mock_blocked') || '[]'); } catch { return []; } })();
+      const updated = blocks.filter(b => b.id !== uid);
+      try { localStorage.setItem('_mock_blocked', JSON.stringify(updated)); } catch {}
+      return delay(300).then(() => ({ message: 'Engel kaldırıldı' }));
+    }
+    // Delete playlist: DELETE /playlists/{id}
+    if (/^\/playlists\/[^/]+$/.test(url)) {
+      return delay(300).then(() => ({ message: 'Playlist silindi' }));
+    }
+    // Delete track from playlist: DELETE /playlists/{id}/tracks/{trackId}
+    if (/^\/playlists\/[^/]+\/tracks\/[^/]+$/.test(url)) {
+      return delay(200).then(() => ({ message: 'Şarkı kaldırıldı' }));
+    }
+    // Delete account — final: DELETE /account/delete
+    if (url.includes('/account/delete')) {
+      try { localStorage.removeItem('_mock_user'); localStorage.removeItem('_mockAuth'); } catch {}
+      return delay(800).then(() => ({ message: 'Hesabınız kalıcı olarak silindi' }));
+    }
     // Delete notification: DELETE /notifications/{id}
     if (/^\/notifications\/[^/]+$/.test(url)) {
       const nid = url.split('/notifications/')[1];
@@ -638,5 +924,6 @@ const api = {
 export const getApiUrl = (path = '') => `https://api.socialbeats.app${path}`;
 export const BASE_URL  = 'https://api.socialbeats.app';
 
-// Also export as default (axios-like)
+// Named + default export (both used across screens)
+export { api };
 export default api;

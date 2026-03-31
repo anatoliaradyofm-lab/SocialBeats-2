@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { getApiUrl } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const mediaUri = (uri) => {
   if (!uri) return null;
@@ -111,6 +112,12 @@ export default function SavedScreen({ navigation }) {
 
     return (
       <View style={styles.post}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
         <View style={styles.postHeader}>
           <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { username: uname })}>
             <Image source={{ uri: avatar }} style={styles.avatar} />

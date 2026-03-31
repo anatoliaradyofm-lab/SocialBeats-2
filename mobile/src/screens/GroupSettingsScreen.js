@@ -14,6 +14,7 @@ import api from '../services/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { getApiUrl } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const mediaUri = (uri) => {
   if (!uri) return null;
@@ -175,6 +176,12 @@ export default function GroupSettingsScreen({ route, navigation }) {
   if (loadingGroup && !groupData) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -232,7 +239,7 @@ export default function GroupSettingsScreen({ route, navigation }) {
           value={name}
           onChangeText={setName}
           placeholder={t('groups.groupNamePlaceholderEdit')}
-          placeholderTextColor="#6B7280"
+          placeholderTextColor={colors.textMuted}
           maxLength={50}
         />
       </View>
@@ -293,7 +300,7 @@ export default function GroupSettingsScreen({ route, navigation }) {
 
 const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   backBtn: { padding: 4, marginRight: 12 },
   title: { fontSize: 18, fontWeight: '700', color: colors.text },
   avatarWrap: { alignSelf: 'center', marginTop: 32, position: 'relative' },
@@ -301,13 +308,13 @@ const createStyles = (colors) => StyleSheet.create({
   avatarLoader: { position: 'absolute', bottom: 8, right: 8 },
   avatarBadge: { position: 'absolute', bottom: 0, right: 0, width: 36, height: 36, borderRadius: 18, backgroundColor: '#8B5CF6', alignItems: 'center', justifyContent: 'center' },
   field: { padding: 20 },
-  label: { fontSize: 14, color: '#9CA3AF', marginBottom: 8 },
-  input: { backgroundColor: '#1F2937', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: colors.text },
+  label: { fontSize: 14, color: colors.textMuted, marginBottom: 8 },
+  input: { backgroundColor: colors.inputBg, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: colors.text },
   saveBtn: { marginHorizontal: 20, marginTop: 24, backgroundColor: '#8B5CF6', borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
   saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: { color: colors.text, fontSize: 16, fontWeight: '600' },
   callButtons: { paddingHorizontal: 20, paddingTop: 16, gap: 8 },
-  callBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#1F2937', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, marginBottom: 8 },
+  callBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.inputBg, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, marginBottom: 8 },
   callBtnText: { color: colors.text, fontSize: 15, fontWeight: '500' },
   loadingCenter: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll: { flex: 1 },
@@ -315,14 +322,14 @@ const createStyles = (colors) => StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 4, marginTop: 8 },
   toggleLabel: { fontSize: 15, color: colors.text },
   membersSection: { marginTop: 24 },
-  membersSectionTitle: { fontSize: 14, color: '#9CA3AF', marginBottom: 12 },
-  memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1F2937', gap: 12 },
+  membersSectionTitle: { fontSize: 14, color: colors.textMuted, marginBottom: 12 },
+  memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 12 },
   memberAvatar: { width: 40, height: 40, borderRadius: 20 },
   memberInfo: { flex: 1, minWidth: 0 },
   memberName: { fontSize: 15, color: colors.text, fontWeight: '500' },
   adminBadge: { fontSize: 11, color: colors.accent, marginTop: 2 },
   memberActions: { flexDirection: 'row', gap: 8 },
-  memberActionBtn: { paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#374151', borderRadius: 8 },
+  memberActionBtn: { paddingVertical: 6, paddingHorizontal: 10, backgroundColor: colors.surfaceHigh, borderRadius: 8 },
   memberActionText: { fontSize: 12, color: colors.accent },
   memberActionDanger: { backgroundColor: 'rgba(239,68,68,0.2)' },
   memberActionTextDanger: { fontSize: 12, color: colors.error },

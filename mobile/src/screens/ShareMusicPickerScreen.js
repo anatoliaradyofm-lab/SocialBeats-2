@@ -1,7 +1,8 @@
 /**
  * ShareMusicPickerScreen - Müzik paylaşımı için şarkı seçimi
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
   ActivityIndicator, TextInput, Alert} from 'react-native';
@@ -12,6 +13,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../contexts/ThemeContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function ShareMusicPickerScreen({ route, navigation }) {
   const { colors } = useTheme();
@@ -26,6 +28,12 @@ export default function ShareMusicPickerScreen({ route, navigation }) {
   const [sending, setSending] = useState(false);
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState(false);
+  const inputRef = useRef(null);
+
+  useFocusEffect(useCallback(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 100);
+    return () => clearTimeout(t);
+  }, []));
 
   const searchMusic = useCallback(async (q) => {
     if (!q?.trim()) {
@@ -95,7 +103,7 @@ export default function ShareMusicPickerScreen({ route, navigation }) {
           <Image source={{ uri: thumb }} style={styles.thumb} resizeMode="cover" />
         ) : (
           <View style={[styles.thumb, styles.thumbPlaceholder]}>
-            <Ionicons name="musical-notes" size={28} color="#6B7280" />
+            <Ionicons name="musical-notes" size={28} color={colors.textMuted} />
           </View>
         )}
         <View style={styles.info}>
@@ -109,6 +117,12 @@ export default function ShareMusicPickerScreen({ route, navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -116,11 +130,12 @@ export default function ShareMusicPickerScreen({ route, navigation }) {
         <Text style={styles.headerTitle}>{t('player.shareMusic')}</Text>
       </View>
       <View style={styles.searchRow}>
-        <Ionicons name="search" size={20} color="#6B7280" />
+        <Ionicons name="search" size={20} color={colors.textMuted} />
         <TextInput
+          ref={inputRef}
           style={styles.searchInput}
           placeholder={t('search.searchSongs')}
-          placeholderTextColor="#6B7280"
+          placeholderTextColor={colors.textMuted}
           value={query}
           onChangeText={setQuery}
           onSubmitEditing={() => searchMusic(query)}
@@ -151,19 +166,19 @@ export default function ShareMusicPickerScreen({ route, navigation }) {
 
 const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   backBtn: { padding: 4, marginRight: 12 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  searchRow: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
-  searchInput: { flex: 1, backgroundColor: '#1F2937', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 16, color: colors.text },
+  searchRow: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
+  searchInput: { flex: 1, backgroundColor: colors.inputBg, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 16, color: colors.text },
   searchBtn: { paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#8B5CF6', borderRadius: 10 },
   searchBtnText: { color: colors.text, fontWeight: '600' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#1F2937', gap: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 12 },
   thumb: { width: 56, height: 56, borderRadius: 8 },
-  thumbPlaceholder: { backgroundColor: '#1F2937', justifyContent: 'center', alignItems: 'center' },
+  thumbPlaceholder: { backgroundColor: colors.inputBg, justifyContent: 'center', alignItems: 'center' },
   info: { flex: 1, minWidth: 0 },
   songTitle: { fontSize: 15, color: colors.text, fontWeight: '500' },
-  artist: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  empty: { color: '#9CA3AF', textAlign: 'center', padding: 24 },
+  artist: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  empty: { color: colors.textMuted, textAlign: 'center', padding: 24 },
 });

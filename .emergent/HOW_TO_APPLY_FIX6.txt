@@ -1,0 +1,57 @@
+HOW TO APPLY THE REMAINING CHANGE (FIX 6)
+==========================================
+
+STATUS: All 8 fixes are already implemented in MobilePreview.html EXCEPT
+one minor data attribute on line 1837. The app works correctly either way
+because the code uses `item.label === 'Dil'` to detect the language item.
+
+THE CHANGE: On line 1837, add ",isLang:true" after val:'Türkçe'
+
+FIND THIS (line 1837):
+  {label:'Dil',val:'Türkçe'}
+
+REPLACE WITH:
+  {label:'Dil',val:'Türkçe',isLang:true}
+
+-------------------------------------------------
+OPTION 1: Run the Python script (recommended)
+-------------------------------------------------
+From your PROJE directory in a terminal:
+
+  python .emergent/apply_fix.py
+
+-------------------------------------------------
+OPTION 2: Run the bash script (Git Bash)
+-------------------------------------------------
+From .emergent directory in Git Bash:
+
+  bash fix_dil.sh
+
+-------------------------------------------------
+OPTION 3: Manual edit in any text editor
+-------------------------------------------------
+1. Open: C:\Users\user\Desktop\PROJE\MobilePreview.html
+2. Use Find & Replace (Ctrl+H):
+   Find:    {label:'Dil',val:'Türkçe'}
+   Replace: {label:'Dil',val:'Türkçe',isLang:true}
+3. Save
+
+-------------------------------------------------
+OPTION 4: PowerShell one-liner
+-------------------------------------------------
+  $f = "C:\Users\user\Desktop\PROJE\MobilePreview.html"
+  (Get-Content $f -Raw) -replace "{label:'Dil',val:'Türkçe'}", "{label:'Dil',val:'Türkçe',isLang:true}" | Set-Content $f
+
+-------------------------------------------------
+VERIFICATION AFTER APPLYING:
+-------------------------------------------------
+Run this to confirm the change was applied:
+
+  git grep --no-index "isLang" MobilePreview.html
+
+Expected output:
+  MobilePreview.html:    'Uygulama Tercihleri':{...{label:'Dil',val:'Türkçe',isLang:true}...}
+
+NOTE: The app already functions correctly without this change.
+The language modal opens when clicking "Dil" via label detection at line 838.
+This is purely an explicit data attribute for code clarity.

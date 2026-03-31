@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const BADGE_ICONS = {
   first_post: 'create-outline',
@@ -87,6 +88,12 @@ export default function AchievementsScreen({ navigation }) {
 
     return (
       <View style={[styles.card, item.unlocked && styles.cardUnlocked]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
         <View style={[styles.iconCircle, { backgroundColor: item.unlocked ? color + '30' : '#374151' }]}>
           <Ionicons name={icon} size={28} color={item.unlocked ? color : '#6B7280'} />
         </View>

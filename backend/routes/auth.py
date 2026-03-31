@@ -175,9 +175,20 @@ async def login(credentials: UserLogin, request: Request = None):
     if not verify_password(credentials.password, user.get("password", "")):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # Check account frozen status
-    if user.get("account_frozen", False):
-        raise HTTPException(status_code=403, detail="Account is frozen. Please contact support or wait for the freeze period to end.")
+    # Auto-unfreeze on successful login (re-login = intent to reactivate)
+    if user.get("is_frozen", False) or user.get("account_frozen", False):
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {
+                "is_frozen": False, 
+                "account_frozen": False, 
+                "frozen_at": None, 
+                "freeze_reason": None,
+                "frozen_reason": None
+            }}
+        )
+        user["is_frozen"] = False
+        user["account_frozen"] = False
 
     # Update online status
     await db.users.update_one(
@@ -609,3 +620,209 @@ async def revoke_all_sessions(body: dict = None, current_user: dict = Depends(ge
         query["id"] = {"$ne": keep_id}
     result = await db.user_sessions.update_many(query, {"$set": {"revoked": True}})
     return {"revoked_count": result.modified_count}
+
+
+# ============== PHONE AUTH (WhatsApp OTP via Evilation) ==============
+
+@auth_router.post("/phone/send-otp")
+async def send_phone_otp(body: dict):
+    """Telefon numarasına WhatsApp OTP gönder"""
+    phone = body.get("phone", "").strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="Telefon numarası gerekli")
+    # Normalize: ensure starts with +
+    if not phone.startswith("+"):
+        raise HTTPException(status_code=400, detail="Telefon numarası + ile başlamalı (örn. +905551234567)")
+
+    from services.evilation_service import generate_otp, send_whatsapp_otp
+    code = generate_otp(6)
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+
+    await db.phone_otps.update_one(
+        {"phone": phone},
+        {"$set": {
+            "phone": phone,
+            "code": code,
+            "expires_at": expires_at,
+            "used": False,
+            "attempts": 0,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True
+    )
+
+    await send_whatsapp_otp(phone, code)
+    return {"message": "Doğrulama kodu WhatsApp'a gönderildi", "sent": True}
+
+
+@auth_router.post("/phone/verify")
+async def verify_phone_otp(body: dict):
+    """OTP kodunu doğrula → giriş yap veya kayıt ol"""
+    phone        = body.get("phone", "").strip()
+    code         = str(body.get("code", "")).strip()
+    username     = sanitize_username(body.get("username", "").strip()) if body.get("username") else ""
+    display_name = body.get("display_name", "").strip()
+    country      = body.get("country", "").strip()
+    gender       = body.get("gender", "").strip()
+
+    if not phone or not code:
+        raise HTTPException(status_code=400, detail="Telefon ve kod gerekli")
+
+    record = await db.phone_otps.find_one({"phone": phone, "used": False})
+    if not record:
+        raise HTTPException(status_code=400, detail="Geçersiz veya süresi dolmuş kod. Yeni kod isteyin.")
+
+    if record.get("attempts", 0) >= 5:
+        raise HTTPException(status_code=429, detail="Çok fazla hatalı deneme. Yeni kod isteyin.")
+
+    expires = datetime.fromisoformat(record["expires_at"].replace("Z", "+00:00"))
+    if datetime.now(timezone.utc) > expires:
+        await db.phone_otps.delete_one({"phone": phone})
+        raise HTTPException(status_code=400, detail="Kod süresi doldu. Yeni kod isteyin.")
+
+    await db.phone_otps.update_one({"phone": phone}, {"$inc": {"attempts": 1}})
+
+    if record["code"] != code:
+        raise HTTPException(status_code=400, detail="Geçersiz kod")
+
+    await db.phone_otps.update_one({"phone": phone}, {"$set": {"used": True}})
+
+    # Mevcut kullanıcıyı kontrol et
+    existing_user = await db.users.find_one({"phone": phone})
+
+    if existing_user:
+        # Giriş akışı
+        user = existing_user
+        if user.get("is_frozen") or user.get("account_frozen"):
+            await db.users.update_one(
+                {"id": user["id"]},
+                {"$set": {"is_frozen": False, "account_frozen": False, "frozen_at": None}}
+            )
+            user["is_frozen"] = False
+        await db.users.update_one({"id": user["id"]}, {"$set": {"is_online": True, "last_seen": now_iso()}})
+        is_new = False
+    else:
+        # Kayıt akışı — kullanıcı adı zorunlu
+        if not username:
+            raise HTTPException(
+                status_code=422,
+                detail="Yeni hesap için kullanıcı adı gerekli",
+                headers={"X-Needs-Username": "true"}
+            )
+        if len(username) < 3:
+            raise HTTPException(status_code=400, detail="Kullanıcı adı en az 3 karakter olmalı")
+        if await db.users.find_one({"username": username}):
+            raise HTTPException(status_code=400, detail="Bu kullanıcı adı alınmış")
+
+        user_id = generate_id()
+        user = {
+            "id": user_id,
+            "phone": phone,
+            "email": None,
+            "username": username,
+            "password": None,
+            "display_name": display_name or username,
+            "avatar_url": f"https://i.pravatar.cc/200?u={user_id}",
+            "bio": "",
+            "country": country or None,
+            "gender": gender or None,
+            "connected_services": [],
+            "created_at": now_iso(),
+            "subscription_type": "free",
+            "followers_count": 0,
+            "following_count": 0,
+            "posts_count": 0,
+            "favorite_genres": [],
+            "favorite_artists": [],
+            "music_mood": None,
+            "is_verified": False,
+            "level": 1,
+            "xp": 0,
+            "badges": [],
+            "profile_theme": "default",
+            "is_online": True,
+            "last_seen": now_iso(),
+        }
+        await db.users.insert_one(user)
+        is_new = True
+
+    access_token = create_access_token(user["id"], user.get("email") or phone)
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "is_new_user": is_new,
+        "user": format_user_response(user),
+    }
+
+
+# ============== PHONE PASSWORD RESET (WhatsApp OTP) ==============
+
+@auth_router.post("/phone/reset-password/send-otp")
+async def send_reset_password_otp(body: dict):
+    """Şifre sıfırlama için WhatsApp OTP gönder — telefon kayıtlı olmalı"""
+    phone = body.get("phone", "").strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="Telefon numarası gerekli")
+    if not phone.startswith("+"):
+        raise HTTPException(status_code=400, detail="Telefon numarası + ile başlamalı (örn. +905551234567)")
+
+    user = await db.users.find_one({"phone": phone})
+    if not user:
+        raise HTTPException(status_code=404, detail="Bu telefon numarası ile kayıtlı hesap bulunamadı")
+
+    from services.evilation_service import generate_otp, send_whatsapp_otp
+    code = generate_otp(6)
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+
+    await db.phone_otps.update_one(
+        {"phone": phone, "purpose": "reset"},
+        {"$set": {
+            "phone": phone,
+            "purpose": "reset",
+            "code": code,
+            "expires_at": expires_at,
+            "used": False,
+            "attempts": 0,
+        }},
+        upsert=True
+    )
+
+    await send_whatsapp_otp(phone, code)
+    return {"message": "Şifre sıfırlama kodu WhatsApp'a gönderildi", "sent": True}
+
+
+@auth_router.post("/phone/reset-password/verify")
+async def verify_reset_password_otp(body: dict):
+    """OTP'yi doğrula ve yeni şifreyi kaydet"""
+    phone        = body.get("phone", "").strip()
+    code         = str(body.get("code", "")).strip()
+    new_password = body.get("new_password", "").strip()
+
+    if not phone or not code or not new_password:
+        raise HTTPException(status_code=400, detail="Telefon, kod ve yeni şifre gerekli")
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Şifre en az 6 karakter olmalı")
+
+    record = await db.phone_otps.find_one({"phone": phone, "purpose": "reset", "used": False})
+    if not record:
+        raise HTTPException(status_code=400, detail="Geçersiz veya süresi dolmuş kod. Yeni kod isteyin.")
+
+    if record.get("attempts", 0) >= 5:
+        raise HTTPException(status_code=429, detail="Çok fazla hatalı deneme. Yeni kod isteyin.")
+
+    expires = datetime.fromisoformat(record["expires_at"].replace("Z", "+00:00"))
+    if datetime.now(timezone.utc) > expires:
+        await db.phone_otps.delete_one({"phone": phone, "purpose": "reset"})
+        raise HTTPException(status_code=400, detail="Kod süresi doldu. Yeni kod isteyin.")
+
+    await db.phone_otps.update_one({"phone": phone, "purpose": "reset"}, {"$inc": {"attempts": 1}})
+
+    if record["code"] != code:
+        raise HTTPException(status_code=400, detail="Geçersiz kod")
+
+    await db.phone_otps.update_one({"phone": phone, "purpose": "reset"}, {"$set": {"used": True}})
+
+    hashed = hash_password(new_password)
+    await db.users.update_one({"phone": phone}, {"$set": {"password": hashed}})
+
+    return {"message": "Şifre başarıyla sıfırlandı"}

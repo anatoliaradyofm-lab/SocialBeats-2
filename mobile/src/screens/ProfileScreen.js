@@ -399,7 +399,7 @@ export default function ProfileScreen({ navigation }) {
                   <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
                 </TouchableOpacity>
               ))}
-              <TouchableOpacity style={s.menuRow} onPress={() => { setMenuVisible(false); logout?.(); }}>
+              <TouchableOpacity style={s.menuRow} onPress={() => { setMenuVisible(false); if (typeof window !== 'undefined' && window.__sbForceLogout) { window.__sbForceLogout(); } else { logout?.(); try { navigation.reset({ index: 0, routes: [{ name: 'Login' }] }); } catch (_) {} } }}>
                 <View style={[s.menuIcon, { backgroundColor: '#F8717122' }]}>
                   <Ionicons name="log-out-outline" size={18} color="#F87171" />
                 </View>
@@ -428,7 +428,7 @@ export default function ProfileScreen({ navigation }) {
                   <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
                 </TouchableOpacity>
               ))}
-              <TouchableOpacity style={s.menuRow} onPress={() => { setMenuVisible(false); logout?.(); }}>
+              <TouchableOpacity style={s.menuRow} onPress={() => { setMenuVisible(false); if (typeof window !== 'undefined' && window.__sbForceLogout) { window.__sbForceLogout(); } else { logout?.(); try { navigation.reset({ index: 0, routes: [{ name: 'Login' }] }); } catch (_) {} } }}>
                 <View style={[s.menuIcon, { backgroundColor: '#F8717122' }]}>
                   <Ionicons name="log-out-outline" size={18} color="#F87171" />
                 </View>

@@ -9,10 +9,8 @@ import { useTheme } from '../contexts/ThemeContext';
 const CATEGORIES = [
   { name: 'AccountSettings',      label: 'Hesap Ayarları',                      icon: 'person-circle-outline',  color: '#A78BFA' },
   { name: 'NotifSettings',        label: 'Bildirim Ayarları',                   icon: 'notifications-outline',  color: '#F87171' },
-  { name: 'AudioSettings',        label: 'Ses ve Oynatma',                      icon: 'musical-notes-outline',  color: '#34D399' },
   { name: 'LanguageRegion',       label: 'Dil ve Bölge',                        icon: 'language-outline',       color: '#FBBF24' },
   { name: 'DataBackup',           label: 'Veri ve Yedekleme',                   icon: 'cloud-outline',          color: '#60A5FA' },
-  { name: 'AccessibilitySettings',label: 'Erişilebilirlik ve Görünüm',          icon: 'accessibility-outline',  color: '#F472B6' },
   { name: 'LegalSettings',        label: 'Kullanım Koşulları ve Gizlilik',      icon: 'document-text-outline',  color: '#9CA3AF' },
 ];
 
@@ -23,6 +21,12 @@ export default function SettingsScreen({ navigation }) {
 
   return (
     <View style={[s.root, { backgroundColor: colors.background }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       {/* Header */}
       <View style={[s.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
@@ -45,7 +49,7 @@ export default function SettingsScreen({ navigation }) {
           </LinearGradient>
           <View style={{ flex: 1, gap: 3 }}>
             <Text style={[s.profileName, { color: colors.text }]}>{user?.display_name || user?.username || 'Kullanıcı'}</Text>
-            <Text style={[s.profileSub, { color: colors.textMuted }]}>{user?.email || 'Profili düzenle'}</Text>
+            <Text style={[s.profileSub, { color: colors.textMuted }]}>{user?.phone || user?.username || 'Profili düzenle'}</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textGhost} />
         </TouchableOpacity>
@@ -71,7 +75,14 @@ export default function SettingsScreen({ navigation }) {
         {/* Logout */}
         <TouchableOpacity
           style={[s.logoutBtn, { backgroundColor: colors.errorBg, borderColor: colors.error + '40' }]}
-          onPress={() => logout()}
+          onPress={() => {
+            if (typeof window !== 'undefined' && window.__sbForceLogout) {
+              window.__sbForceLogout();
+            } else {
+              logout?.();
+              try { navigation.reset({ index: 0, routes: [{ name: 'Login' }] }); } catch (_) {}
+            }
+          }}
           activeOpacity={0.8}
         >
           <Ionicons name="log-out-outline" size={20} color={colors.error} />

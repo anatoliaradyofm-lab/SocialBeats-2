@@ -19,6 +19,19 @@ import api from '../services/api';
 
 const { width: W } = Dimensions.get('window');
 
+function loadConversations() {
+  let readIds = new Set();
+  let groups = [];
+  try {
+    if (typeof window !== 'undefined') {
+      readIds = new Set(JSON.parse(localStorage.getItem('_mock_read_convs') || '[]'));
+      groups = JSON.parse(localStorage.getItem('_mock_groups') || '[]');
+    }
+  } catch {}
+  const base = MOCK_CONVERSATIONS.map(c => readIds.has(c.id) ? { ...c, unread: 0 } : c);
+  return [...groups, ...base];
+}
+
 const MOCK_CONVERSATIONS = [
   { id:'c1', user:'melodikbeat', avatar:'https://i.pravatar.cc/100?u=melodikbeat', lastMsg:'Hey! Did you check the new release?', time:'2m', unread:3, online:true, typing:false },
   { id:'c2', user:'djvibe',      avatar:'https://i.pravatar.cc/100?u=djvibe',      lastMsg:'That playlist is 🔥🔥',           time:'14m', unread:0, online:true,  typing:true  },
@@ -32,30 +45,58 @@ const MOCK_CONVERSATIONS = [
 
 const ACTIVE_NOW = MOCK_CONVERSATIONS.filter(c => c.online).slice(0, 5);
 
-function ConvItem({ item, navigation, colors }) {
+function ConvItem({ item, navigation, colors, onRead }) {
+  const isGroup = item.is_group;
+  const onPress = () => {
+    onRead(item.id);
+    if (isGroup) {
+      navigation.navigate('Chat', {
+        conversationId: item.id,
+        isGroup: true,
+        conversation: item,
+        otherUser: { username: item.name || item.user, display_name: item.name || item.user, avatar_url: item.avatar, isGroup: true },
+      });
+    } else {
+      navigation.navigate('Chat', { conversationId: item.id, otherUser: { username: item.user, avatar_url: item.avatar, display_name: item.user } });
+    }
+  };
+
   return (
-    <TouchableOpacity
-      style={[ci.row, { borderBottomColor: colors.borderLight }]}
-      onPress={() => navigation.navigate('Chat', { conversationId: item.id, otherUser: { username: item.user, avatar_url: item.avatar, display_name: item.user } })}
-      activeOpacity={0.8}
-    >
-      {/* Avatar + online dot */}
+    <TouchableOpacity style={[ci.row, { borderBottomColor: colors.borderLight }]} onPress={onPress} activeOpacity={0.8}>
+      {/* Avatar */}
       <View style={ci.avatarWrap}>
-        <Image source={{ uri: item.avatar }} style={ci.avatar} />
-        {item.online && <View style={[ci.onlineDot, { borderColor: colors.background }]} />}
+        {isGroup ? (
+          <View style={[ci.groupAvatarWrap, { backgroundColor: colors.surface }]}>
+            {(item.participants || []).slice(0, 2).map((p, i) => (
+              <Image key={p.id || i} source={{ uri: p.avatar_url || `https://i.pravatar.cc/60?u=${p.id}` }} style={[ci.groupAvatarSmall, i === 1 && ci.groupAvatarSmall2]} />
+            ))}
+            {(item.participants || []).length === 0 && (
+              <Ionicons name="people" size={24} color={colors.textMuted} />
+            )}
+          </View>
+        ) : (
+          <>
+            <Image source={{ uri: item.avatar }} style={ci.avatar} />
+            {item.online && <View style={[ci.onlineDot, { borderColor: colors.background }]} />}
+          </>
+        )}
       </View>
 
       {/* Content */}
       <View style={ci.content}>
         <View style={ci.topRow}>
-          <Text style={[ci.username, { color: colors.text, fontWeight: item.unread > 0 ? '800' : '600' }]}>
-            {item.user}
+          <Text style={[ci.username, { color: colors.text, fontWeight: item.unread > 0 ? '800' : '600' }]} numberOfLines={1}>
+            {isGroup ? (item.name || 'Grup') : item.user}
           </Text>
-          <Text style={[ci.time, { color: item.unread > 0 ? colors.primary : colors.textMuted }]}>{item.time}</Text>
+          <Text style={[ci.time, { color: item.unread > 0 ? colors.primary : colors.textMuted }]}>{item.time || ''}</Text>
         </View>
         <View style={ci.bottomRow}>
           {item.typing ? (
-            <Text style={[ci.typing, { color: colors.primary }]}>typing...</Text>
+            <Text style={[ci.typing, { color: colors.primary }]}>yazıyor...</Text>
+          ) : isGroup ? (
+            <Text style={[ci.lastMsg, { color: colors.textMuted }]} numberOfLines={1}>
+              {item.lastMsg || ((item.participants || []).map(p => p.display_name || p.username).join(', '))}
+            </Text>
           ) : (
             <Text style={[ci.lastMsg, { color: item.unread > 0 ? colors.textSecondary : colors.textMuted, fontWeight: item.unread > 0 ? '600' : '400' }]} numberOfLines={1}>
               {item.lastMsg}
@@ -76,9 +117,12 @@ const ci = StyleSheet.create({
   avatarWrap: { position:'relative' },
   avatar: { width:54, height:54, borderRadius:27 },
   onlineDot: { position:'absolute', bottom:1, right:1, width:13, height:13, borderRadius:7, backgroundColor:'#4ADE80', borderWidth:2 },
-  content: { flex:1, gap:4 },
-  topRow: { flexDirection:'row', alignItems:'center', justifyContent:'space-between' },
-  username: { fontSize:15 },
+  groupAvatarWrap: { width:54, height:54, borderRadius:27, alignItems:'center', justifyContent:'center', overflow:'hidden', position:'relative' },
+  groupAvatarSmall: { position:'absolute', width:32, height:32, borderRadius:16, top:2, left:2 },
+  groupAvatarSmall2: { top:18, left:18 },
+  content: { flex:1, gap:3 },
+  topRow: { flexDirection:'row', alignItems:'center', justifyContent:'space-between', gap:8 },
+  username: { flex:1, fontSize:15 },
   time: { fontSize:12 },
   bottomRow: { flexDirection:'row', alignItems:'center', justifyContent:'space-between', gap:8 },
   lastMsg: { flex:1, fontSize:13 },
@@ -93,9 +137,25 @@ export default function ConversationsScreen({ navigation }) {
   const { t }       = useTranslation();
   const insets      = useSafeAreaInsets();
 
-  const [conversations, setConversations] = useState(MOCK_CONVERSATIONS);
+  const [conversations, setConversations] = useState(loadConversations);
   const [refreshing, setRefreshing]       = useState(false);
   const [search, setSearch]               = useState('');
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      setConversations(loadConversations());
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const markAsRead = useCallback((id) => {
+    setConversations(prev => prev.map(c => c.id === id ? { ...c, unread: 0 } : c));
+    api.post(`/messages/conversations/${id}/read`).catch(() => {});
+    // Web preview için Dashboard'u bilgilendir
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('sb:msg-read'));
+    }
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -107,7 +167,12 @@ export default function ConversationsScreen({ navigation }) {
   }, []);
 
   const filtered = search
-    ? conversations.filter(c => c.user?.toLowerCase().includes(search.toLowerCase()))
+    ? conversations.filter(c => {
+        const q = search.toLowerCase();
+        if ((c.user || c.name || '').toLowerCase().includes(q)) return true;
+        if (c.is_group && (c.participants || []).some(p => (p.display_name || p.username || '').toLowerCase().includes(q))) return true;
+        return false;
+      })
     : conversations;
 
   const s = createStyles(colors, insets);
@@ -123,16 +188,19 @@ export default function ConversationsScreen({ navigation }) {
       {/* ── Header ── */}
       <View style={s.header}>
         <View style={s.headerTop}>
+          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={22} color={colors.text} />
+          </TouchableOpacity>
           <Text style={s.title}>Messages</Text>
           <View style={s.headerActions}>
             <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('CreateGroup')}>
               <Ionicons name="people-outline" size={20} color={colors.text} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.iconBtn, { backgroundColor: colors.primaryGlow, borderColor: colors.primary }]}
-              onPress={() => navigation.navigate('FindContacts')}
-            >
-              <Ionicons name="create-outline" size={20} color={colors.primary} />
+            <TouchableOpacity style={s.composePill} onPress={() => navigation.navigate('NewMessage')}>
+              <LinearGradient colors={['#9333EA', '#C084FC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.composePillGrad}>
+                <Ionicons name="create-outline" size={15} color="#FFF" />
+                <Text style={s.composePillText}>Yeni</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         </View>
@@ -153,13 +221,13 @@ export default function ConversationsScreen({ navigation }) {
       <FlatList
         data={filtered}
         keyExtractor={item => item.id}
-        renderItem={({ item }) => <ConvItem item={item} navigation={navigation} colors={colors} />}
+        renderItem={({ item }) => <ConvItem item={item} navigation={navigation} colors={colors} onRead={markAsRead} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           /* Active now strip */
           <View style={s.activeSection}>
-            <Text style={[s.activeSectionTitle, { color: colors.textMuted }]}>Active now</Text>
+            <Text style={[s.activeSectionTitle, { color: colors.textMuted }]}>Çevrimiçi</Text>
             <View style={s.activeRow}>
               {ACTIVE_NOW.map(u => (
                 <TouchableOpacity key={u.id} style={s.activeWrap} onPress={() => navigation.navigate('Chat', { conversationId: u.id, user: { username: u.user, avatar: u.avatar } })}>
@@ -195,8 +263,9 @@ function createStyles(colors, insets) {
       alignItems: 'center',
       justifyContent: 'space-between',
     },
-    title: { fontSize: 30, fontWeight: '900', color: colors.text, letterSpacing: -1 },
-    headerActions: { flexDirection: 'row', gap: 8 },
+    backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
+    title: { flex: 1, fontSize: 24, fontWeight: '900', color: colors.text, letterSpacing: -0.8 },
+    headerActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
     iconBtn: {
       width: 38,
       height: 38,
@@ -207,6 +276,9 @@ function createStyles(colors, insets) {
       alignItems: 'center',
       justifyContent: 'center',
     },
+    composePill: { borderRadius: 20, overflow: 'hidden' },
+    composePillGrad: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 9 },
+    composePillText: { color: '#FFF', fontSize: 13, fontWeight: '700', letterSpacing: 0.1 },
     searchBar: {
       flexDirection: 'row',
       alignItems: 'center',

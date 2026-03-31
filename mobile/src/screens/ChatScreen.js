@@ -2,11 +2,10 @@
  * ChatScreen - Mesajlaşma ekranı
  * Metin, foto/video, sesli mesaj, GIF, sticker, tepki, alıntı, ilet, sil, düzenle, okundu, yazıyor
  */
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Alert, Modal, ScrollView, Dimensions, RefreshControl, Keyboard} from 'react-native';
+  Alert, Modal, ScrollView, Dimensions, RefreshControl, Keyboard, Pressable} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -95,6 +94,7 @@ export default function ChatScreen({ route, navigation }) {
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [vanishMode, setVanishMode] = useState(conversation?.vanish_mode || false);
   const [vanishDuration, setVanishDuration] = useState(conversation?.vanish_duration || 86400);
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
   const flatListRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
@@ -152,11 +152,11 @@ export default function ChatScreen({ route, navigation }) {
     loadMessages();
   }, [loadMessages]);
 
-  useFocusEffect(useCallback(() => {
+  useEffect(() => {
     loadMessages();
     const poll = setInterval(loadMessages, 5000); // pseudo-realtime: fetch new messages every 5s
     return () => clearInterval(poll);
-  }, [loadMessages]));
+  }, [loadMessages]);
 
   useEffect(() => {
     let t;
@@ -309,6 +309,13 @@ export default function ChatScreen({ route, navigation }) {
       setShowAttach(false);
       setShowStickers(false);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      if (isGroup && groupParticipants.length > 0) {
+        const sentId = displayMsg.id;
+        const readers = groupParticipants.map(p => ({ user_id: p.id, read_at: new Date().toISOString() }));
+        setTimeout(() => {
+          setMessages(prev => prev.map(m => m.id === sentId ? { ...m, read_by: readers } : m));
+        }, 1500 + Math.random() * 1500);
+      }
     } catch (e) {
       const msg = e?.data?.detail || e?.message || t('chat.sendFailed');
       const isRateLimit = e?.status === 429;
@@ -469,16 +476,119 @@ export default function ChatScreen({ route, navigation }) {
 
   const isMe = (msg) => msg.sender_id === user?.id || msg.sender?.id === user?.id;
   const displayName = isGroup
-    ? (conversation?.group_name || t('chat.group'))
+    ? (conversation?.group_name || conversation?.name || t('chat.group'))
     : (otherUser?.display_name || otherUser?.username || t('chat.user'));
   const avatar = isGroup
     ? (conversation?.group_avatar || `https://i.pravatar.cc/100?g=${conversation?.id || 'group'}`)
     : (otherUser?.avatar_url || `https://i.pravatar.cc/100?u=${otherUser?.username}`);
 
+  // Load group participants — fallback to localStorage if params were lost during navigation
+  const groupParticipants = useMemo(() => {
+    if ((conversation?.participants || []).length > 0) return conversation.participants;
+    try {
+      if (typeof window !== 'undefined') {
+        const groups = JSON.parse(localStorage.getItem('_mock_groups') || '[]');
+        const found = groups.find(g => g.id === conversationId);
+        return found?.participants || [];
+      }
+    } catch {}
+    return [];
+  }, [conversation?.participants, conversationId]);
+
   const renderMessage = ({ item }) => {
     const mine = isMe(item);
     const reactions = item.reactions || [];
     const myReaction = reactions.find((r) => r.user_id === user?.id);
+
+    const senderName = !mine && isGroup
+      ? (item.sender?.display_name || item.sender?.username || '')
+      : null;
+    const senderAvatar = !mine && isGroup
+      ? (item.sender?.avatar_url || `https://i.pravatar.cc/80?u=${item.sender_id}`)
+      : null;
+
+    const bubbleContent = (
+      <>
+        {pinnedMessages.includes(item.id) && (
+          <View style={styles.pinnedBadge}>
+            <Ionicons name="pin" size={12} color="#F59E0B" />
+            <Text style={styles.pinnedText}>{t('chat.pinnedMessages')}</Text>
+          </View>
+        )}
+        {item.quoted_message && (
+          <View style={styles.quoted}>
+            <Text style={styles.quotedText} numberOfLines={2}>{item.quoted_message.content || `📷 ${t('chat.media')}`}</Text>
+          </View>
+        )}
+        {item.content_type === 'IMAGE' && item.media_url && (
+          <Image source={{ uri: mediaUri(item.media_url) }} style={styles.mediaMsg} resizeMode="cover" />
+        )}
+        {item.content_type === 'VIDEO' && item.media_url && (
+          <Image source={{ uri: mediaUri(item.media_url) }} style={styles.mediaMsg} resizeMode="cover" />
+        )}
+        {item.content_type === 'VOICE' && (
+          <View style={styles.voiceRow}>
+            <Ionicons name="mic" size={20} color={mine ? '#fff' : colors.primary} />
+            <Text style={[styles.voiceText, mine && styles.voiceTextMe]}>{item.duration || 0}s</Text>
+          </View>
+        )}
+        {item.content_type === 'GIF' && item.media_url && (
+          <Image source={{ uri: item.media_url }} style={styles.gifMsg} resizeMode="cover" />
+        )}
+        {item.content_type === 'POST' && item.post_id ? (
+          <View style={styles.shareCard}>
+            <Ionicons name="newspaper" size={24} color={mine ? '#fff' : colors.primary} />
+            <Text style={[styles.shareCardText, mine && styles.shareCardTextMe]} numberOfLines={2}>{item.content || t('chat.postShared')}</Text>
+          </View>
+        ) : item.content_type === 'MUSIC' && item.music_id ? (
+          <TouchableOpacity style={styles.shareCard} onPress={() => { }} activeOpacity={0.8}>
+            <Ionicons name="musical-notes" size={24} color={mine ? '#fff' : colors.primary} />
+            <Text style={[styles.shareCardText, mine && styles.shareCardTextMe]} numberOfLines={2}>{item.content || t('chat.musicShared')}</Text>
+          </TouchableOpacity>
+        ) : item.content_type === 'PLAYLIST' && item.playlist_id ? (
+          <TouchableOpacity style={styles.shareCard} onPress={() => navigation.navigate('PlaylistDetail', { playlistId: item.playlist_id })} activeOpacity={0.8}>
+            <Ionicons name="list" size={24} color={mine ? '#fff' : '#8B5CF6'} />
+            <Text style={[styles.shareCardText, mine && styles.shareCardTextMe]} numberOfLines={2}>{item.content || t('chat.playlistShared')}</Text>
+            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.6)" />
+          </TouchableOpacity>
+        ) : item.content_type === 'PROFILE' && item.user_id ? (
+          <TouchableOpacity style={styles.shareCard} onPress={() => navigation.navigate('UserProfile', { userId: item.user_id })} activeOpacity={0.8}>
+            <Ionicons name="person" size={24} color={mine ? '#fff' : '#8B5CF6'} />
+            <Text style={[styles.shareCardText, mine && styles.shareCardTextMe]} numberOfLines={2}>{item.content || t('chat.profileShared')}</Text>
+            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.6)" />
+          </TouchableOpacity>
+        ) : (item.content_type === 'TEXT' || !item.content_type) && (item.content || decryptedContent[item.id]) ? (
+          <Text style={[styles.msgText, mine ? styles.msgTextMe : styles.msgTextOther]}>
+            {item.e2e_encrypted && !mine ? (decryptedContent[item.id] ?? `🔒 ${t('chat.encrypting')}`) : item.content}
+            {item.edited && <Text style={styles.edited}> {t('chat.edited')}</Text>}
+          </Text>
+        ) : null}
+        <View style={styles.msgFooter}>
+          {item.disappears_after_seconds && <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.5)" style={{ marginRight: 4 }} />}
+          <Text style={styles.msgTime}>{formatLocaleTime(item.created_at, { hour: '2-digit', minute: '2-digit' })}</Text>
+          {mine && isGroup && (item.read_by || []).filter(r => r.user_id !== (user?.id || 'preview-1')).length > 0 ? (
+            <View style={styles.groupReadAvatars}>
+              {(item.read_by || []).filter(r => r.user_id !== (user?.id || 'preview-1')).slice(0, 3).map(r => (
+                <Image key={r.user_id} source={{ uri: `https://i.pravatar.cc/40?u=${r.user_id}` }} style={styles.groupReadAvatar} />
+              ))}
+            </View>
+          ) : mine ? (
+            <Ionicons
+              name={item.read_by?.length > 1 ? 'checkmark-done' : 'checkmark'}
+              size={14}
+              color={item.read_by?.length > 1 ? '#60A5FA' : 'rgba(255,255,255,0.6)'}
+            />
+          ) : null}
+        </View>
+        {reactions.length > 0 && (
+          <View style={styles.reactionsRow}>
+            {[...new Set(reactions.map((r) => r.reaction))].map((emoji) => (
+              <Text key={emoji} style={styles.reactionEmoji}>{emoji}</Text>
+            ))}
+          </View>
+        )}
+      </>
+    );
 
     return (
       <TouchableOpacity
@@ -496,87 +606,29 @@ export default function ChatScreen({ route, navigation }) {
         onLongPress={() => setReactionPicker(item.id)}
         activeOpacity={1}
       >
-        <View style={[styles.bubble, mine ? styles.bubbleMe : styles.bubbleOther, vanishMode && (mine ? styles.bubbleMeVanish : styles.bubbleOtherVanish)]}>
-          {pinnedMessages.includes(item.id) && (
-            <View style={styles.pinnedBadge}>
-              <Ionicons name="pin" size={12} color="#F59E0B" />
-              <Text style={styles.pinnedText}>{t('chat.pinnedMessages')}</Text>
+        {!mine && isGroup ? (
+          <View style={styles.groupMsgOtherRow}>
+            <Image source={{ uri: senderAvatar }} style={styles.groupMsgAvatar} />
+            <View style={{ flex: 1 }}>
+              {senderName ? <Text style={styles.groupMsgSenderName}>{senderName}</Text> : null}
+              <View style={[styles.bubble, styles.bubbleOther, vanishMode && styles.bubbleOtherVanish]}>
+                {bubbleContent}
+              </View>
             </View>
-          )}
-          {item.quoted_message && (
-            <View style={styles.quoted}>
-              <Text style={styles.quotedText} numberOfLines={2}>{item.quoted_message.content || `📷 ${t('chat.media')}`}</Text>
-            </View>
-          )}
-          {item.content_type === 'IMAGE' && item.media_url && (
-            <Image source={{ uri: mediaUri(item.media_url) }} style={styles.mediaMsg} resizeMode="cover" />
-          )}
-          {item.content_type === 'VIDEO' && item.media_url && (
-            <Image source={{ uri: mediaUri(item.media_url) }} style={styles.mediaMsg} resizeMode="cover" />
-          )}
-          {item.content_type === 'VOICE' && (
-            <View style={styles.voiceRow}>
-              <Ionicons name="mic" size={20} color={mine ? '#fff' : colors.primary} />
-              <Text style={[styles.voiceText, mine && styles.voiceTextMe]}>{item.duration || 0}s</Text>
-            </View>
-          )}
-          {item.content_type === 'GIF' && item.media_url && (
-            <Image source={{ uri: item.media_url }} style={styles.gifMsg} resizeMode="cover" />
-          )}
-          {item.content_type === 'POST' && item.post_id ? (
-            <View style={styles.shareCard}>
-              <Ionicons name="newspaper" size={24} color={mine ? '#fff' : colors.primary} />
-              <Text style={[styles.shareCardText, mine && styles.shareCardTextMe]} numberOfLines={2}>{item.content || t('chat.postShared')}</Text>
-            </View>
-          ) : item.content_type === 'MUSIC' && item.music_id ? (
-            <TouchableOpacity style={styles.shareCard} onPress={() => { }} activeOpacity={0.8}>
-              <Ionicons name="musical-notes" size={24} color={mine ? '#fff' : colors.primary} />
-              <Text style={[styles.shareCardText, mine && styles.shareCardTextMe]} numberOfLines={2}>{item.content || t('chat.musicShared')}</Text>
-            </TouchableOpacity>
-          ) : item.content_type === 'PLAYLIST' && item.playlist_id ? (
-            <TouchableOpacity style={styles.shareCard} onPress={() => navigation.navigate('PlaylistDetail', { playlistId: item.playlist_id })} activeOpacity={0.8}>
-              <Ionicons name="list" size={24} color={mine ? '#fff' : '#8B5CF6'} />
-              <Text style={[styles.shareCardText, mine && styles.shareCardTextMe]} numberOfLines={2}>{item.content || t('chat.playlistShared')}</Text>
-              <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.6)" />
-            </TouchableOpacity>
-          ) : item.content_type === 'PROFILE' && item.user_id ? (
-            <TouchableOpacity style={styles.shareCard} onPress={() => navigation.navigate('UserProfile', { userId: item.user_id })} activeOpacity={0.8}>
-              <Ionicons name="person" size={24} color={mine ? '#fff' : '#8B5CF6'} />
-              <Text style={[styles.shareCardText, mine && styles.shareCardTextMe]} numberOfLines={2}>{item.content || t('chat.profileShared')}</Text>
-              <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.6)" />
-            </TouchableOpacity>
-          ) : (item.content_type === 'TEXT' || item.content_type === 'MUSIC' || item.content_type === 'POST') && (item.content || decryptedContent[item.id]) ? (
-            <Text style={[styles.msgText, mine ? styles.msgTextMe : styles.msgTextOther]}>
-              {item.e2e_encrypted && !mine ? (decryptedContent[item.id] ?? `🔒 ${t('chat.encrypting')}`) : item.content}
-              {item.edited && <Text style={styles.edited}> {t('chat.edited')}</Text>}
-            </Text>
-          ) : null}
-          <View style={styles.msgFooter}>
-            {item.disappears_after_seconds && <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.5)" style={{ marginRight: 4 }} />}
-            <Text style={styles.msgTime}>{formatLocaleTime(item.created_at, { hour: '2-digit', minute: '2-digit' })}</Text>
-            {mine && (
-              <Ionicons
-                name={item.read_by?.length > 1 ? 'checkmark-done' : 'checkmark'}
-                size={14}
-                color={item.read_by?.length > 1 ? '#60A5FA' : 'rgba(255,255,255,0.6)'}
-              />
-            )}
           </View>
-          {reactions.length > 0 && (
-            <View style={styles.reactionsRow}>
-              {[...new Set(reactions.map((r) => r.reaction))].map((emoji) => (
-                <Text key={emoji} style={styles.reactionEmoji}>{emoji}</Text>
-              ))}
-            </View>
-          )}
-        </View>
+        ) : (
+          <View style={[styles.bubble, mine ? styles.bubbleMe : styles.bubbleOther, vanishMode && (mine ? styles.bubbleMeVanish : styles.bubbleOtherVanish)]}>
+            {bubbleContent}
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
 
   return (
+    <View style={[styles.container, { flex: 1 }]}>
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
+      style={{ flex: 1, paddingTop: insets.top }}
       behavior="padding"
       keyboardVerticalOffset={insets.top}
     >
@@ -590,25 +642,44 @@ export default function ChatScreen({ route, navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Image source={{ uri: avatar }} style={styles.headerAvatar} />
-        <View style={styles.headerInfo}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={styles.headerName} numberOfLines={1}>{displayName}</Text>
+        <TouchableOpacity
+          onPress={() => isGroup && setShowGroupInfo(true)}
+          activeOpacity={isGroup ? 0.7 : 1}
+          style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }}
+        >
+          {isGroup && groupParticipants.length > 0 ? (
+            <View style={styles.groupHeaderAvatarWrap}>
+              {groupParticipants.slice(0, 2).map((p, i) => (
+                <Image key={p.id || i} source={{ uri: p.avatar_url || `https://i.pravatar.cc/80?u=${p.id}` }}
+                  style={[styles.groupHeaderAvatarSmall, i === 1 && styles.groupHeaderAvatarSmall2]} />
+              ))}
+            </View>
+          ) : (
+            <Image source={{ uri: avatar }} style={styles.headerAvatar} />
+          )}
+          <View style={styles.headerInfo}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.headerName} numberOfLines={1}>{displayName}</Text>
             {!isGroup && otherUserE2EKey && (
               <Ionicons name="lock-closed" size={14} color="#10B981" />
             )}
           </View>
           {typingUsers.length > 0 ? (
             <Text style={styles.typingText}>{t('chat.typing')}</Text>
-          ) : !isGroup && onlineStatus?.is_online ? (
+          ) : isGroup ? (
+            <Text style={styles.lastSeenText} numberOfLines={1}>
+              {groupParticipants.map(p => p.display_name || p.username).join(', ') || `${groupParticipants.length + 1} üye`}
+            </Text>
+          ) : onlineStatus?.is_online ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
               <View style={styles.onlineDot} />
               <Text style={styles.onlineText}>{t('chat.onlineNow')}</Text>
             </View>
-          ) : !isGroup && onlineStatus?.last_seen ? (
+          ) : onlineStatus?.last_seen ? (
             <Text style={styles.lastSeenText}>{t('chat.lastSeen', { time: formatRelativeTime(onlineStatus.last_seen, t) })}</Text>
           ) : null}
-        </View>
+          </View>
+        </TouchableOpacity>
         {!isGroup && otherUser?.id && (
           <>
             <TouchableOpacity
@@ -1129,6 +1200,128 @@ export default function ChatScreen({ route, navigation }) {
         </Modal>
       )}
     </KeyboardAvoidingView>
+    {/* Group Info Sheet */}
+    {isGroup && showGroupInfo && (
+      <GroupInfoSheet
+        displayName={displayName}
+        groupParticipants={groupParticipants}
+        user={user}
+        colors={colors}
+        styles={styles}
+        conversationId={conversationId}
+        onClose={() => setShowGroupInfo(false)}
+        onMemberPress={(p) => { setShowGroupInfo(false); navigation.navigate('UserProfile', { username: p.username || p.id }); }}
+        onLeave={() => {
+          Alert.alert('Gruptan Ayrıl', 'Bu gruptan ayrılmak istiyor musunuz?', [
+            { text: 'İptal', style: 'cancel' },
+            { text: 'Ayrıl', style: 'destructive', onPress: () => {
+              try {
+                if (typeof window !== 'undefined') {
+                  const groups = JSON.parse(localStorage.getItem('_mock_groups') || '[]');
+                  localStorage.setItem('_mock_groups', JSON.stringify(groups.filter(g => g.id !== conversationId)));
+                }
+              } catch {}
+              setShowGroupInfo(false);
+              navigation.navigate('Conversations');
+            }},
+          ]);
+        }}
+      />
+    )}
+    </View>
+  );
+}
+
+/* ─── GroupInfoSheet ─────────────────────────────────────────────────────── */
+function GroupInfoSheet({ displayName, groupParticipants, user, colors, styles, conversationId, onClose, onMemberPress, onLeave }) {
+  const overlayStyle = Platform.OS === 'web'
+    ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' }
+    : { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' };
+
+  const sheet = (
+    <View style={[styles.groupInfoSheet, { backgroundColor: colors.surface || '#1A0A2E' }]}>
+      <View style={styles.groupInfoHandle} />
+      <View style={styles.groupInfoHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.groupInfoTitle, { color: colors.text }]}>{displayName}</Text>
+          <Text style={[styles.groupInfoSubtitle, { color: colors.textMuted }]}>
+            {groupParticipants.length + 1} üye
+          </Text>
+        </View>
+        <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
+          <Ionicons name="close" size={24} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }}>
+        {/* Current user */}
+        <View style={styles.groupMemberRow}>
+          <Image source={{ uri: user?.avatar_url || `https://i.pravatar.cc/80?u=${user?.id}` }} style={styles.groupMemberAvatar} />
+          <View style={styles.groupMemberInfo}>
+            <Text style={[styles.groupMemberName, { color: colors.text }]}>{user?.display_name || user?.username}</Text>
+            <Text style={[styles.groupMemberUsername, { color: colors.primary }]}>Sen (Yönetici)</Text>
+          </View>
+          <View style={[styles.groupAdminBadge, { backgroundColor: colors.primaryGlow || 'rgba(192,132,252,0.2)' }]}>
+            <Text style={[styles.groupAdminText, { color: colors.primary }]}>Admin</Text>
+          </View>
+        </View>
+
+        {/* Other participants */}
+        {groupParticipants.length === 0 ? (
+          <Text style={[styles.groupMemberUsername, { color: colors.textMuted, paddingHorizontal: 20, paddingVertical: 12 }]}>
+            Üye bilgisi yüklenemedi
+          </Text>
+        ) : (
+          groupParticipants.map((p) => (
+            <TouchableOpacity
+              key={p.id}
+              style={styles.groupMemberRow}
+              activeOpacity={0.7}
+              onPress={() => onMemberPress(p)}
+            >
+              <Image source={{ uri: p.avatar_url || `https://i.pravatar.cc/80?u=${p.id}` }} style={styles.groupMemberAvatar} />
+              <View style={styles.groupMemberInfo}>
+                <Text style={[styles.groupMemberName, { color: colors.text }]}>{p.display_name || p.username}</Text>
+                {p.username ? <Text style={[styles.groupMemberUsername, { color: colors.textMuted }]}>@{p.username}</Text> : null}
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textGhost || 'rgba(255,255,255,0.15)'} />
+            </TouchableOpacity>
+          ))
+        )}
+
+        {/* Leave group */}
+        <TouchableOpacity style={styles.leaveGroupBtn} onPress={onLeave}>
+          <Ionicons name="exit-outline" size={20} color="#F87171" />
+          <Text style={styles.leaveGroupText}>Gruptan Ayrıl</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
+  );
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={overlayStyle}>
+        {/* backdrop */}
+        <Pressable
+          onPress={onClose}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        />
+        {/* sheet sits at the bottom above backdrop */}
+        <View style={{ position: 'relative', zIndex: 1 }}>
+          {sheet}
+        </View>
+      </View>
+    );
+  }
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <View style={overlayStyle}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={{ position: 'relative' }}>
+          {sheet}
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -1157,6 +1350,29 @@ const createStyles = (colors) => StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { padding: 16, flexGrow: 1, justifyContent: 'flex-end' },
   empty: { color: colors.textMuted, textAlign: 'center', paddingVertical: 40 },
+  groupHeaderAvatarWrap: { width:40, height:40, position:'relative' },
+  groupHeaderAvatarSmall: { position:'absolute', width:26, height:26, borderRadius:13, top:0, left:0, borderWidth:1.5, borderColor:'rgba(8,6,15,1)' },
+  groupHeaderAvatarSmall2: { top:12, left:12 },
+  groupMsgOtherRow: { flexDirection:'row', alignItems:'flex-end', gap:8, maxWidth:'85%' },
+  groupMsgAvatar: { width:28, height:28, borderRadius:14, flexShrink:0 },
+  groupMsgSenderName: { fontSize:11, fontWeight:'600', color:colors.primary, marginBottom:3, marginLeft:2 },
+  groupReadAvatars: { flexDirection:'row', gap:2, marginLeft:4, alignItems:'center' },
+  groupReadAvatar: { width:14, height:14, borderRadius:7, borderWidth:1.5, borderColor:'rgba(8,6,15,0.9)' },
+  leaveGroupBtn: { flexDirection:'row', alignItems:'center', gap:12, paddingHorizontal:20, paddingVertical:18, marginTop:4, borderTopWidth:1, borderTopColor:'rgba(255,255,255,0.08)' },
+  leaveGroupText: { fontSize:15, color:'#F87171', fontWeight:'700' },
+  groupInfoOverlay: { flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0,0,0.65)', zIndex:9999, elevation:10 },
+  groupInfoSheet: { borderTopLeftRadius:24, borderTopRightRadius:24, paddingBottom:32, overflow:'hidden' },
+  groupInfoHandle: { width:40, height:4, borderRadius:2, backgroundColor:'rgba(255,255,255,0.25)', alignSelf:'center', marginTop:14, marginBottom:4 },
+  groupInfoHeader: { flexDirection:'row', alignItems:'flex-start', paddingHorizontal:20, paddingVertical:14, gap:12 },
+  groupInfoTitle: { fontSize:18, fontWeight:'800', letterSpacing:-0.3, marginBottom:2 },
+  groupInfoSubtitle: { fontSize:13 },
+  groupMemberRow: { flexDirection:'row', alignItems:'center', paddingHorizontal:20, paddingVertical:12, gap:12, borderBottomWidth:1, borderBottomColor:'rgba(255,255,255,0.04)' },
+  groupMemberAvatar: { width:46, height:46, borderRadius:23 },
+  groupMemberInfo: { flex:1, gap:2 },
+  groupMemberName: { fontSize:15, fontWeight:'600' },
+  groupMemberUsername: { fontSize:12 },
+  groupAdminBadge: { borderRadius:8, paddingHorizontal:8, paddingVertical:3 },
+  groupAdminText: { fontSize:11, fontWeight:'700' },
   msgRow: { marginBottom: 8 },
   msgRowMe: { alignItems: 'flex-end' },
   msgRowOther: { alignItems: 'flex-start' },

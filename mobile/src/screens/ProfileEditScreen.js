@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Alert, Image, Switch,
+  ScrollView, ActivityIndicator, Alert, Image, Switch, Modal, FlatList, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { COUNTRIES } from '../lib/countries';
 
 /* ── palette shortcuts ── */
 const C = {
@@ -85,6 +86,8 @@ export default function ProfileEditScreen({ navigation }) {
   const [country, setCountry]               = useState('');
   const [city, setCity]                     = useState('');
   const [isPrivate, setIsPrivate]           = useState(false);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [countryQuery, setCountryQuery]     = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
 
@@ -210,6 +213,12 @@ export default function ProfileEditScreen({ navigation }) {
 
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       {/* ── Header ── */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.headerBack}>
@@ -329,12 +338,69 @@ export default function ProfileEditScreen({ navigation }) {
 
         {/* ── Konum ── */}
         <SectionLabel label="KONUM" />
-        <FieldInput
-          icon="flag-outline"
-          placeholder="Ülke (örn. Türkiye)"
-          value={country}
-          onChangeText={setCountry}
-        />
+
+        {/* Country picker */}
+        <TouchableOpacity
+          style={[s.fieldWrap, s.selectRow]}
+          onPress={() => { setCountryQuery(''); setShowCountryPicker(true); }}
+          activeOpacity={0.8}
+        >
+          <View style={s.fieldIcon}>
+            <Ionicons name="flag-outline" size={18} color={C.textMuted} />
+          </View>
+          <Text style={[s.fieldInput, { color: country ? C.text : C.textMuted, paddingTop: 0, paddingBottom: 0 }]}>
+            {country
+              ? `${COUNTRIES.find(c => c.name === country)?.flag ?? ''} ${country}`
+              : 'Ülke seçin'}
+          </Text>
+          <Ionicons name="chevron-down" size={16} color={C.textMuted} style={{ marginRight: 12 }} />
+        </TouchableOpacity>
+
+        {/* Country modal */}
+        <Modal visible={showCountryPicker} animationType="slide" transparent onRequestClose={() => setShowCountryPicker(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
+            <View style={{ backgroundColor: '#130D22', borderRadius: 20, maxHeight: '75%', paddingBottom: 24 }}>
+              {/* Handle */}
+              <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 8 }}>
+                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)' }} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12 }}>
+                <Text style={{ flex: 1, color: C.text, fontSize: 16, fontWeight: '700' }}>Ülke Seç</Text>
+                <TouchableOpacity onPress={() => setShowCountryPicker(false)} style={{ padding: 4 }}>
+                  <Ionicons name="close" size={22} color={C.textMuted} />
+                </TouchableOpacity>
+              </View>
+              {/* Search */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12, marginHorizontal: 16, marginBottom: 8, paddingHorizontal: 12 }}>
+                <Ionicons name="search-outline" size={16} color={C.textMuted} />
+                <TextInput
+                  style={{ flex: 1, color: C.text, fontSize: 15, paddingVertical: 10, paddingLeft: 8 }}
+                  placeholder="Ülke ara..."
+                  placeholderTextColor={C.textMuted}
+                  value={countryQuery}
+                  onChangeText={setCountryQuery}
+                  autoFocus
+                />
+              </View>
+              <FlatList
+                data={COUNTRIES.filter(c => c.name.toLowerCase().includes(countryQuery.toLowerCase()))}
+                keyExtractor={c => c.code}
+                keyboardShouldPersistTaps="handled"
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingHorizontal: 20, gap: 12 }}
+                    onPress={() => { setCountry(item.name); setShowCountryPicker(false); }}
+                  >
+                    <Text style={{ width: 34, fontSize: 22 }}>{item.flag}</Text>
+                    <Text style={{ flex: 1, color: country === item.name ? C.primary : C.text, fontSize: 15, fontWeight: country === item.name ? '700' : '500' }}>{item.name}</Text>
+                    {country === item.name && <Ionicons name="checkmark-circle" size={18} color={C.primary} />}
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </View>
+        </Modal>
+
         <FieldInput
           icon="location-outline"
           placeholder="Şehir (örn. İstanbul)"
@@ -468,6 +534,7 @@ const s = StyleSheet.create({
     paddingTop: 14,
   },
   fieldSuffix: { fontSize: 13, color: C.textMuted },
+  selectRow: { paddingRight: 0 },
   charCount: {
     fontSize: 11,
     color: C.textMuted,

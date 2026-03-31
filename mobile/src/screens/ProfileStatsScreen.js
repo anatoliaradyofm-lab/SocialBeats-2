@@ -8,11 +8,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
-const BG     = '#08060F';
-const SURF   = 'rgba(255,255,255,0.055)';
-const BORDER = 'rgba(255,255,255,0.09)';
 const PRI    = '#C084FC';
 const ACC    = '#FB923C';
 const RED    = '#F87171';
@@ -39,48 +37,53 @@ function fmtMin(min) {
   return min + ' dk';
 }
 
-function MiniBar({ value, max, color = PRI }) {
+function MiniBar({ value, max, color = PRI, borderColor = 'rgba(255,255,255,0.09)' }) {
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
   return (
-    <View style={mb.track}>
+    <View style={[mb.track, { backgroundColor: borderColor }]}>
       <View style={[mb.fill, { width: `${pct}%`, backgroundColor: color }]} />
     </View>
   );
 }
 const mb = StyleSheet.create({
-  track: { height: 5, borderRadius: 3, backgroundColor: BORDER, overflow: 'hidden', flex: 1 },
+  track: { height: 5, borderRadius: 3, overflow: 'hidden', flex: 1 },
   fill:  { height: '100%', borderRadius: 3 },
 });
 
-function Chip({ icon, label, value, color = PRI }) {
+function Chip({ icon, label, value, color = PRI, textColor = '#F8F8F8', mutedColor = 'rgba(248,248,248,0.32)' }) {
   return (
     <View style={ch.wrap}>
       <View style={[ch.icon, { backgroundColor: color + '22' }]}>
         <Ionicons name={icon} size={18} color={color} />
       </View>
-      <Text style={ch.val}>{value}</Text>
-      <Text style={ch.lbl}>{label}</Text>
+      <Text style={[ch.val, { color: textColor }]}>{value}</Text>
+      <Text style={[ch.lbl, { color: mutedColor }]}>{label}</Text>
     </View>
   );
 }
 const ch = StyleSheet.create({
   wrap: { flex: 1, alignItems: 'center', paddingVertical: 16 },
   icon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  val:  { fontSize: 20, fontWeight: '800', color: '#fff' },
-  lbl:  { fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2, textAlign: 'center' },
+  val:  { fontSize: 20, fontWeight: '800' },
+  lbl:  { fontSize: 11, marginTop: 2, textAlign: 'center' },
 });
 
-function Card({ children, style }) {
-  return <View style={[cd.card, style]}>{children}</View>;
+function Card({ children, style, cardBg = 'rgba(255,255,255,0.055)', cardBorder = 'rgba(255,255,255,0.09)' }) {
+  return <View style={[cd.card, { backgroundColor: cardBg, borderColor: cardBorder }, style]}>{children}</View>;
 }
 const cd = StyleSheet.create({
-  card: { backgroundColor: SURF, borderRadius: 20, borderWidth: 1, borderColor: BORDER, padding: 20, marginBottom: 14 },
+  card: { borderRadius: 20, borderWidth: 1, padding: 20, marginBottom: 14 },
 });
 
 export default function ProfileStatsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const { token } = useAuth();
 
+  const s = createStyles(colors);
+  const cardProps = { cardBg: colors.card, cardBorder: colors.border };
+  const chipProps = { textColor: colors.text, mutedColor: colors.textMuted };
+  const barProps  = { borderColor: colors.border };
   const [period, setPeriod]       = useState('month');
   const [data, setData]           = useState(null);
   const [followers, setFollowers] = useState(null);
@@ -118,6 +121,12 @@ export default function ProfileStatsScreen({ navigation }) {
 
   return (
     <View style={[s.root, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       {/* ── Header ── */}
       <View style={s.hdr}>
         <TouchableOpacity style={s.hdrBtn} onPress={() => navigation.goBack()}>
@@ -154,19 +163,19 @@ export default function ProfileStatsScreen({ navigation }) {
         >
           {/* ── Özet ── */}
           <Text style={s.sec}>Özet</Text>
-          <Card>
+          <Card {...cardProps}>
             <View style={{ flexDirection: 'row' }}>
-              <Chip icon="people"     label="Takipçi"    value={fmt(folSummary.total_followers)}          color={PRI}     />
+              <Chip {...chipProps} icon="people"     label="Takipçi"    value={fmt(folSummary.total_followers)}          color={PRI}     />
               <View style={s.vDiv} />
-              <Chip icon="person-add" label="Yeni Takip" value={`+${fmt(folSummary.new_followers || 0)}`} color={GREEN}   />
+              <Chip {...chipProps} icon="person-add" label="Yeni Takip" value={`+${fmt(folSummary.new_followers || 0)}`} color={GREEN}   />
               <View style={s.vDiv} />
-              <Chip icon="flash"      label="Aktif Gün"  value={fmt(activity.days_active)}                color="#FACC15" />
+              <Chip {...chipProps} icon="flash"      label="Aktif Gün"  value={fmt(activity.days_active)}                color="#FACC15" />
             </View>
           </Card>
 
           {/* ── Dinleme ── */}
           <Text style={s.sec}>Dinleme</Text>
-          <Card>
+          <Card {...cardProps}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <View>
                 <Text style={s.bigVal}>{fmtMin(listening.total_minutes)}</Text>
@@ -196,7 +205,7 @@ export default function ProfileStatsScreen({ navigation }) {
           {topArtists.length > 0 && (
             <>
               <Text style={s.sec}>En Çok Dinlenen Sanatçılar</Text>
-              <Card>
+              <Card {...cardProps}>
                 {topArtists.map((a, i) => (
                   <View key={i} style={{ marginBottom: i < topArtists.length - 1 ? 14 : 0 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -206,7 +215,7 @@ export default function ProfileStatsScreen({ navigation }) {
                       </View>
                       <Text style={s.playCount}>{a.play_count} oynatma</Text>
                     </View>
-                    <MiniBar value={a.play_count} max={maxArtistPlays} color={PRI} />
+                    <MiniBar {...barProps} value={a.play_count} max={maxArtistPlays} color={PRI} />
                   </View>
                 ))}
               </Card>
@@ -217,10 +226,10 @@ export default function ProfileStatsScreen({ navigation }) {
           {topTracks.length > 0 && (
             <>
               <Text style={s.sec}>En Çok Dinlenen Şarkılar</Text>
-              <Card>
+              <Card {...cardProps}>
                 {topTracks.map((t, i) => (
-                  <View key={i} style={[s.trackRow, i < topTracks.length - 1 && { borderBottomWidth: 1, borderBottomColor: BORDER }]}>
-                    <View style={[s.trackNum, { backgroundColor: i === 0 ? PRI + '33' : SURF }]}>
+                  <View key={i} style={[s.trackRow, i < topTracks.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
+                    <View style={[s.trackNum, { backgroundColor: i === 0 ? PRI + '33' : colors.surface }]}>
                       <Text style={[s.trackNumTx, { color: i === 0 ? PRI : 'rgba(255,255,255,0.4)' }]}>{i + 1}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
@@ -239,7 +248,7 @@ export default function ProfileStatsScreen({ navigation }) {
 
           {/* ── Takipçi özeti ── */}
           <Text style={s.sec}>Takipçiler</Text>
-          <Card>
+          <Card {...cardProps}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
               {[
                 { val: fmt(folSummary.total_followers),  color: '#fff',  lbl: 'Toplam'    },
@@ -263,11 +272,11 @@ export default function ProfileStatsScreen({ navigation }) {
           {topFollowers.length > 0 && (
             <>
               <Text style={s.sec}>Etkileşim Kuran Takipçiler</Text>
-              <Card style={{ padding: 8 }}>
+              <Card {...cardProps} style={{ padding: 8 }}>
                 {topFollowers.map((f, i) => (
                   <TouchableOpacity
                     key={f.id}
-                    style={[s.followerRow, i < topFollowers.length - 1 && { borderBottomWidth: 1, borderBottomColor: BORDER }]}
+                    style={[s.followerRow, i < topFollowers.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}
                     onPress={() => navigation.navigate('UserProfile', { userId: f.id })}
                   >
                     {f.avatar_url
@@ -294,7 +303,7 @@ export default function ProfileStatsScreen({ navigation }) {
 
           {/* ── Aktivite ── */}
           <Text style={s.sec}>Aktivite</Text>
-          <Card>
+          <Card {...cardProps}>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               {[
                 { icon: 'calendar-outline', color: PRI,       val: activity.days_active    || 0, lbl: 'Aktif Gün'    },
@@ -316,46 +325,46 @@ export default function ProfileStatsScreen({ navigation }) {
   );
 }
 
-const s = StyleSheet.create({
-  root:         { flex: 1, backgroundColor: BG },
-  hdr:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 60 },
-  hdrBtn:       { width: 40, height: 40, borderRadius: 20, backgroundColor: SURF, justifyContent: 'center', alignItems: 'center' },
-  hdrTitle:     { fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
-  pills:        { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 8, gap: 6 },
-  pill:         { flex: 1, paddingVertical: 8, borderRadius: 20, backgroundColor: SURF, borderWidth: 1, borderColor: BORDER, alignItems: 'center' },
+const createStyles = (colors) => StyleSheet.create({
+  root:         { flex: 1, backgroundColor: colors.background },
+  hdr:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 60, borderBottomWidth: 1, borderBottomColor: colors.border },
+  hdrBtn:       { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center' },
+  hdrTitle:     { fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
+  pills:        { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 6 },
+  pill:         { flex: 1, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
   pillActive:   { backgroundColor: PRI + '33', borderColor: PRI },
-  pillTx:       { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '600' },
+  pillTx:       { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
   pillTxActive: { color: PRI, fontWeight: '700' },
   loader:       { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-  loaderTx:     { color: 'rgba(255,255,255,0.4)', fontSize: 14 },
-  sec:          { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.35)', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 8, marginTop: 4 },
-  vDiv:         { width: 1, backgroundColor: BORDER, marginHorizontal: 4 },
-  hDiv:         { height: 1, backgroundColor: BORDER },
-  bigVal:       { fontSize: 28, fontWeight: '900', color: '#fff', letterSpacing: -1 },
-  bigLbl:       { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
+  loaderTx:     { color: colors.textMuted, fontSize: 14 },
+  sec:          { fontSize: 11, fontWeight: '700', color: colors.textMuted, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 8, marginTop: 4 },
+  vDiv:         { width: 1, backgroundColor: colors.border, marginHorizontal: 4 },
+  hDiv:         { height: 1, backgroundColor: colors.border },
+  bigVal:       { fontSize: 28, fontWeight: '900', color: colors.text, letterSpacing: -1 },
+  bigLbl:       { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   pulseCircle:  { width: 58, height: 58, borderRadius: 29, justifyContent: 'center', alignItems: 'center' },
-  listenChip:   { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: SURF, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: BORDER },
-  listenChipTx: { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
-  rank:         { width: 22, height: 22, borderRadius: 11, backgroundColor: SURF, textAlign: 'center', lineHeight: 22, fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '700' },
-  artistName:   { fontSize: 14, fontWeight: '700', color: '#fff' },
-  playCount:    { fontSize: 12, color: 'rgba(255,255,255,0.4)' },
+  listenChip:   { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: colors.border },
+  listenChipTx: { fontSize: 12, color: colors.text, fontWeight: '600' },
+  rank:         { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.surface, textAlign: 'center', lineHeight: 22, fontSize: 12, color: colors.textMuted, fontWeight: '700' },
+  artistName:   { fontSize: 14, fontWeight: '700', color: colors.text },
+  playCount:    { fontSize: 12, color: colors.textMuted },
   trackRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   trackNum:     { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   trackNumTx:   { fontSize: 13, fontWeight: '800' },
-  trackTitle:   { fontSize: 14, fontWeight: '700', color: '#fff' },
-  trackArtist:  { fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+  trackTitle:   { fontSize: 14, fontWeight: '700', color: colors.text },
+  trackArtist:  { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   playBadge:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: ACC + '22', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   playBadgeTx:  { fontSize: 12, color: ACC, fontWeight: '700' },
   folStat:      { alignItems: 'center', flex: 1 },
-  folVal:       { fontSize: 18, fontWeight: '800' },
-  folLbl:       { fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2, textAlign: 'center' },
+  folVal:       { fontSize: 18, fontWeight: '800', color: colors.text },
+  folLbl:       { fontSize: 11, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
   followerRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 8 },
   fAvatar:      { width: 42, height: 42, borderRadius: 21 },
-  fName:        { fontSize: 14, fontWeight: '700', color: '#fff' },
-  fUser:        { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 1 },
+  fName:        { fontSize: 14, fontWeight: '700', color: colors.text },
+  fUser:        { fontSize: 12, color: colors.textMuted, marginTop: 1 },
   engBadge:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: GREEN + '22', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   engTx:        { fontSize: 12, color: GREEN, fontWeight: '700' },
-  actBox:       { flex: 1, backgroundColor: SURF, borderRadius: 16, borderWidth: 1, borderColor: BORDER, alignItems: 'center', paddingVertical: 16, gap: 6 },
-  actVal:       { fontSize: 22, fontWeight: '800', color: '#fff' },
-  actLbl:       { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
+  actBox:       { flex: 1, backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, alignItems: 'center', paddingVertical: 16, gap: 6 },
+  actVal:       { fontSize: 22, fontWeight: '800', color: colors.text },
+  actLbl:       { fontSize: 11, color: colors.textMuted },
 });

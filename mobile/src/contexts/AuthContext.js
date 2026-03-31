@@ -126,16 +126,20 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function clearStorage() {
-    await Promise.all([
-      secureDeleteItem(AUTH_TOKEN_KEY),
-      secureDeleteItem(AUTH_USER_KEY),
-      AsyncStorage.multiRemove([ACCOUNTS_KEY, CURRENT_ACCOUNT_INDEX_KEY]),
-    ]);
+  function clearAuthState() {
     setUser(null);
     setToken(null);
     setAccounts([]);
     setCurrentAccountIndex(0);
+  }
+
+  async function clearStorage() {
+    clearAuthState();
+    Promise.all([
+      secureDeleteItem(AUTH_TOKEN_KEY),
+      secureDeleteItem(AUTH_USER_KEY),
+      AsyncStorage.multiRemove([ACCOUNTS_KEY, CURRENT_ACCOUNT_INDEX_KEY]),
+    ]).catch(() => {});
   }
 
   async function persistAccounts(accts, idx) {
@@ -177,29 +181,6 @@ export function AuthProvider({ children }) {
         await biometricService.enable(authToken);
       }
     } catch (_) { }
-  }
-
-  // ── Public: login with email + password (calls backend) ──────────────────────
-  async function login(email, password) {
-    const res = await api.post('/auth/login', { email, password });
-    if (!res?.access_token) {
-      throw new Error(res?.detail || 'Invalid email or password');
-    }
-    await applyAuth(res.access_token, res.user);
-  }
-
-  // ── Public: register new account (calls backend + auto-login) ────────────────
-  async function register({ email, password, username, name }) {
-    const res = await api.post('/auth/register', {
-      email,
-      password,
-      username,
-      display_name: name || username,
-    });
-    if (!res?.access_token) {
-      throw new Error(res?.detail || 'Registration failed');
-    }
-    await applyAuth(res.access_token, res.user);
   }
 
   // ── Public: enter as guest ───────────────────────────────────────────────────
@@ -244,8 +225,10 @@ export function AuthProvider({ children }) {
     setToken(null);
   }
 
-  async function logout() {
-    await clearStorage();
+  function logout() {
+    clearAuthState();
+    clearStorage().catch(() => {});
+    return Promise.resolve();
   }
 
   async function updateUser(userData) {
@@ -265,6 +248,11 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // ── Public: login with pre-obtained token (phone OTP, OAuth, etc.) ──────────
+  async function loginWithToken(authToken, userData) {
+    await applyAuth(authToken, userData);
+  }
+
   const value = {
     user,
     token,
@@ -273,9 +261,8 @@ export function AuthProvider({ children }) {
     isLoading,
     isAuthenticated: !!(token && user),
     isGuest: user?.isGuest === true,
-    login,
-    register,
     loginAsGuest,
+    loginWithToken,
     logout,
     updateUser,
     enterAsGuest,

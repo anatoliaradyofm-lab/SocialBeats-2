@@ -14,7 +14,7 @@ if not JWT_SECRET:
         "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
     )
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRATION_HOURS = 24
+JWT_EXPIRATION_HOURS = 24 * 365  # 1 yıl — WhatsApp OTP oturumu kalıcı
 
 # ============== PASSWORD HELPERS ==============
 

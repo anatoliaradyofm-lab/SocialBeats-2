@@ -4,7 +4,8 @@
  * Inspired by: Spotify Wrapped aesthetic · Apple Music 2025 · Mobbin top apps
  * Hero cards · Story rings · Horizontal scrollers · Now trending
  */
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
   RefreshControl, Pressable, ActivityIndicator, Dimensions,
@@ -130,7 +131,9 @@ export default function DashboardScreen({ navigation }) {
   const featuredRef     = useDragScroll();
   const insets          = useSafeAreaInsets();
 
-  const [refreshing, setRefreshing]     = useState(false);
+  const [refreshing, setRefreshing]       = useState(false);
+  const [unreadMsgCount, setUnreadMsgCount]   = useState(0);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
 
   // ── Stories ────────────────────────────────────────────────
@@ -155,6 +158,32 @@ export default function DashboardScreen({ navigation }) {
   }, [token]);
 
   useEffect(() => { loadStories(); }, [loadStories]);
+
+  const fetchUnreadCounts = useCallback(() => {
+    if (!token) return;
+    api.get('/messages/unread-count', token)
+      .then(res => setUnreadMsgCount(res?.count ?? 0))
+      .catch(() => {});
+    api.get('/notifications/unread-count', token)
+      .then(res => setUnreadNotifCount(res?.count ?? 0))
+      .catch(() => {});
+  }, [token]);
+
+  useEffect(() => { fetchUnreadCounts(); }, [fetchUnreadCounts]);
+
+  useFocusEffect(useCallback(() => { fetchUnreadCounts(); }, [fetchUnreadCounts]));
+
+  // Web preview: okundu event'lerinde sayaçları güncelle
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => fetchUnreadCounts();
+    window.addEventListener('sb:msg-read', handler);
+    window.addEventListener('sb:notif-read', handler);
+    return () => {
+      window.removeEventListener('sb:msg-read', handler);
+      window.removeEventListener('sb:notif-read', handler);
+    };
+  }, [fetchUnreadCounts]);
 
   // ── Inline Search ──────────────────────────────────────────
   const [searchQuery,   setSearchQuery]   = useState('');
@@ -258,17 +287,26 @@ export default function DashboardScreen({ navigation }) {
           <View style={s.headerTop}>
             <View style={s.headerLeft}>
               <Text style={s.greeting}>{greeting()}</Text>
-              <Text style={s.userName} numberOfLines={1} ellipsizeMode="tail">
+              <Text style={[s.userName, { fontSize: Math.max(16, 28 - Math.max(0, ((user?.username || user?.name || '').length - 8) * 1.2)) }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
                 {(() => { const n = user?.username || user?.name || t('dashboard.listener'); return n.charAt(0).toUpperCase() + n.slice(1); })()}
               </Text>
             </View>
             <View style={s.headerRight}>
               <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Conversations')}>
                 <Ionicons name="chatbubble-outline" size={20} color="#F8F8F8" />
+                {unreadMsgCount > 0 && (
+                  <View style={[s.msgBadge, { backgroundColor: colors.accent || '#FB923C' }]}>
+                    <Text style={s.msgBadgeText}>{unreadMsgCount > 99 ? '99+' : unreadMsgCount}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
               <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')}>
                 <Ionicons name="notifications-outline" size={20} color="#F8F8F8" />
-                <View style={[s.badge, { backgroundColor: '#FF3B30' }]} />
+                {unreadNotifCount > 0 && (
+                  <View style={[s.msgBadge, { backgroundColor: '#FF3B30' }]}>
+                    <Text style={s.msgBadgeText}>{unreadNotifCount > 99 ? '99+' : unreadNotifCount}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={s.avatarWrap}>
                 <Image
@@ -384,7 +422,7 @@ export default function DashboardScreen({ navigation }) {
               {searchDropdownContent}
             </View>
           )}
-          <View style={[s.searchBar, { backgroundColor: colors.searchBg, borderColor: searchFocused ? colors.primary : colors.border }]}>
+          <View style={[s.searchBar, { backgroundColor: searchFocused ? colors.inputBg : colors.searchBg, borderColor: searchFocused ? colors.primary : colors.border, borderWidth: searchFocused ? 2 : 1 }]}>
             <Ionicons name="search-outline" size={16} color={searchFocused ? colors.primary : colors.textMuted} />
             <TextInput
               ref={searchInputRef}
@@ -521,7 +559,7 @@ function createStyles(colors, insets) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.background },
     content: { paddingBottom: 16 },
-    heroBg: { overflow: 'hidden' },
+    heroBg: {},
 
     // Header
     header: {
@@ -535,9 +573,9 @@ function createStyles(colors, insets) {
       justifyContent: 'space-between',
       paddingHorizontal: 20,
     },
-    headerLeft: { gap: 1, flex: 1, paddingRight: 16 },
+    headerLeft: { gap: 1, flex: 1, minWidth: 0, paddingRight: 16, overflow: 'hidden' },
     greeting: { fontSize: 10, color: colors.textMuted, fontWeight: '500', letterSpacing: 2.0, textTransform: 'uppercase' },
-    userName: { fontSize: 28, fontWeight: '700', color: colors.text, lineHeight: 34, letterSpacing: -0.5 },
+    userName: { fontSize: 28, fontWeight: '700', color: colors.text, lineHeight: 34, letterSpacing: -0.5, flexShrink: 1 },
     headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 },
     headerBtn: {
       width: 38,
@@ -570,6 +608,20 @@ function createStyles(colors, insets) {
       borderWidth: 1.5,
       borderColor: colors.background,
     },
+    msgBadge: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 4,
+      borderWidth: 1.5,
+      borderColor: colors.background,
+    },
+    msgBadgeText: { fontSize: 10, fontWeight: '800', color: '#fff' },
     avatarWrap: {
       borderRadius: 20,
       borderWidth: 2,
@@ -579,7 +631,7 @@ function createStyles(colors, insets) {
     avatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface },
 
     // Search Bar
-    searchWrap: { marginHorizontal: 20, marginTop: 4, marginBottom: 6, zIndex: 100 },
+    searchWrap: { marginHorizontal: 20, marginTop: 4, marginBottom: 6, zIndex: 100, backgroundColor: colors.background },
     searchBar: {
       flexDirection: 'row',
       alignItems: 'center',

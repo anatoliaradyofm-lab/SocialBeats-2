@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const REASONS = [
   { key: 'personal_break',    label: 'Kişisel mola ihtiyacı',    icon: 'cafe-outline' },
@@ -52,7 +53,9 @@ export default function FreezeAccountScreen({ navigation }) {
       Alert.alert(
         'Hesap Donduruldu',
         'Hesabınız donduruldu. Tekrar giriş yaparak etkinleştirebilirsiniz.',
-        [{ text: 'Tamam', onPress: () => logout?.() }]
+        [{ text: 'Tamam', onPress: () => {
+          logout?.();
+        }}]
       );
     } catch (err) {
       const msg = err?.data?.detail || err?.message || 'Hesap dondurma başarısız.';
@@ -64,6 +67,12 @@ export default function FreezeAccountScreen({ navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -113,7 +122,7 @@ export default function FreezeAccountScreen({ navigation }) {
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.glassBorder }]}>
           {[
             { icon: 'eye-off-outline',    text: 'Profiliniz diğer kullanıcılara görünmez olacak' },
-            { icon: 'notifications-off-outline', text: 'Bildirimler ve e-postalar duracak' },
+            { icon: 'notifications-off-outline', text: 'Bildirimler ve WhatsApp bildirimleri duracak' },
             { icon: 'shield-checkmark-outline',  text: 'Tüm verileriniz güvende kalacak' },
             { icon: 'refresh-outline',    text: 'Tekrar giriş yaparak hesabınızı aktifleştirebilirsiniz' },
           ].map((item, i) => (

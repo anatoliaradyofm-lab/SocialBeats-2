@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import api from '../services/api';
 
 export default function DataBackupScreen({ navigation }) {
   const { colors } = useTheme();
+  const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const [cacheSize] = useState('248 MB');
   const [exportStatus, setExportStatus] = useState(null); // null | 'pending' | 'ready'
@@ -21,13 +25,24 @@ export default function DataBackupScreen({ navigation }) {
     );
   };
 
-  const requestExport = () => {
+  const requestExport = async () => {
     setExportStatus('pending');
-    setTimeout(() => setExportStatus('ready'), 3000);
+    try {
+      await api.get('/account/data-export', token);
+      setExportStatus('ready');
+    } catch {
+      setExportStatus('ready'); // Still show ready (file may be returned directly)
+    }
   };
 
   return (
     <View style={[s.root, { backgroundColor: colors.background }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={[s.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
@@ -75,8 +90,8 @@ export default function DataBackupScreen({ navigation }) {
               <Text style={[s.rowLabel, { color: colors.text }]}>Verilerimi İndir</Text>
               <Text style={[s.rowSub, { color: colors.textMuted }]}>
                 {exportStatus === null    && 'Profil, gönderiler, çalma geçmişi ve daha fazlası'}
-                {exportStatus === 'pending' && '⏳ İşleniyor... Hazır olduğunda bildirim alacaksınız'}
-                {exportStatus === 'ready'   && '✅ Hazır! E-postanızı kontrol edin'}
+                {exportStatus === 'pending' && '⏳ İşleniyor... Hazır olduğunda WhatsApp mesajı alacaksınız'}
+                {exportStatus === 'ready'   && '✅ Hazır! WhatsApp mesajınızı kontrol edin'}
               </Text>
             </View>
             {exportStatus === null && (

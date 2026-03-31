@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 /**
  * 404 / Not Found screen - shown when navigating to invalid route or deep link
@@ -13,6 +14,12 @@ export default function NotFoundScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <Text style={styles.code}>404</Text>
       <Text style={styles.title}>{t('notFound.title')}</Text>
       <Text style={styles.subtitle}>{t('notFound.subtitle')}</Text>

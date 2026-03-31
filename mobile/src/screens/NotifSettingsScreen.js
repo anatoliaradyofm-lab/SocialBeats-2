@@ -1,34 +1,62 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Switch, ActivityIndicator } from 'react-native';
 import { TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import api from '../services/api';
 
 const NOTIF_ITEMS = [
   { key: 'push',     label: 'Push Bildirimleri',  sub: 'Tüm anlık bildirimleri al',             icon: 'phone-portrait-outline',   color: '#A78BFA' },
   { key: 'messages', label: 'Mesaj Bildirimleri', sub: 'Yeni mesaj geldiğinde bildir',           icon: 'chatbubble-outline',        color: '#60A5FA' },
   { key: 'likes',    label: 'Beğeni Bildirimleri',sub: 'Gönderilerin beğenildiğinde bildir',     icon: 'heart-outline',             color: '#F87171' },
-  { key: 'comments', label: 'Yorum Bildirimleri', sub: 'Yeni yorum geldiğinde bildir',           icon: 'chatbox-outline',           color: '#FBBF24' },
   { key: 'follows',  label: 'Takip Bildirimleri', sub: 'Yeni takipçi kazandığında bildir',       icon: 'person-add-outline',        color: '#34D399' },
 ];
 
 export default function NotifSettingsScreen({ navigation }) {
   const { colors } = useTheme();
+  const { token } = useAuth();
   const insets = useSafeAreaInsets();
 
-  const [settings, setSettings] = useState({ push: true, messages: true, likes: true, comments: true, follows: true });
+  const DEFAULT_SETTINGS = { push: true, messages: true, likes: true, follows: true };
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [saving, setSaving] = useState(false);
 
-  const toggle = (key) => setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+  useEffect(() => {
+    api.get('/notifications/preferences', token)
+      .then(data => setSettings(s => ({ ...s, ...data })))
+      .catch(() => {});
+  }, []);
+
+  const toggle = useCallback((key) => {
+    setSettings(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      setSaving(true);
+      api.put('/notifications/preferences', next, token)
+        .catch(() => {})
+        .finally(() => setSaving(false));
+      return next;
+    });
+  }, [token]);
 
   return (
     <View style={[s.root, { backgroundColor: colors.background }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={[s.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.text }]}>Bildirim Ayarları</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 40, alignItems: 'center' }}>
+          {saving && <ActivityIndicator size="small" color={colors.primary} />}
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 32 }]}>

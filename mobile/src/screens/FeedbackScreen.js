@@ -42,6 +42,12 @@ export default function FeedbackScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <LinearGradient colors={['#111827', '#000000']} style={StyleSheet.absoluteFill} />
       
       <View style={[styles.header, { paddingTop: insets.top }]}>

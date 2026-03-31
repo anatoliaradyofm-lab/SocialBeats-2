@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const avatar = (u) => u?.avatar_url || `https://i.pravatar.cc/100?u=${u?.username || u?.id}`;
 
@@ -77,22 +78,28 @@ export default function BlockedUsersScreen({ navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>{t('settings.blockedUsers')}</Text>
       </View>
       {loading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color="#8B5CF6" /></View>
+        <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
       ) : (
         <FlatList
           data={users}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => item.id || item.username || String(index)}
           contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
           ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyText}>{t('settings.noBlockedUsers')}</Text></View>}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#8B5CF6" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
         />
       )}
     </View>
@@ -101,19 +108,19 @@ export default function BlockedUsersScreen({ navigation }) {
 
 const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   backBtn: { padding: 4, marginRight: 12 },
   title: { fontSize: 18, fontWeight: '700', color: colors.text },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { padding: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   left: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   avatar: { width: 48, height: 48, borderRadius: 24, marginRight: 14 },
   info: { flex: 1 },
   name: { fontSize: 16, fontWeight: '600', color: colors.text },
-  username: { fontSize: 14, color: '#9CA3AF', marginTop: 2 },
-  unblockBtn: { paddingVertical: 8, paddingHorizontal: 16, backgroundColor: '#374151', borderRadius: 8 },
+  username: { fontSize: 14, color: colors.textMuted, marginTop: 2 },
+  unblockBtn: { paddingVertical: 8, paddingHorizontal: 16, backgroundColor: colors.surfaceHigh, borderRadius: 8 },
   unblockText: { fontSize: 14, color: colors.text, fontWeight: '500' },
   empty: { padding: 40, alignItems: 'center' },
-  emptyText: { color: '#9CA3AF' },
+  emptyText: { color: colors.textMuted },
 });

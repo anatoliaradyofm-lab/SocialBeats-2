@@ -7,7 +7,6 @@ import {
   View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
   ActivityIndicator, Alert, Modal, Linking, Dimensions, Animated, RefreshControl, Share,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,7 +19,7 @@ import RichText from '../components/RichText';
 import { useTheme } from '../contexts/ThemeContext';
 
 const { width: SW } = Dimensions.get('window');
-const COVER_H = 80;
+const COVER_H = 105;
 
 const REPORT_REASONS = (t) => [
   { value: 'spam',          label: t('report.spam') },
@@ -89,9 +88,12 @@ export default function UserProfileScreen({ navigation, route }) {
 
   useEffect(() => { loadUser(); }, [loadUser]);
 
-  useFocusEffect(useCallback(() => {
-    if (!loading) loadUser();
-  }, [loadUser, loading]));
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (!loading) loadUser();
+    });
+    return unsubscribe;
+  }, [navigation, loadUser, loading]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -708,7 +710,7 @@ const s = StyleSheet.create({
   heroBg: { height: COVER_H, width: '100%' },
 
   /* Identity */
-  identityBlock:{ paddingHorizontal:20, marginTop:-46, paddingBottom:8 },
+  identityBlock:{ paddingHorizontal:20, marginTop:-36, paddingBottom:8 },
   avatarRing:   { width:90, height:90, borderRadius:45, borderWidth:3, borderColor:'#C084FC',
                   marginBottom:14, position:'relative', zIndex:20, elevation:20,
                   shadowColor:'#C084FC', shadowOpacity:0.55, shadowRadius:14, shadowOffset:{width:0,height:0} },

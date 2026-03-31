@@ -363,12 +363,6 @@ export default function PlaylistsScreen({ navigation }) {
       {/* ── Section Header ── */}
       <View style={s.sectionHeader}>
         <Text style={[s.sectionTitle, { color: colors.text }]}>Oynatma Listelerim</Text>
-        <TouchableOpacity style={s.createBtn} onPress={() => { setInputVal(''); setCreateModal(true); }} activeOpacity={0.85}>
-          <LinearGradient colors={['#A78BFA', '#7C3AED']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.createBtnGrad}>
-            <Ionicons name="add" size={16} color="#FFF" />
-            <Text style={s.createBtnText}>Oluştur</Text>
-          </LinearGradient>
-        </TouchableOpacity>
       </View>
 
       {/* ── List ── */}
@@ -390,12 +384,11 @@ export default function PlaylistsScreen({ navigation }) {
               <Ionicons name="musical-notes-outline" size={56} color={colors.textGhost || colors.textMuted} />
               <Text style={[s.emptyTitle, { color: colors.text }]}>Henüz playlist yok</Text>
               <Text style={[s.emptySub, { color: colors.textMuted }]}>İlk oynatma listeni oluştur</Text>
-              <TouchableOpacity
-                style={[s.emptyBtn, { backgroundColor: colors.primary }]}
-                onPress={() => setCreateModal(true)}
-              >
-                <Ionicons name="add" size={18} color="#FFF" />
-                <Text style={s.emptyBtnText}>Oluştur</Text>
+              <TouchableOpacity style={s.emptyBtn} onPress={() => setCreateModal(true)}>
+                <LinearGradient colors={['#A78BFA', '#7C3AED']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.emptyBtnGrad]}>
+                  <Ionicons name="add" size={18} color="#FFF" />
+                  <Text style={s.emptyBtnText}>Oluştur</Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           }
@@ -476,7 +469,8 @@ function createStyles(colors, insets) {
     empty:       { alignItems: 'center', paddingTop: 60, gap: 10 },
     emptyTitle:  { fontSize: 17, fontWeight: '700', marginTop: 8 },
     emptySub:    { fontSize: 14 },
-    emptyBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, marginTop: 8 },
+    emptyBtn:    { borderRadius: 24, overflow: 'hidden', marginTop: 8 },
+    emptyBtnGrad:{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 24, paddingVertical: 12 },
     emptyBtnText:{ color: '#FFF', fontWeight: '700', fontSize: 15 },
 
     // Create button

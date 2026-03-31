@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const parseLRC = (lrcText) => {
   if (!lrcText) return [];
@@ -155,6 +156,12 @@ export default function LyricsScreen({ navigation, route }) {
       onScrollEndDrag={handleScrollEnd}
       onMomentumScrollEnd={handleScrollEnd}
     >
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       {syncedLines.map((line, index) => (
         <TouchableOpacity
           key={index}

@@ -4,6 +4,7 @@
  * Fixes: track onPress → play, follow button → API, multi-tab search, error states
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity,
   Image, ActivityIndicator, Dimensions, Alert,
@@ -53,6 +54,12 @@ export default function SearchScreen({ navigation }) {
   const [tracks, setTracks]       = useState([]);
   const [loading, setLoading]     = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
+
+  // Ekrana girilince klavyeyi otomatik aç
+  useFocusEffect(useCallback(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 100);
+    return () => clearTimeout(t);
+  }, []));
 
   // Load search history
   useEffect(() => {
@@ -166,6 +173,12 @@ export default function SearchScreen({ navigation }) {
 
   return (
     <View style={s.root}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       {/* ── Header ── */}
       <View style={s.header}>
         <Text style={s.screenTitle}>Search</Text>

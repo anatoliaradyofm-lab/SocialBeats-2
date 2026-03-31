@@ -1,75 +1,176 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Modal, Pressable } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Modal, Pressable, ActivityIndicator, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import api from '../services/api';
 
-const NAV_ITEMS_TOP = [
-  { name: 'ChangeEmail',    label: 'E-posta Değiştir', icon: 'mail-outline',        color: '#60A5FA' },
-  { name: 'ChangePassword', label: 'Şifre Değiştir',   icon: 'lock-closed-outline', color: '#A78BFA' },
+const MSG_OPTIONS = [
+  { key: 'everyone',  label: 'Herkes' },
+  { key: 'followers', label: 'Takipçilerim' },
+  { key: 'none',      label: 'Hiç Kimse' },
 ];
-
-const NAV_ITEMS_BOTTOM = [
-  { name: 'BlockedUsers',  label: 'Engellenen Kullanıcılar', icon: 'ban-outline',   color: '#F87171' },
-  { name: 'FreezeAccount', label: 'Hesabı Dondur',           icon: 'snow-outline',  color: '#60A5FA' },
-  { name: 'DeleteAccount', label: 'Hesabımı Kalıcı Sil',     icon: 'trash-outline', color: '#F87171' },
-];
-
-const MSG_OPTIONS = ['Herkes', 'Takip Ettiklerim', 'Hiç Kimse'];
 
 export default function AccountSettingsScreen({ navigation }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { token } = useAuth();
 
-  const [privateProfile, setPrivateProfile] = useState(false);
-  const [msgPermission, setMsgPermission]   = useState('Herkes');
-  const [msgModalVisible, setMsgModalVisible] = useState(false);
+  const [privateProfile, setPrivateProfile]     = useState(false);
+  const [msgPermission, setMsgPermission]       = useState('everyone');
+  const [msgModalVisible, setMsgModalVisible]   = useState(false);
+  const [saving, setSaving]                     = useState(false);
+  const [loading, setLoading]                   = useState(true);
+
+  // Load current profile settings
+  useEffect(() => {
+    api.get('/auth/me', token).then(data => {
+      setPrivateProfile(data.is_private ?? false);
+      setMsgPermission(data.message_permission ?? 'everyone');
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const saveProfile = useCallback(async (patch) => {
+    setSaving(true);
+    try {
+      await api.put('/user/profile', patch, token);
+    } catch {/* silent */} finally {
+      setSaving(false);
+    }
+  }, [token]);
+
+  const handlePrivateToggle = (val) => {
+    setPrivateProfile(val);
+    saveProfile({ is_private: val });
+  };
+
+  const handleMsgPermission = (key) => {
+    setMsgPermission(key);
+    setMsgModalVisible(false);
+    saveProfile({ message_permission: key });
+  };
+
+  const msgLabel = MSG_OPTIONS.find(o => o.key === msgPermission)?.label ?? 'Herkes';
+
+  const ALL_ROWS = [
+    { key: 'msg',      label: 'Mesaj İzinleri',            icon: 'chatbubble-outline',  color: '#34D399', type: 'modal',  sub: msgLabel },
+    { key: 'privacy',  label: 'Profil Gizliliği',          icon: 'eye-off-outline',     color: '#A78BFA', type: 'toggle', sub: 'Profilin yalnızca takipçilere görünür' },
+    { key: 'blocked',  label: 'Engellenen Kullanıcılar',   icon: 'ban-outline',         color: '#F87171', nav: 'BlockedUsers' },
+    { key: 'freeze',   label: 'Hesabı Dondur',             icon: 'snow-outline',        color: '#60A5FA', nav: 'FreezeAccount' },
+    { key: 'delete',   label: 'Hesabımı Kalıcı Sil',       icon: 'trash-outline',       color: '#F87171', nav: 'DeleteAccount', danger: true },
+  ];
 
   return (
     <View style={[s.root, { backgroundColor: colors.background }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={[s.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.text }]}>Hesap Ayarları</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 40 }}>
+          {saving && <ActivityIndicator size="small" color={colors.primary} />}
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 32 }]}>
+        {loading ? (
+          <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+        ) : (
+          <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.glassBorder }]}>
+            {ALL_ROWS.map((row, i) => {
+              const isLast = i === ALL_ROWS.length - 1;
+              const divider = !isLast && { borderBottomWidth: 1, borderBottomColor: colors.borderLight };
 
-        {/* E-posta + Şifre */}
-        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.glassBorder }]}>
-          {NAV_ITEMS_TOP.map((item, i) => (
-            <TouchableOpacity
-              key={item.name}
-              style={[s.row, i < NAV_ITEMS_TOP.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}
-              onPress={() => navigation.navigate(item.name)}
-              activeOpacity={0.72}
-            >
-              <View style={[s.iconWrap, { backgroundColor: item.color + '22' }]}>
-                <Ionicons name={item.icon} size={20} color={item.color} />
-              </View>
-              <Text style={[s.rowLabel, { color: colors.text }]}>{item.label}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.textGhost} />
-            </TouchableOpacity>
-          ))}
-        </View>
+              if (row.type === 'toggle') {
+                return (
+                  <View key={row.key} style={[s.row, divider]}>
+                    <View style={[s.iconWrap, { backgroundColor: row.color + '22' }]}>
+                      <Ionicons name={row.icon} size={20} color={row.color} />
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={[s.rowLabel, { color: colors.text }]}>{row.label}</Text>
+                      <Text style={[s.rowSub, { color: colors.textMuted }]}>{row.sub}</Text>
+                    </View>
+                    <Switch
+                      value={privateProfile}
+                      onValueChange={handlePrivateToggle}
+                      trackColor={{ false: colors.surfaceHigh, true: colors.primary + '99' }}
+                      thumbColor={privateProfile ? colors.primary : colors.textMuted}
+                    />
+                  </View>
+                );
+              }
 
-        {/* Mesaj İzinleri */}
-        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.glassBorder }]}>
-          <TouchableOpacity style={s.row} onPress={() => setMsgModalVisible(true)} activeOpacity={0.72}>
-            <View style={[s.iconWrap, { backgroundColor: '#34D39922' }]}>
-              <Ionicons name="chatbubble-outline" size={20} color="#34D399" />
+              if (row.type === 'modal') {
+                return (
+                  <TouchableOpacity key={row.key} style={[s.row, divider]} onPress={() => setMsgModalVisible(true)} activeOpacity={0.72}>
+                    <View style={[s.iconWrap, { backgroundColor: row.color + '22' }]}>
+                      <Ionicons name={row.icon} size={20} color={row.color} />
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={[s.rowLabel, { color: colors.text }]}>{row.label}</Text>
+                      <Text style={[s.rowSub, { color: colors.textMuted }]}>{row.sub}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textGhost} />
+                  </TouchableOpacity>
+                );
+              }
+
+              return (
+                <TouchableOpacity
+                  key={row.key}
+                  style={[s.row, divider]}
+                  onPress={() => navigation.navigate(row.nav)}
+                  activeOpacity={0.72}
+                >
+                  <View style={[s.iconWrap, { backgroundColor: row.color + '22' }]}>
+                    <Ionicons name={row.icon} size={20} color={row.color} />
+                  </View>
+                  <Text style={[s.rowLabel, { color: row.danger ? '#F87171' : colors.text }]}>{row.label}</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textGhost} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Mesaj İzinleri Modal */}
+      {Platform.OS === 'web' ? (
+        msgModalVisible ? (
+          <View style={[StyleSheet.absoluteFill, s.backdrop]} pointerEvents="box-none">
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setMsgModalVisible(false)} />
+            <View style={[s.sheet, { backgroundColor: colors.card, borderColor: colors.glassBorder }]} onStartShouldSetResponder={() => true}>
+              <View style={[s.sheetHandle, { backgroundColor: colors.textGhost }]} />
+              <Text style={[s.sheetTitle, { color: colors.text }]}>Mesaj İzinleri</Text>
+              <Text style={[s.sheetSub, { color: colors.textMuted }]}>Kimler sana mesaj gönderebilir?</Text>
+              {MSG_OPTIONS.map((opt, i) => {
+                const active = msgPermission === opt.key;
+                return (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[s.optRow, i < MSG_OPTIONS.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}
+                    onPress={() => handleMsgPermission(opt.key)}
+                    activeOpacity={0.72}
+                  >
+                    <Text style={[s.optLabel, { color: active ? colors.primary : colors.text }]}>{opt.label}</Text>
+                    {active && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+              <View style={{ height: insets.bottom + 8 }} />
             </View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={[s.rowLabel, { color: colors.text }]}>Mesaj İzinleri</Text>
-              <Text style={[s.rowSub, { color: colors.textMuted }]}>{msgPermission}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textGhost} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Mesaj İzinleri Modal */}
+          </View>
+        ) : null
+      ) : (
         <Modal visible={msgModalVisible} transparent animationType="slide" onRequestClose={() => setMsgModalVisible(false)}>
           <Pressable style={s.backdrop} onPress={() => setMsgModalVisible(false)}>
             <Pressable style={[s.sheet, { backgroundColor: colors.card, borderColor: colors.glassBorder }]} onPress={() => {}}>
@@ -77,61 +178,24 @@ export default function AccountSettingsScreen({ navigation }) {
               <Text style={[s.sheetTitle, { color: colors.text }]}>Mesaj İzinleri</Text>
               <Text style={[s.sheetSub, { color: colors.textMuted }]}>Kimler sana mesaj gönderebilir?</Text>
               {MSG_OPTIONS.map((opt, i) => {
-                const active = msgPermission === opt;
+                const active = msgPermission === opt.key;
                 return (
                   <TouchableOpacity
-                    key={opt}
+                    key={opt.key}
                     style={[s.optRow, i < MSG_OPTIONS.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}
-                    onPress={() => { setMsgPermission(opt); setMsgModalVisible(false); }}
+                    onPress={() => handleMsgPermission(opt.key)}
                     activeOpacity={0.72}
                   >
-                    <Text style={[s.optLabel, { color: active ? colors.primary : colors.text }]}>{opt}</Text>
+                    <Text style={[s.optLabel, { color: active ? colors.primary : colors.text }]}>{opt.label}</Text>
                     {active && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
                   </TouchableOpacity>
                 );
               })}
+              <View style={{ height: insets.bottom + 8 }} />
             </Pressable>
           </Pressable>
         </Modal>
-
-        {/* Profil Gizliliği */}
-        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.glassBorder }]}>
-          <View style={s.toggleRow}>
-            <View style={[s.iconWrap, { backgroundColor: '#A78BFA22' }]}>
-              <Ionicons name="eye-off-outline" size={20} color="#A78BFA" />
-            </View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={[s.rowLabel, { color: colors.text }]}>Profil Gizliliği</Text>
-              <Text style={[s.rowSub, { color: colors.textMuted }]}>Profilin yalnızca takipçilere görünür</Text>
-            </View>
-            <Switch
-              value={privateProfile}
-              onValueChange={setPrivateProfile}
-              trackColor={{ false: colors.surfaceHigh, true: colors.primary + '99' }}
-              thumbColor={privateProfile ? colors.primary : colors.textMuted}
-            />
-          </View>
-        </View>
-
-        {/* Alt navigasyon */}
-        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.glassBorder }]}>
-          {NAV_ITEMS_BOTTOM.map((item, i) => (
-            <TouchableOpacity
-              key={item.name}
-              style={[s.row, i < NAV_ITEMS_BOTTOM.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}
-              onPress={() => navigation.navigate(item.name)}
-              activeOpacity={0.72}
-            >
-              <View style={[s.iconWrap, { backgroundColor: item.color + '22' }]}>
-                <Ionicons name={item.icon} size={20} color={item.color} />
-              </View>
-              <Text style={[s.rowLabel, { color: item.name === 'DeleteAccount' ? colors.error : colors.text }]}>{item.label}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.textGhost} />
-            </TouchableOpacity>
-          ))}
-        </View>
-
-      </ScrollView>
+      )}
     </View>
   );
 }
@@ -144,15 +208,14 @@ const s = StyleSheet.create({
   scroll: { padding: 16, gap: 16 },
   card: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 15, paddingHorizontal: 16 },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 16 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
-  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, paddingBottom: 32, paddingTop: 12 },
+  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, paddingTop: 12 },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 18 },
   sheetTitle: { fontSize: 17, fontWeight: '800', paddingHorizontal: 20, marginBottom: 4 },
   sheetSub: { fontSize: 13, paddingHorizontal: 20, marginBottom: 14 },
   optRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16 },
   optLabel: { fontSize: 16, fontWeight: '600' },
   iconWrap: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  rowLabel: { fontSize: 15, fontWeight: '600' },
+  rowLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
   rowSub: { fontSize: 12 },
 });

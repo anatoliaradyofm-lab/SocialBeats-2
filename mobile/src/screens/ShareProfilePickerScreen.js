@@ -1,7 +1,8 @@
 /**
  * ShareProfilePickerScreen - Profil paylaşımı (kullanıcı ara ve paylaş)
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
   ActivityIndicator, TextInput, Alert} from 'react-native';
@@ -12,6 +13,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../contexts/ThemeContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const SEARCH_DEBOUNCE = 400;
 
@@ -27,6 +29,12 @@ export default function ShareProfilePickerScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [query, setQuery] = useState('');
+  const inputRef = useRef(null);
+
+  useFocusEffect(useCallback(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 100);
+    return () => clearTimeout(t);
+  }, []));
 
   const searchUsers = useCallback(async (q) => {
     if (!q?.trim() || !token) {
@@ -81,6 +89,12 @@ export default function ShareProfilePickerScreen({ route, navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -88,11 +102,12 @@ export default function ShareProfilePickerScreen({ route, navigation }) {
         <Text style={styles.title}>{t('profile.shareProfile')}</Text>
       </View>
       <View style={styles.searchRow}>
-        <Ionicons name="search" size={20} color="#6B7280" />
+        <Ionicons name="search" size={20} color={colors.textMuted} />
         <TextInput
+          ref={inputRef}
           style={styles.searchInput}
           placeholder={t('search.searchUsers')}
-          placeholderTextColor="#6B7280"
+          placeholderTextColor={colors.textMuted}
           value={query}
           onChangeText={setQuery}
           autoCapitalize="none"
@@ -115,16 +130,16 @@ export default function ShareProfilePickerScreen({ route, navigation }) {
 
 const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   backBtn: { padding: 4, marginRight: 12 },
   title: { fontSize: 18, fontWeight: '700', color: colors.text },
-  searchRow: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
-  searchInput: { flex: 1, backgroundColor: '#1F2937', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 16, color: colors.text },
+  searchRow: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
+  searchInput: { flex: 1, backgroundColor: colors.inputBg, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 16, color: colors.text },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#1F2937', gap: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 12 },
   avatar: { width: 48, height: 48, borderRadius: 24 },
   info: { flex: 1, minWidth: 0 },
   name: { fontSize: 16, fontWeight: '600', color: colors.text },
-  username: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  empty: { color: '#9CA3AF', textAlign: 'center', padding: 24 },
+  username: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  empty: { color: colors.textMuted, textAlign: 'center', padding: 24 },
 });

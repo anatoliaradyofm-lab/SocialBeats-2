@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, File, UploadFile, Form, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, File, UploadFile, Form, Request, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -821,6 +821,7 @@ class UserResponse(BaseModel):
     website: Optional[str] = None
     birth_date: Optional[str] = None
     is_private: bool = False
+    message_permission: str = "everyone"
 
 class UserPublicProfile(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -862,6 +863,7 @@ class ProfileUpdateBody(BaseModel):
     twitter: Optional[str] = None
     country: Optional[str] = None
     city: Optional[str] = None
+    message_permission: Optional[str] = None  # 'everyone' | 'followers' | 'none'
 
 class ConnectedService(BaseModel):
     service_type: str
@@ -2061,6 +2063,14 @@ async def login(login_data: UserLogin, request: Request):
         
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
+    # Auto-unfreeze on successful login (re-login = intent to reactivate)
+    if user.get("is_frozen", False):
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {"is_frozen": False, "frozen_at": None, "freeze_reason": None}}
+        )
+        user["is_frozen"] = False
+    
     # 2FA enforcement: if user has 2FA enabled, return temp_token and require verification
     if user.get("two_factor_enabled"):
         # Send code if method is email
@@ -2323,250 +2333,7 @@ async def verify_2fa_login(verify_data: Verify2FALoginRequest, request: Request)
         pass
     return TokenResponse(access_token=token, user=user_response)
 
-# ============== GOOGLE AUTH (Direct OAuth) ==============
-
-GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
-GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
-GOOGLE_REDIRECT_URI = os.environ.get("BACKEND_URL", "http://localhost:8080") + "/api/auth/google/callback"
-
-@api_router.get("/auth/google/login")
-async def google_login():
-    """Get Google OAuth authorization URL"""
-    if not GOOGLE_CLIENT_ID:
-        raise HTTPException(status_code=500, detail="Google OAuth not configured")
-    
-    # Google OAuth URL
-    auth_url = (
-        "https://accounts.google.com/o/oauth2/v2/auth"
-        f"?client_id={GOOGLE_CLIENT_ID}"
-        f"&redirect_uri={GOOGLE_REDIRECT_URI}"
-        "&response_type=code"
-        "&scope=openid%20email%20profile"
-        "&access_type=offline"
-        "&prompt=consent"
-    )
-    return {"auth_url": auth_url}
-
-@api_router.get("/auth/google/callback")
-async def google_callback(code: str = None, error: str = None):
-    """Handle Google OAuth callback"""
-    from fastapi.responses import RedirectResponse
-    
-    # Mobile deeplink ile yönlendirme
-    app_scheme = os.environ.get("MOBILE_APP_SCHEME", "socialbeats")
-
-    if error:
-        return RedirectResponse(url=f"{app_scheme}://auth/callback?error={error}")
-
-    if not code:
-        return RedirectResponse(url=f"{app_scheme}://auth/callback?error=no_code")
-    
-    try:
-        # Exchange code for tokens
-        async with httpx.AsyncClient() as client:
-            token_response = await client.post(
-                "https://oauth2.googleapis.com/token",
-                data={
-                    "client_id": GOOGLE_CLIENT_ID,
-                    "client_secret": GOOGLE_CLIENT_SECRET,
-                    "code": code,
-                    "grant_type": "authorization_code",
-                    "redirect_uri": GOOGLE_REDIRECT_URI
-                }
-            )
-            
-            if token_response.status_code != 200:
-                logging.error(f"Google token error: {token_response.text}")
-                return RedirectResponse(url=f"{app_scheme}://auth/callback?error=token_exchange_failed")
-            
-            tokens = token_response.json()
-            access_token = tokens.get("access_token")
-            
-            # Get user info from Google
-            user_response = await client.get(
-                "https://www.googleapis.com/oauth2/v2/userinfo",
-                headers={"Authorization": f"Bearer {access_token}"}
-            )
-            
-            if user_response.status_code != 200:
-                return RedirectResponse(url=f"{app_scheme}://auth/callback?error=user_info_failed")
-            
-            google_user = user_response.json()
-    
-    except Exception as e:
-        logging.error(f"Google OAuth error: {e}")
-        return RedirectResponse(url=f"{app_scheme}://auth/callback?error=oauth_error")
-    
-    # Check if user exists
-    email = google_user.get("email")
-    existing_user = await db.users.find_one({"email": email}, {"_id": 0})
-    
-    if existing_user:
-        # Update user with Google info
-        await db.users.update_one(
-            {"email": email},
-            {"$set": {
-                "is_online": True,
-                "avatar_url": google_user.get("picture", existing_user.get("avatar_url")),
-                "google_id": google_user.get("id"),
-                "last_login": datetime.now(timezone.utc).isoformat()
-            }}
-        )
-        user_id = existing_user["id"]
-    else:
-        # Create new user
-        user_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
-        username = email.split("@")[0] + "_" + str(uuid.uuid4())[:4]
-        
-        user_doc = {
-            "id": user_id,
-            "email": email,
-            "username": username,
-            "display_name": google_user.get("name", username),
-            "password": None,
-            "avatar_url": google_user.get("picture", f"https://api.dicebear.com/7.x/avataaars/svg?seed={username}"),
-            "bio": None,
-            "google_id": google_user.get("id"),
-            "auth_provider": "google",
-            "connected_services": [],
-            "created_at": now,
-            "subscription_type": "free",
-            "followers_count": 0,
-            "following_count": 0,
-            "posts_count": 0,
-            "favorite_genres": [],
-            "favorite_artists": [],
-            "music_mood": None,
-            "is_verified": google_user.get("verified_email", False),
-            "level": 1,
-            "xp": 0,
-            "badges": ["new_user", "google_user"],
-            "profile_theme": "default",
-            "is_online": True
-        }
-        await db.users.insert_one(user_doc)
-    
-    # Create JWT token
-    token = create_token(user_id, email)
-    
-    # Mobil uygulama deeplink ile token ilet
-    return RedirectResponse(url=f"{app_scheme}://auth/callback?token={token}")
-
-# Mobile Google Auth - supports both id_token (verified) and access_token + user info
-class GoogleMobileLoginRequest(BaseModel):
-    email: Optional[str] = None
-    name: Optional[str] = None
-    picture: Optional[str] = None
-    google_id: Optional[str] = None
-    access_token: Optional[str] = None
-    id_token: Optional[str] = None
-
-def _verify_google_id_token(id_token_str: str):
-    """Verify Google ID token and return user info - tries GOOGLE_CLIENT_ID and EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"""
-    try:
-        from google.oauth2 import id_token
-        from google.auth.transport import requests as google_requests
-        client_ids = []
-        for var in ('GOOGLE_CLIENT_ID', 'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID'):
-            for c in os.environ.get(var, '').split(','):
-                if c.strip():
-                    client_ids.append(c.strip())
-        if not client_ids:
-            return None
-        req = google_requests.Request()
-        for cid in client_ids:
-            try:
-                idinfo = id_token.verify_oauth2_token(id_token_str, req, cid)
-                if idinfo.get('iss') in ('accounts.google.com', 'https://accounts.google.com'):
-                    return {"email": idinfo.get("email"), "name": idinfo.get("name"), "picture": idinfo.get("picture"), "id": idinfo.get("sub")}
-            except ValueError:
-                continue
-        return None
-    except Exception as e:
-        logger.warning(f"ID token verify failed: {e}")
-        return None
-
-@api_router.post("/auth/google/mobile")
-async def google_mobile_login(data: GoogleMobileLoginRequest):
-    """Handle Google login from mobile app - id_token (verified) or access_token + user info"""
-    try:
-        email, name, picture, google_id = None, None, None, None
-        if data.id_token:
-            idinfo = _verify_google_id_token(data.id_token)
-            if idinfo:
-                email, name, picture, google_id = idinfo.get("email"), idinfo.get("name"), idinfo.get("picture"), idinfo.get("id")
-        if not email and data.email:
-            email, name, picture, google_id = data.email, data.name, data.picture, data.google_id
-        if not email:
-            raise HTTPException(status_code=400, detail="Invalid Google credentials")
-        
-        # Check if user exists
-        existing_user = await db.users.find_one({"email": email})
-        
-        if existing_user:
-            user_id = existing_user["id"]
-            # Update user info
-            await db.users.update_one(
-                {"email": email},
-                {"$set": {
-                    "avatar_url": picture or existing_user.get("avatar_url"),
-                    "google_id": google_id,
-                    "is_online": True,
-                    "last_login": datetime.now(timezone.utc).isoformat()
-                }}
-            )
-            user_doc = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0, "password_hash": 0})
-        else:
-            # Create new user
-            user_id = str(uuid.uuid4())
-            username = email.split("@")[0].lower().replace(".", "_")
-            
-            # Check username uniqueness
-            counter = 1
-            original_username = username
-            while await db.users.find_one({"username": username}):
-                username = f"{original_username}{counter}"
-                counter += 1
-            
-            user_doc = {
-                "id": user_id,
-                "email": email,
-                "username": username,
-                "display_name": name or username,
-                "password_hash": "",
-                "avatar_url": picture or f"https://api.dicebear.com/7.x/avataaars/svg?seed={username}",
-                "bio": "",
-                "google_id": google_id,
-                "auth_provider": "google",
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "followers_count": 0,
-                "following_count": 0,
-                "posts_count": 0,
-                "favorite_genres": [],
-                "favorite_artists": [],
-                "music_mood": None,
-                "is_verified": True,
-                "level": 1,
-                "xp": 0,
-                "badges": ["new_user", "google_user"],
-                "profile_theme": "default",
-                "is_online": True
-            }
-            await db.users.insert_one(user_doc)
-            user_doc = {k: v for k, v in user_doc.items() if k not in ("_id", "password", "password_hash")}
-        
-        # Create JWT token
-        token = create_token(user_id, email)
-        
-        return {
-            "access_token": token,
-            "token_type": "bearer",
-            "user": user_doc
-        }
-    except Exception as e:
-        print(f"Mobile Google login error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Google OAuth removed — telefon + WhatsApp OTP kullanılıyor
 
 # ============== USER PROFILE ENDPOINTS ==============
 
@@ -2690,6 +2457,9 @@ async def update_profile(
         update_data["country"] = body.country.strip() or None
     if body.city is not None:
         update_data["city"] = body.city.strip() or None
+    if body.message_permission is not None:
+        if body.message_permission in ('everyone', 'followers', 'none'):
+            update_data["message_permission"] = body.message_permission
 
     if update_data:
         await db.users.update_one({"id": current_user["id"]}, {"$set": update_data})
@@ -2742,6 +2512,17 @@ async def get_user_profile(username: str, current_user: dict = Depends(get_curre
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Block check: if either party blocked the other, show "not found"
+    if user["id"] != current_user["id"]:
+        block_doc = await db.blocked_users.find_one({
+            "$or": [
+                {"blocker_id": current_user["id"], "blocked_id": user["id"]},
+                {"blocker_id": user["id"], "blocked_id": current_user["id"]}
+            ]
+        })
+        if block_doc:
+            raise HTTPException(status_code=404, detail="User not found")
+    
     is_following = await db.follows.find_one({
         "follower_id": current_user["id"],
         "following_id": user["id"]
@@ -2767,6 +2548,7 @@ async def get_user_profile(username: str, current_user: dict = Depends(get_curre
     is_own = current_user["id"] == user["id"]
     is_locked = bool(user.get("is_private")) and not is_following and not is_own
     return {**dict(user), "is_following": is_following, "friend_request_status": friend_request_status, "is_own": is_own, "is_locked": is_locked}
+
 
 @api_router.get("/user/{username}/activity")
 async def get_user_activity(username: str, limit: int = 20, current_user: dict = Depends(get_current_user)):
@@ -4460,6 +4242,28 @@ async def update_dnd_settings(
     
     return {"message": "Rahatsız etmeyin ayarları güncellendi"}
 
+@api_router.get("/notifications/preferences")
+async def get_notif_preferences(current_user: dict = Depends(get_current_user)):
+    """Get per-type notification preferences"""
+    settings = await db.notification_settings.find_one({"user_id": current_user["id"]}, {"_id": 0})
+    defaults = {"push": True, "messages": True, "likes": True, "comments": True, "follows": True}
+    if settings and settings.get("preferences"):
+        return {**defaults, **settings["preferences"]}
+    return defaults
+
+@api_router.put("/notifications/preferences")
+async def update_notif_preferences(body: dict, current_user: dict = Depends(get_current_user)):
+    """Update per-type notification preferences"""
+    allowed = {"push", "messages", "likes", "comments", "follows"}
+    prefs = {k: bool(v) for k, v in body.items() if k in allowed}
+    now = datetime.now(timezone.utc).isoformat()
+    await db.notification_settings.update_one(
+        {"user_id": current_user["id"]},
+        {"$set": {"preferences": prefs, "updated_at": now}, "$setOnInsert": {"user_id": current_user["id"], "created_at": now}},
+        upsert=True
+    )
+    return {"success": True}
+
 # ============== NOTIFICATION SOUNDS ==============
 
 @api_router.get("/notifications/sounds")
@@ -4823,21 +4627,51 @@ async def logout_all_sessions(
     return {"message": "Tüm oturumlar kapatıldı"}
 
 @api_router.post("/account/freeze")
-async def freeze_account(current_user: dict = Depends(get_current_user)):
+async def freeze_account(
+    body: dict = Body(default={}), 
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    current_user: dict = Depends(get_current_user)
+):
+    reason = body.get("reason", "") if isinstance(body, dict) else ""
+    user_id = current_user["id"]
+    now = datetime.now(timezone.utc).isoformat()
+    
     await db.users.update_one(
-        {"id": current_user["id"]},
+        {"id": user_id},
         {"$set": {
             "is_frozen": True,
-            "frozen_at": datetime.now(timezone.utc).isoformat()
+            "account_frozen": True,
+            "frozen_at": now,
+            "freeze_reason": reason,
+            "frozen_reason": reason,
+            "is_online": False
         }}
     )
+    
+    try:
+        if credentials:
+            await db.token_blacklist.insert_one({
+                "token": credentials.credentials,
+                "user_id": user_id,
+                "revoked_at": now
+            })
+        await db.user_sessions.delete_many({"user_id": user_id})
+    except Exception:
+        pass
+        
     return {"message": "Hesabınız donduruldu"}
 
 @api_router.post("/account/unfreeze")
 async def unfreeze_account(current_user: dict = Depends(get_current_user)):
     await db.users.update_one(
         {"id": current_user["id"]},
-        {"$set": {"is_frozen": False, "frozen_at": None}}
+        {"$set": {
+            "is_frozen": False, 
+            "account_frozen": False,
+            "frozen_at": None,
+            "freeze_reason": None,
+            "frozen_reason": None
+        }}
     )
     return {"message": "Hesabınız yeniden etkinleştirildi"}
 
@@ -4859,13 +4693,18 @@ async def request_account_deletion(current_user: dict = Depends(get_current_user
         "expires_at": expires_at
     })
     
-    await email_service.send_deletion_code(
-        user["email"],
-        user.get("display_name", user.get("username", "Kullanıcı")),
-        code
-    )
-    
-    return {"message": "Doğrulama kodu e-posta adresinize gönderildi", "step": 1}
+    phone = user.get("phone") or user.get("phone_number") or ""
+    if phone:
+        from services.evilation_service import send_whatsapp_otp
+        await send_whatsapp_otp(phone, code)
+    else:
+        await email_service.send_deletion_code(
+            user.get("email", ""),
+            user.get("display_name", user.get("username", "Kullanıcı")),
+            code
+        )
+
+    return {"message": "Doğrulama kodu WhatsApp üzerinden gönderildi", "step": 1}
 
 @api_router.post("/account/delete/verify-code")
 async def verify_deletion_code(code: str, current_user: dict = Depends(get_current_user)):
@@ -4970,6 +4809,29 @@ async def request_data_export(current_user: dict = Depends(get_current_user)):
         zf.writestr("comments.json", json.dumps(comments_safe, indent=2, ensure_ascii=False))
         zf.writestr("saved_posts.json", json.dumps(saved_safe, indent=2, ensure_ascii=False))
     
+    # Send WhatsApp notification
+    phone = user.get("phone") or user.get("phone_number") or ""
+    if phone:
+        try:
+            from services.evilation_service import send_whatsapp_otp as _wa
+            import httpx as _hx
+            from services.evilation_service import EVOLUTION_API_URL, EVOLUTION_API_KEY, EVOLUTION_INSTANCE
+            if EVOLUTION_API_KEY and EVOLUTION_API_URL:
+                number = phone.lstrip('+').replace(' ', '').replace('-', '')
+                msg = (
+                    f"🎵 *SocialBeats* veri dışa aktarma işleminiz tamamlandı.\n\n"
+                    f"Verileriniz hazırlandı. Uygulamadan indirebilirsiniz.\n"
+                    f"Kullanıcı adı: @{user.get('username', '')}"
+                )
+                async with _hx.AsyncClient(timeout=10) as _c:
+                    await _c.post(
+                        f"{EVOLUTION_API_URL}/message/sendText/{EVOLUTION_INSTANCE}",
+                        headers={"apikey": EVOLUTION_API_KEY, "Content-Type": "application/json"},
+                        json={"number": number, "text": msg},
+                    )
+        except Exception:
+            pass
+
     from fastapi.responses import FileResponse
     return FileResponse(
         path=zip_path,
@@ -5208,11 +5070,24 @@ async def search(
 
     use_meili = meili_service.is_available()
 
+    # Get blocked user IDs (both directions) to exclude from search results
+    _blocked_docs = await db.blocked_users.find(
+        {"$or": [{"blocker_id": current_user["id"]}, {"blocked_id": current_user["id"]}]},
+        {"blocker_id": 1, "blocked_id": 1, "_id": 0}
+    ).to_list(1000)
+    _blocked_ids = set()
+    for _b in _blocked_docs:
+        _blocked_ids.add(_b["blocker_id"])
+        _blocked_ids.add(_b["blocked_id"])
+    _blocked_ids.discard(current_user["id"])
+    blocked_id_list = list(_blocked_ids)
+
     if use_meili and type == "all":
         meili_results = await meili_service.multi_search(q, {
             "users": min(limit, 10), "posts": limit, "tracks": limit, "playlists": min(limit, 10)
         })
-        results["users"] = meili_results.get("users", {}).get("hits", [])
+        raw_users = meili_results.get("users", {}).get("hits", [])
+        results["users"] = [u for u in raw_users if u.get("id") not in _blocked_ids]
         results["tracks"] = meili_results.get("tracks", {}).get("hits", [])
         results["posts"] = meili_results.get("posts", {}).get("hits", [])
         results["playlists"] = meili_results.get("playlists", {}).get("hits", [])
@@ -5220,12 +5095,16 @@ async def search(
         if type in ["all", "users"]:
             if use_meili:
                 r = await meili_service.search_users(q, limit, offset)
-                results["users"] = r.get("hits", [])
+                raw_users = r.get("hits", [])
+                results["users"] = [u for u in raw_users if u.get("id") not in _blocked_ids]
             else:
-                user_query = {"$or": [
-                {"username": {"$regex": q, "$options": "i"}},
-                {"display_name": {"$regex": q, "$options": "i"}},
-                {"bio": {"$regex": q, "$options": "i"}}
+                user_query = {"$and": [
+                    {"$or": [
+                        {"username": {"$regex": q, "$options": "i"}},
+                        {"display_name": {"$regex": q, "$options": "i"}},
+                        {"bio": {"$regex": q, "$options": "i"}}
+                    ]},
+                    {"id": {"$nin": blocked_id_list}}
                 ]}
                 results["users"] = await db.users.find(user_query, {"_id": 0, "password": 0, "email": 0}).limit(limit).skip(offset).to_list(limit)
 
@@ -5734,6 +5613,22 @@ async def create_conversation(
     
     # Check if 1-on-1 conversation already exists
     if not data.is_group and len(all_participants) == 2:
+        other_id = next((p for p in all_participants if p != current_user["id"]), None)
+        if other_id:
+            other_user = await db.users.find_one({"id": other_id}, {"message_permission": 1, "id": 1, "_id": 0})
+            if other_user:
+                perm = other_user.get("message_permission", "everyone")
+                if perm == "none":
+                    raise HTTPException(status_code=403, detail="Bu kullanıcı mesaj almıyor")
+                elif perm == "followers":
+                    # "takipçilerim" → only the recipient's followers (people who follow the recipient) can message
+                    is_allowed = await db.follows.find_one({
+                        "follower_id": current_user["id"],
+                        "following_id": other_id
+                    })
+                    if not is_allowed:
+                        raise HTTPException(status_code=403, detail="Bu kullanıcı yalnızca takip ettiği kişilerden mesaj alıyor")
+
         existing = await db.conversations.find_one({
             "$and": [
                 {"participants": {"$all": all_participants}},
@@ -5998,6 +5893,24 @@ async def send_message(
     if conv.get("is_group") and conv.get("only_admins_can_send"):
         if current_user["id"] not in conv.get("admins", []):
             raise HTTPException(status_code=403, detail="Sadece yöneticiler mesaj gönderebilir")
+    
+    # Check message_permission for 1-on-1 conversations
+    if not conv.get("is_group"):
+        other_id = next((p for p in conv.get("participants", []) if p != current_user["id"]), None)
+        if other_id:
+            other_user = await db.users.find_one({"id": other_id}, {"message_permission": 1, "id": 1, "_id": 0})
+            if other_user:
+                perm = other_user.get("message_permission", "everyone")
+                if perm == "none":
+                    raise HTTPException(status_code=403, detail="Bu kullanıcı mesaj almıyor")
+                elif perm == "followers":
+                    is_allowed = await db.follows.find_one({
+                        "follower_id": current_user["id"],
+                        "following_id": other_id
+                    })
+                    if not is_allowed:
+                        raise HTTPException(status_code=403, detail="Bu kullanıcı yalnızca takip ettiği kişilerden mesaj alıyor")
+
     
     quoted = None
     if data.reply_to:
@@ -16064,12 +15977,7 @@ try:
 except ImportError as e:
     logging.warning(f"Could not load comments router: {e}")
 
-try:
-    from routes.firebase_auth import router as firebase_auth_router
-    fastapi_app.include_router(firebase_auth_router, prefix="/api")
-    logging.info("Firebase Auth router loaded")
-except ImportError as e:
-    logging.warning(f"Could not load firebase auth router: {e}")
+# Firebase Auth router kaldırıldı — telefon + WhatsApp OTP kullanılıyor
 
 try:
     from routes.nextauth_routes import router as nextauth_router

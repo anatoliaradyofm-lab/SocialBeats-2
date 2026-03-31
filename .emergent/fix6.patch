@@ -1,0 +1,10 @@
+--- a/MobilePreview.html
++++ b/MobilePreview.html
+@@ -1834,7 +1834,7 @@
+     'Ekolayzer':          {title:'Ekolayzer', items:[{label:'Ekolayzer',toggle:true},{label:'Bas Takviyesi',toggle:true},{label:'Ses Normalleştirme',toggle:false},{label:'Gürültü Önleme',toggle:false}]},
+     'Bağlı Uygulamalar':  {title:'Bağlı Uygulamalar', items:[{label:'Spotify',val:'Bağlı'},{label:'Apple Music',val:'Bağlı değil'},{label:'YouTube Music',val:'Bağlı değil'},{label:'Last.fm',val:'Bağlı'}]},
+-    'Uygulama Tercihleri':{title:'Uygulama Tercihleri', items:[{label:'Karanlık Mod',toggle:true},{label:'Dil',val:'Türkçe'},{label:'Animasyonlar',toggle:true},{label:'Haptic Geri Bildirim',toggle:true}]},
++    'Uygulama Tercihleri':{title:'Uygulama Tercihleri', items:[{label:'Karanlık Mod',toggle:true},{label:'Dil',val:'Türkçe',isLang:true},{label:'Animasyonlar',toggle:true},{label:'Haptic Geri Bildirim',toggle:true}]},
+   };
+
+   const SECTIONS = [

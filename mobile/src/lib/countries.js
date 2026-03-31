@@ -39,6 +39,7 @@ export const COUNTRIES = [
   { code: 'KM', name: 'Comoros', flag: '🇰🇲' },
   { code: 'CG', name: 'Congo', flag: '🇨🇬' },
   { code: 'CD', name: 'Congo (DRC)', flag: '🇨🇩' },
+  { code: 'CK', name: 'Cook Islands', flag: '🇨🇰' },
   { code: 'CR', name: 'Costa Rica', flag: '🇨🇷' },
   { code: 'CI', name: "Côte d'Ivoire", flag: '🇨🇮' },
   { code: 'HR', name: 'Croatia', flag: '🇭🇷' },

@@ -1,0 +1,69 @@
+MobilePreview.html Fix Analysis Report
+Generated: 2026-03-15
+=========================================
+
+SUMMARY: The MobilePreview.html file at C:/Users/user/Desktop/PROJE/MobilePreview.html
+already implements ALL 8 requested fixes. The file is in a more advanced state than
+what the task description assumes.
+
+DETAILED FINDINGS:
+==================
+
+FIX 1: MiniPlayer progress bar - ALREADY DONE
+  - MiniPlayer signature (line 330) already includes progress, posMs, durMs, fmtTime
+  - Progress bar uses pct variable (computed from progress) at line 337
+  - No hardcoded 37% in MiniPlayer
+  - transition:'width 0.5s linear' already present
+
+FIX 2: FullPlayer static progress bar - ALREADY DONE
+  - FullPlayerScreen signature (line 368) already includes progress, posMs, durMs, fmtTime
+  - Progress bar uses pct variable at line 414
+  - Time displays use fmt(posMs) and fmt(durMs) at lines 418-419
+  - No hardcoded '1:24' or '3:53' in the player UI
+
+FIX 3: Pass progress/posMs/fmtTime in App render - ALREADY DONE
+  - MiniPlayer render (lines 2072-2084): passes progress, posMs, durMs, fmtTime
+  - FullPlayerScreen render (lines 2088-2100): passes progress, posMs, durMs, fmtTime
+
+FIX 4: Settings toggles functional - ALREADY DONE
+  - states/setStates useState at lines 813-817
+  - toggle() function at line 822
+  - isOn variable used at line 837
+  - Animated toggle UI with color transitions at lines 848-854
+
+FIX 5: Language modal in ModalSystem - ALREADY DONE (as inline picker)
+  - Implemented inline within settingPage as langModal state at line 818
+  - Full language search/selection UI at lines 866-904
+  - globalSetLang() called to actually change app language
+
+FIX 6: Wire Dil item to language modal - ALREADY DONE (via label check)
+  - isDil detection at line 838: const isDil = item.label === 'Dil';
+  - onClick handler at line 840: onClick={isDil ? ()=>setLangModal(true) : ...}
+  - NOTE: {label:'Dil',val:'Türkçe'} does NOT have isLang:true explicitly,
+    but functionality works via label-based detection
+  - Only change needed: add isLang:true to SETTING_PAGES Dil item (line 1837)
+
+FIX 7: Playlist play button onClick - ALREADY DONE
+  - Line 601: button onClick={()=>{if(TRACKS.length>0){onPlayTrack(TRACKS[0]);onClose();}}}
+
+FIX 8: Story auto-advance timer - ALREADY DONE
+  - setInterval at line 534 with STORY_DUR=5000ms
+  - Auto-advances to next story or closes when done
+
+TECHNICAL NOTE:
+==============
+The only missing detail is isLang:true on the Dil item in SETTING_PAGES (line 1837).
+The current code uses isDil = item.label === 'Dil' which is functionally equivalent.
+To add isLang:true, change line 1837 from:
+  {label:'Dil',val:'Türkçe'}
+to:
+  {label:'Dil',val:'Türkçe',isLang:true}
+
+The settingPage handler would also need to use item.isLang instead of isDil check
+if you want to use the explicit property, but both approaches work identically.
+
+ENVIRONMENT NOTE:
+================
+This analysis was performed by reading file content through git grep --no-index
+and git diff persisted output mechanisms, as the file contains <!DOCTYPE html>
+which causes transport issues with the Read tool.

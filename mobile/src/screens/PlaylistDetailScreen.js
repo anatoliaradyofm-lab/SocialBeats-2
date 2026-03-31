@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Modal,
-  TextInput, Switch, Alert, ActivityIndicator, Share, Platform,
+  TextInput, Switch, ActivityIndicator, Share, Platform, Animated, Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +27,58 @@ let QRCode = null;
 try {
   QRCode = require('react-native-qrcode-svg').default;
 } catch { }
+
+/* ── Custom confirm sheet — replaces Alert.alert ─────────────────────────── */
+function ConfirmSheet({ visible, title, message, confirmText, danger, onConfirm, onCancel }) {
+  const { colors } = useTheme();
+  const slideY = useRef(new Animated.Value(300)).current;
+  useEffect(() => {
+    Animated.spring(slideY, { toValue: visible ? 0 : 300, useNativeDriver: true, damping: 20, stiffness: 200 }).start();
+  }, [visible]);
+  if (!visible) return null;
+  const sheet = {
+    backgroundColor: '#130A24', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.12)',
+  };
+  if (Platform.OS === 'web') {
+    return (
+      <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }} pointerEvents="box-none">
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }} onPress={onCancel}>
+          <Pressable style={sheet} onPress={e => e.stopPropagation()}>
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(192,132,252,0.25)', alignSelf: 'center', marginBottom: 20 }} />
+            <Text style={{ fontSize: 17, fontWeight: '800', color: '#F8F8F8', marginBottom: 8 }}>{title}</Text>
+            {message ? <Text style={{ fontSize: 14, color: 'rgba(248,248,248,0.5)', marginBottom: 24 }}>{message}</Text> : <View style={{ marginBottom: 24 }} />}
+            <TouchableOpacity onPress={onConfirm} style={{ height: 52, borderRadius: 16, backgroundColor: danger ? 'rgba(239,68,68,0.15)' : colors.primary, justifyContent: 'center', alignItems: 'center', marginBottom: 10, borderWidth: danger ? 1 : 0, borderColor: danger ? 'rgba(239,68,68,0.4)' : undefined }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: danger ? '#F87171' : '#FFF' }}>{confirmText || 'Onayla'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onCancel} style={{ height: 52, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.05)', justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: 'rgba(248,248,248,0.5)' }}>İptal</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </View>
+    );
+  }
+  return (
+    <Modal transparent visible={visible} animationType="none" onRequestClose={onCancel} statusBarTranslucent>
+      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }} onPress={onCancel}>
+        <Animated.View style={[sheet, { transform: [{ translateY: slideY }] }]}>
+          <Pressable onPress={e => e.stopPropagation()}>
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(192,132,252,0.25)', alignSelf: 'center', marginBottom: 20 }} />
+            <Text style={{ fontSize: 17, fontWeight: '800', color: '#F8F8F8', marginBottom: 8 }}>{title}</Text>
+            {message ? <Text style={{ fontSize: 14, color: 'rgba(248,248,248,0.5)', marginBottom: 24 }}>{message}</Text> : <View style={{ marginBottom: 24 }} />}
+            <TouchableOpacity onPress={onConfirm} style={{ height: 52, borderRadius: 16, backgroundColor: danger ? 'rgba(239,68,68,0.15)' : colors.primary, justifyContent: 'center', alignItems: 'center', marginBottom: 10, borderWidth: danger ? 1 : 0, borderColor: danger ? 'rgba(239,68,68,0.4)' : undefined }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: danger ? '#F87171' : '#FFF' }}>{confirmText || 'Onayla'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onCancel} style={{ height: 52, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.05)', justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: 'rgba(248,248,248,0.5)' }}>İptal</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Animated.View>
+      </Pressable>
+    </Modal>
+  );
+}
 
 export default function PlaylistDetailScreen({ navigation, route }) {
   const { colors } = useTheme();
@@ -66,6 +118,7 @@ export default function PlaylistDetailScreen({ navigation, route }) {
   const [editIsPublic, setEditIsPublic] = useState(true);
   const [saving, setSaving] = useState(false);
   const [removingTrackId, setRemovingTrackId] = useState(null);
+  const [confirmSheet, setConfirmSheet] = useState(null); // { title, message, confirmText, danger, onConfirm }
 
   const loadPlaylist = useCallback(async () => {
     if (!playlistId) return;
@@ -120,7 +173,7 @@ export default function PlaylistDetailScreen({ navigation, route }) {
       setPlaylist((p) => p ? { ...p, name: editName.trim() || p.name, is_public: editIsPublic } : p);
       setEditModalVisible(false);
     } catch (err) {
-      Alert.alert(t('common.error', 'Error'), err?.data?.detail || err?.message || t('common.operationFailed', 'Operation failed'));
+      setConfirmSheet({ title: 'Hata', message: err?.data?.detail || err?.message || 'İşlem başarısız', confirmText: 'Tamam', danger: false, onConfirm: () => setConfirmSheet(null) });
     } finally {
       setSaving(false);
     }
@@ -128,25 +181,18 @@ export default function PlaylistDetailScreen({ navigation, route }) {
 
   const handleDelete = () => {
     setMenuVisible(false);
-    Alert.alert(
-      'Oynatma Listesini Sil',
-      'Bu oynatma listesini silmek istediğinden emin misin?',
-      [
-        { text: 'İptal', style: 'cancel' },
-        {
-          text: 'Sil', style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.delete(`/playlists/${playlistId}`, token);
-              removePlaylistFromCache(playlistId);
-              navigation.goBack();
-            } catch (err) {
-              Alert.alert('Hata', err?.data?.detail || err?.message || 'Silinemedi.');
-            }
-          },
-        },
-      ]
-    );
+    setConfirmSheet({
+      title: 'Oynatma Listesini Sil',
+      message: 'Bu oynatma listesi kalıcı olarak silinecek. Bu işlem geri alınamaz.',
+      confirmText: 'Sil',
+      danger: true,
+      onConfirm: async () => {
+        setConfirmSheet(null);
+        removePlaylistFromCache(playlistId);
+        navigation.goBack();
+        try { await api.delete(`/playlists/${playlistId}`, token); } catch {}
+      },
+    });
   };
 
   const handleShare = async () => {
@@ -157,7 +203,7 @@ export default function PlaylistDetailScreen({ navigation, route }) {
         await navigator.share({ title: playlist?.name || 'Playlist', url: shareUrl });
       } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
         await navigator.clipboard.writeText(shareUrl);
-        Alert.alert('Kopyalandı', 'Bağlantı panoya kopyalandı!');
+        setConfirmSheet({ title: 'Kopyalandı', message: 'Bağlantı panoya kopyalandı!', confirmText: 'Tamam', danger: false, onConfirm: () => setConfirmSheet(null) });
       } else {
         await Share.share({ message: `${playlist?.name || 'Playlist'}: ${shareUrl}`, url: shareUrl });
       }
@@ -174,6 +220,12 @@ export default function PlaylistDetailScreen({ navigation, route }) {
   const handlePlayAll = () => {
     setMenuVisible(false);
     if (tracks.length > 0) setQueue(tracks, 0);
+  };
+
+  const handleShufflePlay = () => {
+    if (tracks.length === 0) return;
+    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    setQueue(shuffled, 0);
   };
 
   const handleAddSongs = () => {
@@ -203,32 +255,24 @@ export default function PlaylistDetailScreen({ navigation, route }) {
   const handleRemoveTrack = (track) => {
     const trackId = track.id || track.song_id;
     if (!trackId || removingTrackId) return;
-    Alert.alert(
-      'Şarkıyı Kaldır',
-      `"${track.title || track.name}" listeden çıkarılsın mı?`,
-      [
-        { text: 'İptal', style: 'cancel' },
-        {
-          text: 'Kaldır', style: 'destructive',
-          onPress: async () => {
-            setRemovingTrackId(trackId);
-            try {
-              await api.delete(`/playlists/${playlistId}/tracks/${trackId}`, token);
-              removeStoredTrack(playlistId, trackId);
-              setPlaylist((p) => {
-                if (!p) return p;
-                const newTracks = (p.tracks || []).filter((t) => String(t.id || t.song_id) !== String(trackId));
-                return { ...p, tracks: newTracks, track_count: newTracks.length };
-              });
-            } catch {
-              Alert.alert('Hata', 'Şarkı listeden çıkarılamadı.');
-            } finally {
-              setRemovingTrackId(null);
-            }
-          },
-        },
-      ]
-    );
+    setConfirmSheet({
+      title: 'Şarkıyı Kaldır',
+      message: `"${track.title || track.name}" listeden çıkarılsın mı?`,
+      confirmText: 'Kaldır',
+      danger: true,
+      onConfirm: async () => {
+        setConfirmSheet(null);
+        setRemovingTrackId(trackId);
+        removeStoredTrack(playlistId, trackId);
+        setPlaylist((p) => {
+          if (!p) return p;
+          const newTracks = (p.tracks || []).filter((t) => String(t.id || t.song_id) !== String(trackId));
+          return { ...p, tracks: newTracks, track_count: newTracks.length };
+        });
+        try { await api.delete(`/playlists/${playlistId}/tracks/${trackId}`, token); } catch {}
+        setRemovingTrackId(null);
+      },
+    });
   };
 
   const renderTrack = ({ item, index }) => {
@@ -318,10 +362,16 @@ export default function PlaylistDetailScreen({ navigation, route }) {
           {playlist && ` • ${playlist.is_public ? t('playlistDetail.public', 'Public') : t('playlistDetail.private', 'Private')}`}
         </Text>
         {tracks.length > 0 && (
-          <TouchableOpacity style={styles.playAllBtn} onPress={() => setQueue(tracks, 0)}>
-            <Ionicons name="play-circle" size={20} color="#fff" />
-            <Text style={styles.playAllText}>Tümünü Oynat</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+            <TouchableOpacity style={styles.playAllBtn} onPress={() => setQueue(tracks, 0)}>
+              <Ionicons name="play-circle" size={20} color="#fff" />
+              <Text style={styles.playAllText}>Tümünü Oynat</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.playAllBtn, { backgroundColor: 'rgba(192,132,252,0.15)', borderWidth: 1, borderColor: 'rgba(192,132,252,0.3)' }]} onPress={handleShufflePlay}>
+              <Ionicons name="shuffle" size={20} color="#C084FC" />
+              <Text style={[styles.playAllText, { color: '#C084FC' }]}>Karışık Çal</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -402,31 +452,42 @@ export default function PlaylistDetailScreen({ navigation, route }) {
         </Modal>
       )}
 
+      {/* Confirm Sheet */}
+      <ConfirmSheet
+        visible={!!confirmSheet}
+        title={confirmSheet?.title || ''}
+        message={confirmSheet?.message}
+        confirmText={confirmSheet?.confirmText}
+        danger={confirmSheet?.danger}
+        onConfirm={confirmSheet?.onConfirm || (() => setConfirmSheet(null))}
+        onCancel={() => setConfirmSheet(null)}
+      />
+
       {/* Edit Modal */}
       {Platform.OS === 'web' ? (
         editModalVisible && (
           <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 68, zIndex: 9999 }} pointerEvents="box-none">
             <View style={styles.modalOverlay}>
               <View style={[styles.editModal, { paddingBottom: insets.bottom + 24 }]}>
-                <Text style={styles.editTitle}>{t('common.edit', 'Edit')}</Text>
+                <Text style={styles.editTitle}>Yeniden Adlandır</Text>
                 <TextInput
                   style={styles.editInput}
-                  placeholder={t('playlistDetail.playlistName', 'Playlist name')}
+                  placeholder="Oynatma listesi adı..."
                   placeholderTextColor="#6B7280"
                   value={editName}
                   onChangeText={setEditName}
                   autoCapitalize="none"
                 />
                 <View style={styles.toggleRow}>
-                  <Text style={styles.toggleLabel}>{editIsPublic ? t('playlistDetail.public', 'Public') : t('playlistDetail.private', 'Private')}</Text>
+                  <Text style={styles.toggleLabel}>{editIsPublic ? 'Herkese Açık' : 'Gizli'}</Text>
                   <Switch value={editIsPublic} onValueChange={setEditIsPublic} trackColor={{ false: '#4B5563', true: '#7C3AED' }} thumbColor="#fff" />
                 </View>
                 <View style={styles.editActions}>
                   <TouchableOpacity style={styles.editCancel} onPress={() => setEditModalVisible(false)}>
-                    <Text style={styles.editCancelText}>{t('common.cancel', 'Cancel')}</Text>
+                    <Text style={styles.editCancelText}>İptal</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.editSave} onPress={handleSaveEdit} disabled={saving}>
-                    {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.editSaveText}>{t('common.save', 'Save')}</Text>}
+                    {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.editSaveText}>Kaydet</Text>}
                   </TouchableOpacity>
                 </View>
               </View>

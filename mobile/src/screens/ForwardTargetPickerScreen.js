@@ -11,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { useConversationsQuery } from '../hooks/useConversationsQuery';
 import { useTheme } from '../contexts/ThemeContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function ForwardTargetPickerScreen({ route, navigation }) {
   const { colors } = useTheme();
@@ -62,6 +63,12 @@ export default function ForwardTargetPickerScreen({ route, navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />

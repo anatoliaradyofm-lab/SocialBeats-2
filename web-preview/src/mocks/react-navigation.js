@@ -23,3 +23,10 @@ export const NavigationContainer = ({ children }) => children;
 export const createNavigatorFactory = () => () => ({ Navigator: ({ children }) => children, Screen: ({ children }) => children });
 export const useScrollToTop = () => {};
 export const useTheme = () => ({ colors: {}, dark: true });
+
+// CommonActions — used by CreateGroupScreen for stack reset after group creation
+export const CommonActions = {
+  reset:    (state) => ({ type: 'RESET',    payload: state }),
+  navigate: (name, params) => ({ type: 'NAVIGATE', payload: { name, params } }),
+  goBack:   () => ({ type: 'GO_BACK' }),
+};

@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const STATUS_CONFIG = {
   none:       { icon: 'cloud-download-outline', color: null,         label: 'Henüz talep yok' },
@@ -120,6 +121,12 @@ export default function DataExportScreen({ navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -243,7 +250,7 @@ export default function DataExportScreen({ navigation }) {
         )}
 
         <Text style={[styles.note, { color: colors.textGhost }]}>
-          Veriler genellikle 24-48 saat içinde hazırlanır. Hazır olduğunda e-posta ile bildirim alırsınız.
+          Veriler genellikle 24-48 saat içinde hazırlanır. Hazır olduğunda WhatsApp mesajı alırsınız.
         </Text>
       </ScrollView>
     </View>

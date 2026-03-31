@@ -9,28 +9,26 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 0, sta
 
 import i18n from '../../mobile/src/i18n';
 import { ThemeProvider, useTheme } from '../../mobile/src/contexts/ThemeContext';
-import { AuthProvider } from '../../mobile/src/contexts/AuthContext';
+import { AuthProvider, useAuth } from '../../mobile/src/contexts/AuthContext';
 import { NotificationProvider } from '../../mobile/src/contexts/NotificationContext';
 import { PlayerProvider, usePlayer } from './mocks/player-context.jsx';
 import { isLiked, toggleLike, subscribe as likedSubscribe } from '../../mobile/src/lib/likedStore';
 import { getPlaylistsCache, enqueuePendingTrack } from '../../mobile/src/lib/playlistStore';
 
 // Screens
-import LoginScreen                from '../../mobile/src/screens/LoginScreen';
+import PhoneLoginScreen           from '../../mobile/src/screens/PhoneLoginScreen';
 import RegisterScreen             from '../../mobile/src/screens/RegisterScreen';
 import SettingsScreen             from '../../mobile/src/screens/SettingsScreen';
 import NotificationsScreen        from '../../mobile/src/screens/NotificationsScreen';
 import DashboardScreen            from '../../mobile/src/screens/DashboardScreen';
 import ProfileScreen              from '../../mobile/src/screens/ProfileScreen';
-import ForgotPasswordScreen       from '../../mobile/src/screens/ForgotPasswordScreen';
-import ResetPasswordScreen        from '../../mobile/src/screens/ResetPasswordScreen';
 import PlaylistsScreen            from '../../mobile/src/screens/PlaylistsScreen';
 import PlaylistDetailScreen       from '../../mobile/src/screens/PlaylistDetailScreen';
 import AddSongsToPlaylistScreen   from '../../mobile/src/screens/AddSongsToPlaylistScreen';
-import ARMusicScreen              from '../../mobile/src/screens/ARMusicScreen';
 import ListeningRoomScreen        from '../../mobile/src/screens/ListeningRoomScreen';
 import SearchScreen               from '../../mobile/src/screens/SearchScreen';
 import ConversationsScreen        from '../../mobile/src/screens/ConversationsScreen';
+import NewMessageScreen           from '../../mobile/src/screens/NewMessageScreen';
 import ChatScreen                 from '../../mobile/src/screens/ChatScreen';
 import CreateGroupScreen          from '../../mobile/src/screens/CreateGroupScreen';
 import GroupSettingsScreen        from '../../mobile/src/screens/GroupSettingsScreen';
@@ -51,36 +49,28 @@ import EqualizerScreen            from '../../mobile/src/screens/EqualizerScreen
 import SongRadioScreen            from '../../mobile/src/screens/SongRadioScreen';
 import LyricsScreen               from '../../mobile/src/screens/LyricsScreen';
 import ListeningHistoryScreen     from '../../mobile/src/screens/ListeningHistoryScreen';
-import MusicDiscoverScreen        from '../../mobile/src/screens/MusicDiscoverScreen';
-import ChangePasswordScreen       from '../../mobile/src/screens/ChangePasswordScreen';
 import ChangeEmailScreen          from '../../mobile/src/screens/ChangeEmailScreen';
 import DeleteAccountScreen        from '../../mobile/src/screens/DeleteAccountScreen';
 import SessionsScreen             from '../../mobile/src/screens/SessionsScreen';
-import TwoFASettingsScreen        from '../../mobile/src/screens/TwoFASettingsScreen';
-import ScreenTimeScreen           from '../../mobile/src/screens/ScreenTimeScreen';
 import DataExportScreen           from '../../mobile/src/screens/DataExportScreen';
 import NotificationSettingsScreen from '../../mobile/src/screens/NotificationSettingsScreen';
 import LikedScreen                from '../../mobile/src/screens/LikedScreen';
 import SavedScreen                from '../../mobile/src/screens/SavedScreen';
-import MusicTasteTestScreen       from '../../mobile/src/screens/MusicTasteTestScreen';
 import AchievementsScreen         from '../../mobile/src/screens/AchievementsScreen';
 import BackupScreen               from '../../mobile/src/screens/BackupScreen';
 import FeedbackScreen             from '../../mobile/src/screens/FeedbackScreen';
 import LicensesScreen             from '../../mobile/src/screens/LicensesScreen';
-import AudiomackScreen            from '../../mobile/src/screens/AudiomackScreen';
 import AccountSettingsScreen      from '../../mobile/src/screens/AccountSettingsScreen';
 import NotifSettingsScreen        from '../../mobile/src/screens/NotifSettingsScreen';
 import AudioSettingsScreen        from '../../mobile/src/screens/AudioSettingsScreen';
 import LanguageRegionScreen       from '../../mobile/src/screens/LanguageRegionScreen';
 import DataBackupScreen           from '../../mobile/src/screens/DataBackupScreen';
-import AccessibilitySettingsScreen from '../../mobile/src/screens/AccessibilitySettingsScreen';
 import LegalSettingsScreen        from '../../mobile/src/screens/LegalSettingsScreen';
 
 // Tab screens — matches MainTabNavigator exactly (Reels removed)
 const TAB_SCREENS = [
   { name: 'Dashboard', label: 'Home',    icon: 'home',    iconOff: 'home-outline'    },
   { name: 'Library',   label: 'Library', icon: 'albums',  iconOff: 'albums-outline'  },
-  { name: 'AR',        label: 'AR',      icon: 'glasses', iconOff: 'glasses-outline' },
   { name: 'Rooms',     label: 'Rooms',   icon: 'radio',   iconOff: 'radio-outline'   },
 ];
 
@@ -89,36 +79,34 @@ const TAB_NAMES = new Set(TAB_SCREENS.map(t => t.name));
 
 // Screens for the dev toolbar
 const ALL_SCREENS = [
-  'Login', 'Register',
-  'Dashboard', 'Library', 'AR', 'Rooms',
+  'PhoneLogin', 'Register',
+  'Dashboard', 'Library', 'Rooms',
   'Search', 'Messages', 'Chat', 'Notifications',
   'Profile', 'UserProfile', 'ProfileEdit', 'FollowersList', 'FollowingList',
-  'PostDetail', 'CreatePost', 'PlaylistDetail', 'SongRadio', 'Equalizer', 'Lyrics',
+  'PlaylistDetail', 'SongRadio', 'Equalizer', 'Lyrics',
   'Stories', 'StoryCreate', 'StoryViewer', 'StoryArchive',
-  'Settings', 'ChangePassword', 'BlockedUsers', 'ForgotPassword',
+  'Settings', 'ChangePassword', 'BlockedUsers',
   'AccountSettings', 'NotifSettings', 'AudioSettings', 'LanguageRegion', 'DataBackup',
-  'AccessibilitySettings', 'LegalSettings',
+  'LegalSettings',
 ];
 
 /* ─── Mock navigation (with history stack) ─────────────────── */
+// Tab ekranları: navigate ile gidilince stack'i sıfırlar (tab davranışı)
+const TAB_ROOT_SCREENS = new Set(['Dashboard', 'Library', 'Rooms', 'Profile', 'Home']);
+
 function makeMockNav(stack, setStack) {
   const current = () => stack[stack.length - 1] || { name: 'Dashboard', params: {} };
 
   const navigate = (name, params = {}) => {
     const resolved = name === 'Main' ? 'Dashboard' : name;
     setStack(s => {
-      // Already on top — update params only
+      // Zaten üstte aynı ekran → sadece params güncelle
       if (s[s.length - 1]?.name === resolved)
         return [...s.slice(0, -1), { name: resolved, params }];
-      // Screen exists earlier in the stack — pop back to it with merged params
-      for (let i = s.length - 2; i >= 0; i--) {
-        if (s[i].name === resolved) {
-          const updated = [...s.slice(0, i + 1)];
-          updated[i] = { name: resolved, params: { ...(s[i].params || {}), ...params } };
-          return updated;
-        }
-      }
-      // New screen — push
+      // Tab ekranına navigate → stack'i sıfırla (tab bar davranışı)
+      if (TAB_ROOT_SCREENS.has(resolved))
+        return [{ name: resolved, params }];
+      // Diğer tüm ekranlar → her zaman yeni push (geri tuşu doğru çalışsın)
       return [...s, { name: resolved, params }];
     });
   };
@@ -384,23 +372,52 @@ const MOCK_CHAT_MSGS = [
 ];
 
 function WebChat({ navigation, route }) {
-  const p        = route?.params || {};
-  const other    = p.otherUser || p.user || {};
-  const username = other.username || other.display_name || other.u || 'melodikbeat';
-  const avatar   = other.avatar_url || other.avatar || other.img || `https://i.pravatar.cc/100?u=${username}`;
+  const p            = route?.params || {};
+  const other        = p.otherUser || p.user || {};
+  const isGroup      = !!(p.isGroup || other.isGroup);
+  const convId       = p.conversationId;
+  const conv         = p.conversation || {};
 
-  const [msg,       setMsg]       = useState('');
-  const [msgs,      setMsgs]      = useState(MOCK_CHAT_MSGS);
-  const [shownTime, setShownTime] = useState(null);
-  const [seenIdx,   setSeenIdx]   = useState(null); // index of last "görüldü" message
-  const scrollRef  = useRef(null);
-  const inputRef   = useRef(null);
-  const lastTap    = useRef({ idx: null, time: 0 });
+  // Group data — fallback to localStorage
+  const groupParticipants = React.useMemo(() => {
+    if ((conv.participants || []).length > 0) return conv.participants;
+    try {
+      const groups = JSON.parse(localStorage.getItem('_mock_groups') || '[]');
+      const found = groups.find(g => g.id === convId);
+      return found?.participants || [];
+    } catch {}
+    return [];
+  }, [conv.participants, convId]);
+
+  const groupName = conv.group_name || conv.name || other.display_name || other.username || 'Grup';
+  const username  = isGroup ? groupName : (other.username || other.display_name || 'melodikbeat');
+  const avatar    = isGroup ? null : (other.avatar_url || other.avatar || `https://i.pravatar.cc/100?u=${username}`);
+
+  const [msg,           setMsg]           = useState('');
+  const [msgs,          setMsgs]          = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(`_mock_msgs_${convId}`) || '[]');
+      if (stored.length) return stored.map(m => ({
+        me: m.sender_id === 'preview-1',
+        text: m.content || '',
+        time: new Date(m.created_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+        senderName: m.sender?.display_name || m.sender?.username || '',
+        senderAvatar: m.sender?.avatar_url || `https://i.pravatar.cc/40?u=${m.sender_id}`,
+      }));
+    } catch {}
+    return isGroup ? [] : MOCK_CHAT_MSGS;
+  });
+  const [shownTime,     setShownTime]     = useState(null);
+  const [seenIdx,       setSeenIdx]       = useState(null);
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const scrollRef = useRef(null);
+  const inputRef  = useRef(null);
+  const lastTap   = useRef({ idx: null, time: 0 });
 
   useEffect(() => {
     setTimeout(() => {
       if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      if (inputRef.current) { inputRef.current.focus(); }
+      if (inputRef.current) inputRef.current.focus();
     }, 150);
   }, []);
 
@@ -417,9 +434,7 @@ function WebChat({ navigation, route }) {
     }
   };
 
-  const AUTO_REPLIES = [
-    'Anladım 👍', 'Harika!', 'Tamam, bakacağım.', 'Süper olmuş 🔥', 'Teşekkürler!',
-  ];
+  const AUTO_REPLIES = ['Anladım 👍', 'Harika!', 'Tamam, bakacağım.', 'Süper olmuş 🔥', 'Teşekkürler!'];
   const replyIdx = useRef(0);
 
   const send = () => {
@@ -427,27 +442,37 @@ function WebChat({ navigation, route }) {
     const now = new Date();
     const t = `${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
     let sentIdx;
-    setMsgs(prev => {
-      sentIdx = prev.length;
-      return [...prev, { me: true, text: msg.trim(), time: t }];
-    });
+    setMsgs(prev => { sentIdx = prev.length; return [...prev, { me: true, text: msg.trim(), time: t }]; });
     setMsg('');
     scrollBottom();
 
-    /* Karşı taraf mesajı açtı → görüldü göster (kalıcı) */
-    setTimeout(() => {
-      setSeenIdx(sentIdx);
-    }, 2000);
+    // Persist to localStorage
+    try {
+      const key = `_mock_msgs_${convId}`;
+      const existing = JSON.parse(localStorage.getItem(key) || '[]');
+      const newMsg = { id: 'msg_' + Date.now(), content: msg.trim(), content_type: 'TEXT', sender_id: 'preview-1', conversation_id: convId, created_at: now.toISOString(), is_read: false };
+      localStorage.setItem(key, JSON.stringify([...existing, newMsg]));
+      // Update group lastMsg
+      if (isGroup) {
+        const groups = JSON.parse(localStorage.getItem('_mock_groups') || '[]');
+        localStorage.setItem('_mock_groups', JSON.stringify(groups.map(g => g.id === convId ? { ...g, lastMsg: msg.trim(), time: t } : g)));
+      }
+    } catch {}
 
-    /* Karşı taraf cevap verdi → görüldü kalır, cevap mesajı eklenir */
-    setTimeout(() => {
-      const rNow = new Date();
-      const rt = `${rNow.getHours()}:${String(rNow.getMinutes()).padStart(2,'0')}`;
-      const reply = AUTO_REPLIES[replyIdx.current % AUTO_REPLIES.length];
-      replyIdx.current += 1;
-      setMsgs(prev => [...prev, { me: false, text: reply, time: rt }]);
-      scrollBottom();
-    }, 4000);
+    if (!isGroup) {
+      setTimeout(() => { setSeenIdx(sentIdx); }, 2000);
+      setTimeout(() => {
+        const rNow = new Date();
+        const rt = `${rNow.getHours()}:${String(rNow.getMinutes()).padStart(2,'0')}`;
+        setMsgs(prev => [...prev, { me: false, text: AUTO_REPLIES[replyIdx.current++ % AUTO_REPLIES.length], time: rt }]);
+        scrollBottom();
+      }, 4000);
+    } else {
+      // Group: simulate read receipts from participants
+      if (groupParticipants.length > 0) {
+        setTimeout(() => { setSeenIdx(sentIdx); }, 2000);
+      }
+    }
   };
 
   /* row = explicit flexDirection:row to override global "div { flex-direction: column }" */
@@ -468,20 +493,135 @@ function WebChat({ navigation, route }) {
                          justifyContent:'center', cursor:'pointer', flexShrink:0 }}>
           <ion-icon name="chevron-back" style={{ fontSize:18, color:'rgba(248,250,255,0.7)', pointerEvents:'none' }} />
         </button>
-        <div style={{ position:'relative', flexShrink:0, cursor:'pointer' }}
-             onClick={() => navigation.navigate('UserProfile', { username })}>
-          <img src={avatar} alt=""
-               style={{ width:38, height:38, borderRadius:19, objectFit:'cover',
-                        border:'2px solid rgba(147,51,234,0.5)', display:'block' }} />
-          <div style={{ position:'absolute', bottom:0, right:0, width:10, height:10, borderRadius:5,
-                        background:'#34D399', border:'2px solid #0C0916' }} />
-        </div>
-        <div style={{ flex:1, display:'flex', flexDirection:'column', cursor:'pointer' }}
-             onClick={() => navigation.navigate('UserProfile', { username })}>
-          <span style={{ color:'#F8FAFF', fontSize:15, fontWeight:700, letterSpacing:-0.2 }}>{username}</span>
-          <span style={{ color:'#34D399', fontSize:11, fontWeight:500, marginTop:1 }}>aktif şimdi</span>
-        </div>
+
+        {isGroup ? (
+          /* ── Group header ── */
+          <div style={{ ...row, alignItems:'center', gap:10, flex:1, cursor:'pointer' }}
+               onClick={() => setShowGroupInfo(true)}>
+            {/* Overlapping avatars */}
+            <div style={{ position:'relative', width:44, height:38, flexShrink:0 }}>
+              {groupParticipants.slice(0,2).map((p, i) => (
+                <img key={p.id || i} src={p.avatar_url || `https://i.pravatar.cc/40?u=${p.id}`} alt=""
+                     style={{ position:'absolute', width:30, height:30, borderRadius:15,
+                              objectFit:'cover', border:'2px solid #0C0916',
+                              top: i === 1 ? 8 : 0, left: i * 14 }} />
+              ))}
+              {groupParticipants.length === 0 && (
+                <div style={{ width:38, height:38, borderRadius:19, background:'rgba(147,51,234,0.3)',
+                              border:'2px solid rgba(147,51,234,0.5)', ...row, alignItems:'center',
+                              justifyContent:'center' }}>
+                  <ion-icon name="people" style={{ fontSize:18, color:'#C084FC', pointerEvents:'none' }} />
+                </div>
+              )}
+            </div>
+            <div style={{ display:'flex', flexDirection:'column' }}>
+              <span style={{ color:'#F8FAFF', fontSize:15, fontWeight:700, letterSpacing:-0.2 }}>{username}</span>
+              <span style={{ color:'rgba(248,248,248,0.4)', fontSize:11, fontWeight:500, marginTop:1 }}>
+                {groupParticipants.length + 1} üye
+              </span>
+            </div>
+          </div>
+        ) : (
+          /* ── DM header ── */
+          <>
+            <div style={{ position:'relative', flexShrink:0, cursor:'pointer' }}
+                 onClick={() => navigation.navigate('UserProfile', { username })}>
+              <img src={avatar} alt=""
+                   style={{ width:38, height:38, borderRadius:19, objectFit:'cover',
+                            border:'2px solid rgba(147,51,234,0.5)', display:'block' }} />
+              <div style={{ position:'absolute', bottom:0, right:0, width:10, height:10, borderRadius:5,
+                            background:'#34D399', border:'2px solid #0C0916' }} />
+            </div>
+            <div style={{ flex:1, display:'flex', flexDirection:'column', cursor:'pointer' }}
+                 onClick={() => navigation.navigate('UserProfile', { username })}>
+              <span style={{ color:'#F8FAFF', fontSize:15, fontWeight:700, letterSpacing:-0.2 }}>{username}</span>
+              <span style={{ color:'#34D399', fontSize:11, fontWeight:500, marginTop:1 }}>çevrimiçi</span>
+            </div>
+          </>
+        )}
       </div>
+
+      {/* ── Group Info Sheet ── */}
+      {showGroupInfo && (
+        <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:9999,
+                      background:'rgba(0,0,0,0.65)', display:'flex', flexDirection:'column',
+                      justifyContent:'flex-end' }}
+             onClick={() => setShowGroupInfo(false)}>
+          <div style={{ background:'#130D22', borderRadius:'20px 20px 0 0',
+                        borderTop:'1px solid rgba(255,255,255,0.1)',
+                        padding:'0 0 32px 0', maxHeight:'75vh', display:'flex', flexDirection:'column' }}
+               onClick={e => e.stopPropagation()}>
+            {/* Handle */}
+            <div style={{ ...row, justifyContent:'center', padding:'12px 0 8px' }}>
+              <div style={{ width:36, height:4, borderRadius:2, background:'rgba(255,255,255,0.2)' }} />
+            </div>
+            {/* Title */}
+            <div style={{ ...row, alignItems:'center', paddingLeft:20, paddingRight:12, paddingBottom:16,
+                          borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ flex:1 }}>
+                <div style={{ color:'#F8FAFF', fontSize:17, fontWeight:700 }}>{username}</div>
+                <div style={{ color:'rgba(248,248,248,0.4)', fontSize:12, marginTop:2 }}>
+                  {groupParticipants.length + 1} üye
+                </div>
+              </div>
+              <button onClick={() => setShowGroupInfo(false)}
+                      style={{ background:'none', border:'none', cursor:'pointer', padding:'6px 8px',
+                               color:'rgba(255,255,255,0.4)', fontSize:20, lineHeight:1, borderRadius:8 }}>✕</button>
+            </div>
+            {/* Members list */}
+            <div style={{ overflowY:'auto', flex:1 }}>
+              {/* Me */}
+              <div style={{ ...row, alignItems:'center', gap:12, padding:'12px 20px',
+                            borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                <img src="https://i.pravatar.cc/100?u=myuser" alt=""
+                     style={{ width:44, height:44, borderRadius:22, objectFit:'cover', flexShrink:0 }} />
+                <div style={{ flex:1 }}>
+                  <div style={{ color:'#F8FAFF', fontSize:15, fontWeight:600 }}>Sen</div>
+                  <div style={{ color:'rgba(248,248,248,0.4)', fontSize:12 }}>@me</div>
+                </div>
+                <span style={{ background:'rgba(192,132,252,0.2)', color:'#C084FC',
+                               fontSize:11, fontWeight:600, padding:'3px 8px', borderRadius:8 }}>Admin</span>
+              </div>
+              {groupParticipants.map((p, i) => (
+                <div key={p.id || i} style={{ ...row, alignItems:'center', gap:12, padding:'12px 20px',
+                              borderBottom:'1px solid rgba(255,255,255,0.04)', cursor:'pointer' }}
+                     onClick={() => { setShowGroupInfo(false); navigation.navigate('UserProfile', { username: p.username }); }}>
+                  <img src={p.avatar_url || `https://i.pravatar.cc/40?u=${p.id}`} alt=""
+                       style={{ width:44, height:44, borderRadius:22, objectFit:'cover', flexShrink:0 }} />
+                  <div style={{ flex:1 }}>
+                    <div style={{ color:'#F8FAFF', fontSize:15, fontWeight:600 }}>
+                      {p.display_name || p.username}
+                    </div>
+                    {p.username && (
+                      <div style={{ color:'rgba(248,248,248,0.4)', fontSize:12 }}>@{p.username}</div>
+                    )}
+                  </div>
+                  <ion-icon name="chevron-forward" style={{ fontSize:16, color:'rgba(255,255,255,0.25)', pointerEvents:'none' }} />
+                </div>
+              ))}
+            </div>
+            {/* Leave group button */}
+            <div style={{ padding:'16px 20px 0' }}>
+              <button onClick={() => {
+                          setShowGroupInfo(false);
+                          // Remove from localStorage
+                          try {
+                            const groups = JSON.parse(localStorage.getItem('_mock_groups') || '[]');
+                            localStorage.setItem('_mock_groups', JSON.stringify(groups.filter(g => g.id !== convId)));
+                          } catch {}
+                          navigation.navigate('Conversations');
+                        }}
+                      style={{ width:'100%', padding:'14px', borderRadius:14, border:'none',
+                               background:'rgba(239,68,68,0.12)', color:'#F87171',
+                               fontSize:15, fontWeight:700, cursor:'pointer',
+                               display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                <ion-icon name="exit-outline" style={{ fontSize:18, color:'#F87171', pointerEvents:'none' }} />
+                Gruptan Ayrıl
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Date separator ── */}
       <div style={{ ...row, alignItems:'center', gap:8, margin:'10px 14px 4px' }}>
@@ -532,21 +672,27 @@ function WebChat({ navigation, route }) {
                                   gap:6, marginBottom:2 }}
                  onClick={() => handleBubbleTap(i)}>
               {showOtherAv
-                ? <img src={avatar} alt=""
-                       onClick={e => { e.stopPropagation(); navigation.navigate('UserProfile', { username }); }}
+                ? <img src={isGroup ? (m.senderAvatar || `https://i.pravatar.cc/40?u=${i}`) : avatar} alt=""
+                       onClick={e => { e.stopPropagation(); navigation.navigate('UserProfile', { username: m.senderName || username }); }}
                        style={{ width:26, height:26, borderRadius:13, objectFit:'cover',
                                 flexShrink:0, display:'block', cursor:'pointer' }} />
                 : <div style={{ width:26, flexShrink:0 }} />}
-              <div style={{ display:'block', maxWidth:'68%', padding:'9px 13px',
-                            borderRadius:'18px 18px 18px 4px',
-                            background:'#1C1530', border:'1px solid rgba(255,255,255,0.08)',
-                            cursor:'pointer' }}>
-                <span style={{ color:'#F8FAFF', fontSize:14, lineHeight:'21px',
-                               wordBreak:'break-word' }}>{m.text}</span>
-                {shownTime === i && (
-                  <span style={{ color:'rgba(255,255,255,0.4)', fontSize:10, marginTop:4,
-                                 display:'block', textAlign:'left' }}>{m.time}</span>
+              <div style={{ display:'flex', flexDirection:'column', maxWidth:'68%' }}>
+                {isGroup && showOtherAv && m.senderName && (
+                  <span style={{ color:'rgba(192,132,252,0.8)', fontSize:11, fontWeight:600,
+                                 marginBottom:3, paddingLeft:4 }}>{m.senderName}</span>
                 )}
+                <div style={{ display:'block', padding:'9px 13px',
+                              borderRadius:'18px 18px 18px 4px',
+                              background:'#1C1530', border:'1px solid rgba(255,255,255,0.08)',
+                              cursor:'pointer' }}>
+                  <span style={{ color:'#F8FAFF', fontSize:14, lineHeight:'21px',
+                                 wordBreak:'break-word' }}>{m.text}</span>
+                  {shownTime === i && (
+                    <span style={{ color:'rgba(255,255,255,0.4)', fontSize:10, marginTop:4,
+                                   display:'block', textAlign:'left' }}>{m.time}</span>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -591,6 +737,7 @@ function WebChat({ navigation, route }) {
 function MiniPlayer({ onOpen }) {
   const { currentTrack, isPlaying, play, pause, skip, prev } = usePlayer() || {};
   const slideAnim = useRef(new Animated.Value(80)).current;
+  const [dismissed, setDismissed] = useState(false);
 
   const [liked, setLiked] = useState(() => isLiked(currentTrack?.id));
   const [showPlModal, setShowPlModal] = useState(false);
@@ -600,16 +747,18 @@ function MiniPlayer({ onOpen }) {
     return likedSubscribe(() => setLiked(isLiked(currentTrack?.id)));
   }, [currentTrack?.id]);
 
+  useEffect(() => { setDismissed(false); }, [currentTrack?.id]);
+
   useEffect(() => {
     Animated.spring(slideAnim, {
-      toValue: currentTrack ? 0 : 80,
+      toValue: currentTrack && !dismissed ? 0 : 80,
       useNativeDriver: true,
       damping: 18,
       stiffness: 200,
     }).start();
-  }, [!!currentTrack]);
+  }, [!!currentTrack, dismissed]);
 
-  if (!currentTrack) return null;
+  if (!currentTrack || dismissed) return null;
 
   return (
     <Animated.View style={[mp.wrap, { transform: [{ translateY: slideAnim }] }]}>
@@ -626,6 +775,9 @@ function MiniPlayer({ onOpen }) {
         </Pressable>
         <TouchableOpacity onPress={() => isPlaying ? pause?.() : play?.()} style={mp.playBtn}>
           <ion-icon name={isPlaying ? 'pause' : 'play'} style={{ fontSize: 24, color: '#FB923C', pointerEvents: 'none', marginLeft: isPlaying ? 0 : 2 }} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setDismissed(true)} style={[mp.btn, { marginLeft: 2 }]}>
+          <ion-icon name="close" style={{ fontSize: 20, color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
         </TouchableOpacity>
       </View>
       <PlaylistPickerModal
@@ -747,19 +899,49 @@ function DevToolbar({ current, onChange }) {
 /* Screens that render as transparent modal overlay (background screen stays visible) */
 const MODAL_SCREENS = new Set(['Notifications']);
 
+const AUTH_SCREENS = new Set(['PhoneLogin', 'Register']);
+
 /* ─── App Root ─────────────────────────────────────────────── */
-function App() {
-  const [stack, setStack] = useState([{ name: 'Login', params: {} }]);
-  const screen = stack[stack.length - 1] || { name: 'Dashboard', params: {} };
-  const nav    = makeMockNav(stack, setStack);
+function AppInner() {
+  const { isAuthenticated, isLoading, logout } = useAuth();
+  // null = waiting for auth check, array = resolved
+  const [stack, setStack] = useState(null);
+
+  // Expose a reliable forceLogout on window so screens can call it directly
+  useEffect(() => {
+    window.__sbForceLogout = () => {
+      logout();
+      setStack([{ name: 'PhoneLogin', params: {} }]);
+    };
+    return () => { window.__sbForceLogout = null; };
+  }, [logout]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!isAuthenticated) {
+      setStack([{ name: 'PhoneLogin', params: {} }]);
+    } else {
+      setStack(prev => {
+        const top = prev?.[prev.length - 1]?.name;
+        if (!prev || AUTH_SCREENS.has(top)) return [{ name: 'Dashboard', params: {} }];
+        return prev;
+      });
+    }
+  }, [isAuthenticated, isLoading]);
+
+  const resolving = isLoading || stack === null;
+
+  const effectiveStack = resolving ? [{ name: 'Dashboard', params: {} }] : stack;
+  const screen = effectiveStack[effectiveStack.length - 1] || { name: 'Register', params: {} };
+  const nav    = makeMockNav(effectiveStack, setStack);
 
   const isModal   = MODAL_SCREENS.has(screen.name);
   const bgScreen  = isModal
-    ? (stack.length > 1 ? stack[stack.length - 2] : { name: 'Dashboard', params: {} })
+    ? (effectiveStack.length > 1 ? effectiveStack[effectiveStack.length - 2] : { name: 'Dashboard', params: {} })
     : null;
   const LIBRARY_STACK = new Set(['PlaylistDetail', 'Liked', 'ListeningHistory', 'AddSongsToPlaylist']);
   const effectiveName = isModal && bgScreen ? bgScreen.name : screen.name;
-  const showTabBar = TAB_NAMES.has(effectiveName) || LIBRARY_STACK.has(effectiveName);
+  const showTabBar = !resolving && (TAB_NAMES.has(effectiveName) || LIBRARY_STACK.has(effectiveName));
 
   const renderScreen = (s) => {
     const r     = s || screen;
@@ -767,15 +949,12 @@ function App() {
     const props = { navigation: nav, route };
     switch (r.name) {
       // Auth
-      case 'Login':                  return <LoginScreen {...props} />;
+      case 'PhoneLogin':             return <PhoneLoginScreen {...props} />;
       case 'Register':               return <RegisterScreen {...props} />;
-      case 'ForgotPassword':         return <ForgotPasswordScreen {...props} />;
-      case 'ResetPassword':          return <ResetPasswordScreen {...props} />;
 
       // Main tabs
       case 'Dashboard':              return <DashboardScreen {...props} />;
       case 'Library':                return <PlaylistsScreen {...props} />;
-      case 'AR':                     return <ARMusicScreen {...props} />;
       case 'Rooms':                  return <ListeningRoomScreen {...props} />;
 
       // Social
@@ -805,12 +984,11 @@ function App() {
       case 'Equalizer':              return <EqualizerScreen {...props} />;
       case 'Lyrics':                 return <LyricsScreen {...props} />;
       case 'ListeningHistory':       return <ListeningHistoryScreen {...props} />;
-      case 'MusicDiscover':          return <MusicDiscoverScreen {...props} />;
-      case 'Audiomack':              return <AudiomackScreen {...props} />;
 
       // Messages
       case 'Messages':               return <ConversationsScreen {...props} />;
       case 'Conversations':          return <ConversationsScreen {...props} />;
+      case 'NewMessage':             return <NewMessageScreen {...props} />;
       case 'Chat':                   return <WebChat {...props} />;
       case 'CreateGroup':            return <CreateGroupScreen {...props} />;
       case 'GroupSettings':          return <GroupSettingsScreen {...props} />;
@@ -820,17 +998,13 @@ function App() {
       case 'ProfileEdit':            return <ProfileEditScreen {...props} />;
       case 'ProfileStats':           return <ProfileStatsScreen {...props} />;
       case 'ProfileQR':              return <ProfileQRScreen {...props} />;
-      case 'ChangePassword':         return <ChangePasswordScreen {...props} />;
       case 'ChangeEmail':            return <ChangeEmailScreen {...props} />;
       case 'DeleteAccount':          return <DeleteAccountScreen {...props} />;
       case 'Sessions':               return <SessionsScreen {...props} />;
-      case 'TwoFASettings':          return <TwoFASettingsScreen {...props} />;
       case 'BlockedUsers':           return <BlockedUsersScreen {...props} />;
       case 'MutedUsers':             return <MutedUsersScreen {...props} />;
-      case 'ScreenTime':             return <ScreenTimeScreen {...props} />;
       case 'DataExport':             return <DataExportScreen {...props} />;
       case 'NotificationSettings':   return <NotificationSettingsScreen {...props} />;
-      case 'MusicTasteTest':         return <MusicTasteTestScreen {...props} />;
       case 'Achievements':           return <AchievementsScreen {...props} />;
       case 'Backup':                 return <BackupScreen {...props} />;
       case 'Feedback':               return <FeedbackScreen {...props} />;
@@ -840,7 +1014,6 @@ function App() {
       case 'AudioSettings':          return <AudioSettingsScreen {...props} />;
       case 'LanguageRegion':         return <LanguageRegionScreen {...props} />;
       case 'DataBackup':             return <DataBackupScreen {...props} />;
-      case 'AccessibilitySettings':  return <AccessibilitySettingsScreen {...props} />;
       case 'LegalSettings':          return <LegalSettingsScreen {...props} />;
 
       // Misc
@@ -855,50 +1028,69 @@ function App() {
   };
 
   return (
+    <NotificationProvider>
+      <PlayerProvider>
+        <View style={styles.root}>
+          <PhoneFrame
+            showTabBar={showTabBar}
+            currentTab={(isModal && bgScreen ? bgScreen : screen).name}
+            onTabChange={(name) => setStack([{ name, params: {} }])}
+            onOpenFullPlayer={() => setStack(s => [...s, { name: 'FullPlayer', params: {} }])}
+          >
+            {resolving ? (
+              /* Auth resolving — splash inside PhoneFrame so layout stays stable */
+              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#08060F' }}>
+                <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: '#C084FC22', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ fontSize: 24 }}>🎵</Text>
+                </View>
+              </View>
+            ) : (
+              <>
+                {/* Background screen (always visible) */}
+                {renderScreen(isModal && bgScreen ? bgScreen : null)}
+                {/* Modal overlay — dark scrim + blur(4px) via DOM ref */}
+                {isModal && (
+                  <View
+                    ref={el => {
+                      if (el && el.style) {
+                        el.style.backdropFilter = 'blur(4px)';
+                        el.style.webkitBackdropFilter = 'blur(4px)';
+                        el.style.background = 'rgba(0,0,0,0.65)';
+                      }
+                    }}
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 }}
+                  >
+                    {renderScreen(screen)}
+                  </View>
+                )}
+              </>
+            )}
+          </PhoneFrame>
+          {!resolving && (
+            <DevToolbar
+              current={screen.name}
+              onChange={(name) => {
+                if (MODAL_SCREENS.has(name)) {
+                  setStack([{ name: 'Dashboard', params: {} }, { name, params: {} }]);
+                } else {
+                  setStack([{ name, params: {} }]);
+                }
+              }}
+            />
+          )}
+        </View>
+      </PlayerProvider>
+    </NotificationProvider>
+  );
+}
+
+function App() {
+  return (
     <QueryClientProvider client={queryClient}>
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
         <AuthProvider>
-          <NotificationProvider>
-            <PlayerProvider>
-              <View style={styles.root}>
-                <PhoneFrame
-                  showTabBar={showTabBar}
-                  currentTab={(isModal && bgScreen ? bgScreen : screen).name}
-                  onTabChange={(name) => setStack([{ name, params: {} }])}
-                  onOpenFullPlayer={() => setStack(s => [...s, { name: 'FullPlayer', params: {} }])}
-                >
-                  {/* Background screen (always visible) */}
-                  {renderScreen(isModal && bgScreen ? bgScreen : null)}
-                  {/* Modal overlay — dark scrim + blur(4px) via DOM ref (bypasses RNW style stripping) */}
-                  {isModal && (
-                    <View
-                      ref={el => {
-                        if (el && el.style) {
-                          el.style.backdropFilter = 'blur(4px)';
-                          el.style.webkitBackdropFilter = 'blur(4px)';
-                          el.style.background = 'rgba(0,0,0,0.65)';
-                        }
-                      }}
-                      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 }}
-                    >
-                      {renderScreen(screen)}
-                    </View>
-                  )}
-                </PhoneFrame>
-                <DevToolbar
-                  current={screen.name}
-                  onChange={(name) => {
-                    if (MODAL_SCREENS.has(name)) {
-                      setStack([{ name: 'Dashboard', params: {} }, { name, params: {} }]);
-                    } else {
-                      setStack([{ name, params: {} }]);
-                    }
-                  }}
-                />
-              </View>
-            </PlayerProvider>
-          </NotificationProvider>
+          <AppInner />
         </AuthProvider>
       </ThemeProvider>
     </I18nextProvider>

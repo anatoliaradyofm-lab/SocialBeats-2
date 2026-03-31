@@ -144,8 +144,16 @@ export default function DiscoverPeopleScreen({ navigation }) {
 
       if (reset) {
         setUsers(list);
+        const followed = new Set();
+        list.forEach(u => { if (u.is_following) followed.add(u.id); });
+        setFollowedIds(followed);
       } else {
         setUsers(prev => [...prev, ...list]);
+        setFollowedIds(prev => {
+          const next = new Set(prev);
+          list.forEach(u => { if (u.is_following) next.add(u.id); });
+          return next;
+        });
       }
       offsetRef.current += list.length;
       setOffset(offsetRef.current);
@@ -323,6 +331,12 @@ export default function DiscoverPeopleScreen({ navigation }) {
       };
       return (
         <View style={styles.webCard} onWheel={handleWheel} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.32, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
           {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} blurRadius={20} /> : null}
           <LinearGradient colors={[`${gradient[0]}AA`, `${gradient[1]}DD`, '#0A0A0BFF']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} />
 
@@ -546,21 +560,11 @@ export default function DiscoverPeopleScreen({ navigation }) {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" />
 
-      {/* Header + Search — unified block */}
+      {/* Header — tek satır: geri + arama + filtre */}
       <View style={styles.header} onLayout={e => setHeaderHeight(e.nativeEvent.layout.height)}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('discover.suggestedUsers') || 'Discover People'}</Text>
-          <TouchableOpacity
-            onPress={() => { setTempCountry(selectedCountry); setTempCity(selectedCity); setTempGender(selectedGender); setFilterVisible(true); }}
-            style={[styles.filterBtn, hasActiveFilter && styles.filterBtnActive]}
-          >
-            <Ionicons name="options" size={22} color={hasActiveFilter ? '#fff' : '#D1D5DB'} />
-            {hasActiveFilter && <View style={styles.filterDot} />}
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
 
         <View style={styles.searchBarWrap}>
           <Ionicons name="search" size={17} color={searchQuery.length > 0 ? '#C084FC' : '#6B7280'} />
@@ -582,6 +586,14 @@ export default function DiscoverPeopleScreen({ navigation }) {
             </TouchableOpacity>
           )}
         </View>
+
+        <TouchableOpacity
+          onPress={() => { setTempCountry(selectedCountry); setTempCity(selectedCity); setTempGender(selectedGender); setFilterVisible(true); }}
+          style={[styles.filterBtn, hasActiveFilter && styles.filterBtnActive]}
+        >
+          <Ionicons name="options" size={22} color={hasActiveFilter ? '#fff' : '#D1D5DB'} />
+          {hasActiveFilter && <View style={styles.filterDot} />}
+        </TouchableOpacity>
       </View>
 
       {/* Active filter badge — hidden during search */}
@@ -848,8 +860,8 @@ export default function DiscoverPeopleScreen({ navigation }) {
 const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10,
-    gap: 10,
   },
   headerRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -1057,11 +1069,12 @@ const createStyles = (colors) => StyleSheet.create({
   },
   applyBtnText: { color: colors.text, fontSize: 16, fontWeight: '700' },
 
-  // Search bar — inside unified header block
+  // Search bar — inside header row
   searchBarWrap: {
+    flex: 1,
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
     paddingHorizontal: 12, paddingVertical: 9,
   },
   searchBarInput: {
