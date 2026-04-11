@@ -366,20 +366,6 @@ class TestEnvConfiguration:
         assert origins != "*", "CORS_ORIGINS wildcard (*) olmamalı"
         print(f"✅ CORS_ORIGINS kısıtlı: {origins[:50]}...")
 
-    def test_youtube_api_key_configured(self):
-        """YOUTUBE_API_KEY yapılandırılmış olmalı"""
-        key = os.environ.get("YOUTUBE_API_KEY", "")
-        assert len(key) > 10, "YOUTUBE_API_KEY eksik veya çok kısa"
-        print("✅ YOUTUBE_API_KEY yapılandırılmış")
-
-    def test_spotify_credentials_configured(self):
-        """Spotify credentials yapılandırılmış olmalı"""
-        client_id = os.environ.get("SPOTIFY_CLIENT_ID", "")
-        client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
-        assert len(client_id) > 10, "SPOTIFY_CLIENT_ID eksik"
-        assert len(client_secret) > 10, "SPOTIFY_CLIENT_SECRET eksik"
-        print("✅ Spotify credentials yapılandırılmış")
-
     def test_db_name_correct(self):
         """DB_NAME 'socialbeats' olmalı"""
         db_name = os.environ.get("DB_NAME", "")

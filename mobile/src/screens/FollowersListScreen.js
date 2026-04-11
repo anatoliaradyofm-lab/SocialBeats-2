@@ -4,7 +4,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,6 +14,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Alert } from '../components/ui/AppAlert';
 
 const PRI   = '#C084FC';
 const GREEN = '#4ADE80';
@@ -24,7 +25,7 @@ export default function FollowersListScreen({ navigation, route }) {
   const styles = createStyles(colors);
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { token, user: currentUser } = useAuth();
+  const { token, user: currentUser, isGuest } = useAuth();
   const { userId, displayName } = route.params || {};
 
   // Kendi takipçi listemi mi yoksa başkasının mı görüyorum?
@@ -38,14 +39,15 @@ export default function FollowersListScreen({ navigation, route }) {
   const [followStates, setFollowStates] = useState({});
 
   const load = useCallback(async () => {
-    if (!userId || !token) return;
+    if (!userId) return;
     try {
       const res = await api.get(`/users/${userId}/followers?limit=100`, token);
       const list = res?.users || [];
       setUsers(list);
       // followStates: her kişi için "ben onu takip ediyor muyum?" durumu
       const states = {};
-      list.forEach(u => { states[u.id] = !!u.is_following; });
+      // Misafir modunda takip durumu her zaman false
+      list.forEach(u => { states[u.id] = !isGuest && !!u.is_following; });
       setFollowStates(states);
       setLocked(false);
     } catch (e) {
@@ -83,6 +85,13 @@ export default function FollowersListScreen({ navigation, route }) {
 
   /* Başkasının takipçi listesinde: o kişiyi takip et / bırak */
   const handleToggleFollow = async (item) => {
+    if (isGuest || !token) {
+      Alert.alert('Giriş Gerekli', 'Takip etmek için giriş yapmanız gerekiyor.', [
+        { text: 'İptal', style: 'cancel' },
+        { text: 'Giriş Yap', onPress: () => navigation.navigate('Auth') },
+      ]);
+      return;
+    }
     const isFollowing = followStates[item.id] ?? false;
     if (isFollowing) {
       Alert.alert(

@@ -25,10 +25,39 @@ export const getContactsAsync = () => Promise.resolve({ data: [] });
 export const requestForegroundPermissionsAsync = () => Promise.resolve({ status: 'denied' });
 export const getCurrentPositionAsync = () => Promise.resolve({ coords: { latitude: 0, longitude: 0 } });
 
-// expo-image-picker
-export const launchImageLibraryAsync = () => Promise.resolve({ canceled: true });
-export const launchCameraAsync       = () => Promise.resolve({ canceled: true });
-export const MediaTypeOptions = { Images: 'Images', Videos: 'Videos', All: 'All' };
+// expo-image-picker — browser file input kullanır
+export const launchImageLibraryAsync = (options = {}) => new Promise((resolve) => {
+  const input = document.createElement('input');
+  input.type   = 'file';
+  input.accept = 'image/*,video/*';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+
+  input.onchange = (e) => {
+    document.body.removeChild(input);
+    const file = e.target.files?.[0];
+    if (!file) { resolve({ canceled: true, assets: [] }); return; }
+    const uri  = URL.createObjectURL(file);
+    const type = file.type.startsWith('video/') ? 'video' : 'image';
+    resolve({ canceled: false, assets: [{ uri, type, name: file.name, mimeType: file.type, width: 0, height: 0 }] });
+  };
+
+  // Kullanıcı diyalogu kapatırsa (focus geri gelince kontrol et)
+  const onFocus = () => {
+    window.removeEventListener('focus', onFocus);
+    setTimeout(() => {
+      if (!input.value) {
+        try { document.body.removeChild(input); } catch (_) {}
+        resolve({ canceled: true, assets: [] });
+      }
+    }, 500);
+  };
+  window.addEventListener('focus', onFocus);
+  input.click();
+});
+
+export const launchCameraAsync = () => Promise.resolve({ canceled: true });
+export const MediaTypeOptions  = { Images: 'Images', Videos: 'Videos', All: 'All' };
 
 // expo-camera
 function CameraComponent() { return null; }

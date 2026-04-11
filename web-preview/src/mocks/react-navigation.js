@@ -1,5 +1,5 @@
 // @react-navigation/native mock for web preview
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 
 export const useNavigation = () => ({
   navigate:    () => {},
@@ -16,7 +16,20 @@ export const useNavigation = () => ({
 });
 
 export const useRoute = () => ({ key: 'mock', name: 'mock', params: {} });
-export const useFocusEffect = (cb) => { cb(); };
+// useFocusEffect: mount'ta çalışır + 500ms throttle ile her render'da yeniden çalışır
+// (mock nav'da focus event yok; stack değişince App yeniden render → bileşen yeniden render → tetikler)
+export const useFocusEffect = (cb) => {
+  const cbRef = useRef(cb);
+  const lastRun = useRef(0);
+  cbRef.current = cb;
+  useEffect(() => {
+    const now = Date.now();
+    if (now - lastRun.current > 600) {
+      lastRun.current = now;
+      cbRef.current();
+    }
+  });  // deps yok → her render'da → stack değişince DashboardScreen yeniden render olur
+};
 export const useIsFocused = () => true;
 export const useNavigationState = (sel) => sel({ routes: [], index: 0 });
 export const NavigationContainer = ({ children }) => children;

@@ -1,85 +1,80 @@
 import React from 'react';
-import {
-    View, Text, StyleSheet, ScrollView, TouchableOpacity,
-    Linking, FlatList
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const LIBRARIES = [
-    { name: 'React Native', license: 'MIT', url: 'https://github.com/facebook/react-native' },
-    { name: 'Expo', license: 'MIT', url: 'https://github.com/expo/expo' },
-    { name: 'React Navigation', license: 'MIT', url: 'https://github.com/react-navigation/react-navigation' },
-    { name: 'Axios', license: 'MIT', url: 'https://github.com/axios/axios' },
-    { name: 'i18next', license: 'MIT', url: 'https://github.com/i18next/i18next' },
-    { name: 'Ionicons', license: 'MIT', url: 'https://github.com/ionic-team/ionicons' },
-    { name: 'Expo Graphics', license: 'MIT', url: 'https://github.com/expo/expo-graphics' },
-    { name: 'Async Storage', license: 'MIT', url: 'https://github.com/react-native-async-storage/async-storage' },
-    { name: 'Lucide React', license: 'ISC', url: 'https://github.com/lucide-dev/lucide' },
-    { name: 'Lottie React Native', license: 'MIT', url: 'https://github.com/lottie-react-native/lottie-react-native' },
+  { name: 'React Native',                          license: 'MIT' },
+  { name: 'Expo',                                  license: 'MIT' },
+  { name: 'React Navigation',                      license: 'MIT' },
+  { name: 'React Query (@tanstack)',                license: 'MIT' },
+  { name: 'i18next',                               license: 'MIT' },
+  { name: 'react-i18next',                         license: 'MIT' },
+  { name: '@expo/vector-icons (Ionicons)',          license: 'MIT' },
+  { name: 'expo-linear-gradient',                  license: 'MIT' },
+  { name: 'expo-image-picker',                     license: 'MIT' },
+  { name: 'expo-av',                               license: 'MIT' },
+  { name: 'expo-localization',                     license: 'MIT' },
+  { name: 'expo-linking',                          license: 'MIT' },
+  { name: 'expo-font',                             license: 'MIT' },
+  { name: '@react-native-async-storage/async-storage', license: 'MIT' },
+  { name: 'react-native-safe-area-context',        license: 'MIT' },
+  { name: 'react-native-gesture-handler',          license: 'MIT' },
+  { name: 'react-native-reanimated',               license: 'MIT' },
+  { name: 'react-native-get-random-values',        license: 'MIT' },
+  { name: 'lottie-react-native',                   license: 'Apache-2.0' },
+  { name: 'axios',                                 license: 'MIT' },
 ];
 
 export default function LicensesScreen({ navigation }) {
-    const insets = useSafeAreaInsets();
+  const insets = useSafeAreaInsets();
 
-    return (
-        <View style={styles.container}>
+  return (
+    <View style={s.root}>
       <LinearGradient
         colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
         locations={[0, 0.18, 0.32, 1]}
         start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-            <LinearGradient colors={['#111827', '#000000']} style={StyleSheet.absoluteFill} />
+      <View style={[s.header, { paddingTop: insets.top + 16 }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+          <Ionicons name="chevron-back" size={24} color="#F8F8F8" />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Açık Kaynak Lisansları</Text>
+        <View style={{ width: 40 }} />
+      </View>
 
-            <View style={[styles.header, { paddingTop: insets.top }]}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <Ionicons name="chevron-back" size={24} color="#fff" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Lisanslar</Text>
-                <View style={{ width: 44 }} />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 32 }]}
+      >
+        <View style={s.card}>
+          {LIBRARIES.map((item, i) => (
+            <View
+              key={item.name}
+              style={[s.row, i < LIBRARIES.length - 1 && s.divider]}
+            >
+              <Text style={s.name}>{item.name}</Text>
+              <Text style={s.badge}>{item.license}</Text>
             </View>
-
-            <FlatList
-                data={LIBRARIES}
-                keyExtractor={(item) => item.name}
-                contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
-                renderItem={({ item }) => (
-                    <TouchableOpacity
-                        style={styles.licenseItem}
-                        onPress={() => Linking.openURL(item.url)}
-                        activeOpacity={0.7}
-                    >
-                        <View style={styles.licenseRow}>
-                            <View>
-                                <Text style={styles.libraryName}>{item.name}</Text>
-                                <Text style={styles.licenseType}>{item.license} Lisansı</Text>
-                            </View>
-                            <Ionicons name="open-outline" size={18} color="#9CA3AF" />
-                        </View>
-                    </TouchableOpacity>
-                )}
-            />
+          ))}
         </View>
-    );
+      </ScrollView>
+    </View>
+  );
 }
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 100 },
-    backBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)' },
-    headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
-    content: { padding: 16 },
-    licenseItem: {
-        backgroundColor: 'rgba(255,255,255,0.03)',
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
-    },
-    licenseRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    libraryName: { fontSize: 16, fontWeight: '600', color: '#E5E7EB' },
-    licenseType: { fontSize: 13, color: '#6B7280', marginTop: 4 }
+const s = StyleSheet.create({
+  root:        { flex: 1 },
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  backBtn:     { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#F8F8F8', letterSpacing: -0.3 },
+  scroll:      { padding: 16 },
+  card:        { borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(255,255,255,0.055)', overflow: 'hidden' },
+  row:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
+  divider:     { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
+  name:        { fontSize: 14, fontWeight: '600', color: '#F8F8F8', flex: 1, marginRight: 12 },
+  badge:       { fontSize: 11, fontWeight: '600', color: 'rgba(192,132,252,0.9)', backgroundColor: 'rgba(192,132,252,0.12)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
 });

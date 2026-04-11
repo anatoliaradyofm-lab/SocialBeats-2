@@ -271,14 +271,12 @@ class TestRealtimeTrending:
         data = response.json()
         
         # Check required fields
-        assert "youtube" in data, "Should have youtube trending"
-        assert "apple" in data, "Should have apple trending"
+        assert "soundcloud" in data, "Should have soundcloud trending"
         assert "period" in data, "Should have period"
         assert "timestamp" in data, "Should have timestamp"
-        
+
         # Validate data types
-        assert isinstance(data["youtube"], list), "youtube should be a list"
-        assert isinstance(data["apple"], list), "apple should be a list"
+        assert isinstance(data["soundcloud"], list), "soundcloud should be a list"
         
         print(f"✅ GET /api/stats/realtime/trending - Period: {data['period']}")
     

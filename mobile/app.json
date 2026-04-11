@@ -22,7 +22,9 @@
         "UIBackgroundModes": [
           "audio",
           "remote-notification"
-        ]
+        ],
+        "NSPhotoLibraryUsageDescription": "Hikaye oluşturmak için fotoğraf ve videolarınıza erişim gerekli.",
+        "NSPhotoLibraryAddUsageDescription": "Hikaye fotoğraflarını kütüphanenize kaydetmek için erişim gerekli."
       }
     },
     "android": {
@@ -41,7 +43,11 @@
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -78,6 +84,13 @@
         }
       ],
       "expo-camera",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Hikaye oluşturmak için fotoğraf ve videolarınıza erişim gerekli.",
+          "cameraPermission": "Hikaye çekmek için kamera erişimi gerekli."
+        }
+      ],
       "./withManifestMerger.js",
       "./withNamespace.js",
       "./withFixTrackPlayer.js"

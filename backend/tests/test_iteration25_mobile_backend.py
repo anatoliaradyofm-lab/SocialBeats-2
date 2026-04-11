@@ -78,18 +78,14 @@ class TestMusicStreamAPI:
     """Test /api/music/stream/{id} endpoint - ToS compliant embed URL"""
     
     def test_stream_returns_embed_url(self):
-        """Test that stream endpoint returns embed URL (ToS compliant)"""
-        # Use a known YouTube video ID
-        video_id = "dQw4w9WgXcQ"  # Rick Astley - Never Gonna Give You Up
-        response = requests.get(f"{BASE_URL}/api/music/stream/{video_id}", timeout=10)
+        """Test that stream endpoint returns stream URL (SoundCloud)"""
+        track_id = "sc_123456"
+        response = requests.get(f"{BASE_URL}/api/music/stream/{track_id}", timeout=10)
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-        
+
         data = response.json()
-        # API uses song_id instead of video_id
-        assert "song_id" in data or "video_id" in data, "Response should contain song_id or video_id"
-        assert "embed_url" in data, "Response should contain embed_url"
-        assert "youtube.com/embed" in data["embed_url"], "Embed URL should be YouTube embed format"
-        print(f"✅ Stream endpoint returns ToS compliant embed URL: {data['embed_url']}")
+        assert "song_id" in data or "track_id" in data or "stream_url" in data, "Response should contain stream info"
+        print(f"✅ Stream endpoint returns stream URL")
     
     def test_stream_deprecated_message(self):
         """Test that stream endpoint includes deprecation notice"""

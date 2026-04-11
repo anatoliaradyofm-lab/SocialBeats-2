@@ -71,7 +71,7 @@ async def get_yearly_summary(
     year: Optional[int] = Query(None),
     current_user: dict = Depends(get_current_user),
 ):
-    """Yıllık özet (Spotify Wrapped) - Trench + Gemini"""
+    """Yıllık özet - Trench + Gemini"""
     from services.analytics_service import get_yearly_summary
     data = await get_yearly_summary(current_user["id"], year)
     return data

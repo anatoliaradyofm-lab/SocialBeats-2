@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert} from 'react-native';
+  ActivityIndicator, RefreshControl} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +13,7 @@ import api from '../services/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../contexts/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Alert } from '../components/ui/AppAlert';
 
 export default function SharePlaylistPickerScreen({ route, navigation }) {
   const { colors } = useTheme();

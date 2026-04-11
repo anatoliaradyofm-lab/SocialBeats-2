@@ -4,7 +4,7 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
-  ActivityIndicator, Alert} from 'react-native';
+  ActivityIndicator} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +12,7 @@ import api from '../services/api';
 import { useConversationsQuery } from '../hooks/useConversationsQuery';
 import { useTheme } from '../contexts/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Alert } from '../components/ui/AppAlert';
 
 export default function ForwardTargetPickerScreen({ route, navigation }) {
   const { colors } = useTheme();

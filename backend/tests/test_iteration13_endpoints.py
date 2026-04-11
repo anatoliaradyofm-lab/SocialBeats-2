@@ -410,43 +410,19 @@ class TestWebAuthn:
 class TestPlaylistSync:
     """Test Cross-platform Playlist Sync functionality"""
     
-    def test_sync_spotify_playlists(self, auth_headers):
-        """Test syncing Spotify playlists"""
+    def test_sync_soundcloud_playlists(self, auth_headers):
+        """Test syncing SoundCloud playlists"""
         response = requests.post(
             f"{BASE_URL}/api/playlists/sync",
             headers=auth_headers,
-            data={"platform": "spotify"}
+            data={"platform": "soundcloud"}
         )
         assert response.status_code == 200, f"Failed to sync: {response.text}"
         data = response.json()
-        assert data.get("platform") == "spotify"
+        assert data.get("platform") == "soundcloud"
         assert "synced_playlists" in data
-        print(f"✅ Synced Spotify playlists: {len(data.get('synced_playlists', []))} playlists")
-    
-    def test_sync_apple_music_playlists(self, auth_headers):
-        """Test syncing Apple Music playlists"""
-        response = requests.post(
-            f"{BASE_URL}/api/playlists/sync",
-            headers=auth_headers,
-            data={"platform": "apple_music"}
-        )
-        assert response.status_code == 200, f"Failed to sync: {response.text}"
-        data = response.json()
-        assert data.get("platform") == "apple_music"
-        print(f"✅ Synced Apple Music playlists")
-    
-    def test_sync_youtube_music_playlists(self, auth_headers):
-        """Test syncing YouTube Music playlists"""
-        response = requests.post(
-            f"{BASE_URL}/api/playlists/sync",
-            headers=auth_headers,
-            data={"platform": "youtube_music"}
-        )
-        assert response.status_code == 200, f"Failed to sync: {response.text}"
-        data = response.json()
-        assert data.get("platform") == "youtube_music"
-        print(f"✅ Synced YouTube Music playlists")
-    
+        print(f"✅ Synced SoundCloud playlists: {len(data.get('synced_playlists', []))} playlists")
+
     def test_get_sync_status(self, auth_headers):
         """Test getting sync status"""
         response = requests.get(
@@ -457,9 +433,8 @@ class TestPlaylistSync:
         data = response.json()
         assert "sync_status" in data
         status = data.get("sync_status", {})
-        assert "spotify" in status
-        assert "apple_music" in status
-        assert "youtube_music" in status
+        assert "soundcloud" in status
+        assert "audius" in status
         print(f"✅ Got sync status for all platforms")
     
     def test_sync_status_unauthorized(self):

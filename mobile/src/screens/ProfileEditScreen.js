@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Alert, Image, Switch, Modal, FlatList, Platform,
+  ScrollView, ActivityIndicator, Image, Switch, Modal, FlatList, Platform, Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { COUNTRIES } from '../lib/countries';
+import { Alert } from '../components/ui/AppAlert';
 
 /* ── palette shortcuts ── */
 const C = {
@@ -136,6 +137,7 @@ export default function ProfileEditScreen({ navigation }) {
       setCountry(data.country || '');
       setCity(data.city || '');
       setIsPrivate(!!data.is_private);
+      if (data.country) { try { localStorage.setItem('sb_country', data.country); } catch {} }
     } catch {
       setDisplayName(authUser?.display_name || authUser?.username || '');
       setUsername(authUser?.username || '');
@@ -182,6 +184,8 @@ export default function ProfileEditScreen({ navigation }) {
         },
         token
       );
+      /* Sync country to shared localStorage key so LanguageRegionScreen stays in sync */
+      if (country) { try { localStorage.setItem('sb_country', country.trim()); } catch {} }
       /* Merge with authUser so computed fields (followers_count etc.) are preserved */
       await updateUser?.({ ...authUser, ...(updated || {}) });
       navigation.goBack();
@@ -190,6 +194,56 @@ export default function ProfileEditScreen({ navigation }) {
       Alert.alert('Hata', typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally { setSaving(false); }
   };
+
+  const handleCountryPick = (item) => {
+    setCountry(item.name);
+    setShowCountryPicker(false);
+    setCountryQuery('');
+    try { localStorage.setItem('sb_country', item.name); } catch {}
+  };
+
+  const CountrySheet = () => (
+    <View style={[cp.sheet, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={cp.handle} />
+      <View style={cp.headerRow}>
+        <Text style={[cp.title, { color: C.text }]}>Ülke Seç</Text>
+        <TouchableOpacity onPress={() => { setShowCountryPicker(false); setCountryQuery(''); }} style={cp.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="close" size={22} color={C.textMuted} />
+        </TouchableOpacity>
+      </View>
+      <View style={cp.searchRow}>
+        <Ionicons name="search-outline" size={16} color={C.textMuted} />
+        <TextInput
+          style={cp.searchInput}
+          placeholder="Ülke ara..."
+          placeholderTextColor={C.textMuted}
+          value={countryQuery}
+          onChangeText={setCountryQuery}
+          autoFocus={Platform.OS !== 'web'}
+        />
+        {countryQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setCountryQuery('')}>
+            <Ionicons name="close-circle" size={16} color={C.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
+      <FlatList
+        data={COUNTRIES.filter(c => c.name.toLowerCase().includes(countryQuery.toLowerCase()))}
+        keyExtractor={c => c.code}
+        keyboardShouldPersistTaps="handled"
+        style={{ maxHeight: 380 }}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={cp.optRow} onPress={() => handleCountryPick(item)} activeOpacity={0.72}>
+            <Text style={cp.flag}>{item.flag}</Text>
+            <Text style={[cp.optLabel, { color: country === item.name ? C.primary : C.text, fontWeight: country === item.name ? '700' : '500' }]}>
+              {item.name}
+            </Text>
+            {country === item.name && <Ionicons name="checkmark-circle" size={18} color={C.primary} />}
+          </TouchableOpacity>
+        )}
+      />
+    </View>
+  );
 
   const avatarSrc = avatarUrl ? { uri: avatarUrl } : { uri: `https://i.pravatar.cc/200?u=${authUser?.username}` };
 
@@ -356,50 +410,23 @@ export default function ProfileEditScreen({ navigation }) {
           <Ionicons name="chevron-down" size={16} color={C.textMuted} style={{ marginRight: 12 }} />
         </TouchableOpacity>
 
-        {/* Country modal */}
-        <Modal visible={showCountryPicker} animationType="slide" transparent onRequestClose={() => setShowCountryPicker(false)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
-            <View style={{ backgroundColor: '#130D22', borderRadius: 20, maxHeight: '75%', paddingBottom: 24 }}>
-              {/* Handle */}
-              <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 8 }}>
-                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)' }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12 }}>
-                <Text style={{ flex: 1, color: C.text, fontSize: 16, fontWeight: '700' }}>Ülke Seç</Text>
-                <TouchableOpacity onPress={() => setShowCountryPicker(false)} style={{ padding: 4 }}>
-                  <Ionicons name="close" size={22} color={C.textMuted} />
-                </TouchableOpacity>
-              </View>
-              {/* Search */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12, marginHorizontal: 16, marginBottom: 8, paddingHorizontal: 12 }}>
-                <Ionicons name="search-outline" size={16} color={C.textMuted} />
-                <TextInput
-                  style={{ flex: 1, color: C.text, fontSize: 15, paddingVertical: 10, paddingLeft: 8 }}
-                  placeholder="Ülke ara..."
-                  placeholderTextColor={C.textMuted}
-                  value={countryQuery}
-                  onChangeText={setCountryQuery}
-                  autoFocus
-                />
-              </View>
-              <FlatList
-                data={COUNTRIES.filter(c => c.name.toLowerCase().includes(countryQuery.toLowerCase()))}
-                keyExtractor={c => c.code}
-                keyboardShouldPersistTaps="handled"
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingHorizontal: 20, gap: 12 }}
-                    onPress={() => { setCountry(item.name); setShowCountryPicker(false); }}
-                  >
-                    <Text style={{ width: 34, fontSize: 22 }}>{item.flag}</Text>
-                    <Text style={{ flex: 1, color: country === item.name ? C.primary : C.text, fontSize: 15, fontWeight: country === item.name ? '700' : '500' }}>{item.name}</Text>
-                    {country === item.name && <Ionicons name="checkmark-circle" size={18} color={C.primary} />}
-                  </TouchableOpacity>
-                )}
-              />
+        {/* Country modal — web: View+absoluteFill, native: Modal */}
+        {Platform.OS === 'web' ? (
+          showCountryPicker ? (
+            <View style={[StyleSheet.absoluteFill, cp.overlay]} pointerEvents="box-none">
+              <Pressable style={StyleSheet.absoluteFill} onPress={() => { setShowCountryPicker(false); setCountryQuery(''); }} />
+              <CountrySheet />
             </View>
-          </View>
-        </Modal>
+          ) : null
+        ) : (
+          <Modal visible={showCountryPicker} animationType="slide" transparent onRequestClose={() => { setShowCountryPicker(false); setCountryQuery(''); }}>
+            <Pressable style={cp.overlay} onPress={() => { setShowCountryPicker(false); setCountryQuery(''); }}>
+              <Pressable onPress={e => e.stopPropagation()}>
+                <CountrySheet />
+              </Pressable>
+            </Pressable>
+          </Modal>
+        )}
 
         <FieldInput
           icon="location-outline"
@@ -559,4 +586,18 @@ const s = StyleSheet.create({
   switchInfo:  { flexDirection: 'row', alignItems: 'center', flex: 1 },
   switchLabel: { fontSize: 15, fontWeight: '500', color: C.text },
   switchSub:   { fontSize: 12, color: C.textMuted, marginTop: 2 },
+});
+
+const cp = StyleSheet.create({
+  overlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
+  sheet:     { backgroundColor: '#130D22', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderColor: 'rgba(192,132,252,0.15)' },
+  handle:    { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginTop: 12, marginBottom: 4 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12 },
+  title:     { fontSize: 17, fontWeight: '700' },
+  closeBtn:  { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12, marginHorizontal: 16, marginBottom: 8, paddingHorizontal: 12, gap: 8 },
+  searchInput: { flex: 1, color: '#fff', fontSize: 15, paddingVertical: 10 },
+  optRow:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingHorizontal: 20, gap: 12 },
+  flag:      { width: 34, fontSize: 22 },
+  optLabel:  { flex: 1, fontSize: 15 },
 });

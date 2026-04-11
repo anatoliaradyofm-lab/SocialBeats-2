@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
-  ActivityIndicator, Alert, Modal, Linking, Dimensions, Animated, RefreshControl, Share,
+  ActivityIndicator, Modal, Linking, Dimensions, Animated, RefreshControl, Share, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
@@ -17,6 +17,7 @@ import { getApiUrl } from '../services/api';
 import ProfileStoriesHighlights from '../components/profile/ProfileStoriesHighlights';
 import RichText from '../components/RichText';
 import { useTheme } from '../contexts/ThemeContext';
+import { Alert } from '../components/ui/AppAlert';
 
 const { width: SW } = Dimensions.get('window');
 const COVER_H = 105;
@@ -58,7 +59,17 @@ export default function UserProfileScreen({ navigation, route }) {
   const { colors }                = useTheme();
   const { t }                     = useTranslation();
   const insets                    = useSafeAreaInsets();
-  const { token, user: authUser } = useAuth();
+  const { token, user: authUser, isGuest } = useAuth();
+  const requireAuth = (cb) => {
+    if (isGuest || !token) {
+      Alert.alert('Giriş Gerekli', 'Bu özelliği kullanmak için giriş yapmanız gerekiyor.', [
+        { text: 'İptal', style: 'cancel' },
+        { text: 'Giriş Yap', onPress: () => navigation.navigate('Auth') },
+      ]);
+      return;
+    }
+    cb?.();
+  };
   const { username, requestId, notifId } = route.params || {};
 
   const [user,           setUser]           = useState(null);
@@ -74,6 +85,7 @@ export default function UserProfileScreen({ navigation, route }) {
   const [showReport,     setShowReport]     = useState(false);
   const [showAvatar,     setShowAvatar]     = useState(false);
   const [refreshing,     setRefreshing]     = useState(false);
+  const [userStories,    setUserStories]    = useState(null);
   const [reqStatus,      setReqStatus]      = useState(null); // null | 'loading_accept' | 'loading_reject' | 'accepted' | 'rejected'
   const scrollY = useRef(new Animated.Value(0)).current;
 
@@ -99,6 +111,17 @@ export default function UserProfileScreen({ navigation, route }) {
     setRefreshing(true);
     try { await loadUser(); } finally { setRefreshing(false); }
   }, [loadUser]);
+
+  // Load stories for this user
+  useEffect(() => {
+    if (!user?.id || !token) return;
+    api.get(`/stories/user/${user.id}`, token)
+      .then(res => {
+        const stories = Array.isArray(res) ? res : [];
+        setUserStories(stories.length > 0 ? stories : null);
+      })
+      .catch(() => setUserStories(null));
+  }, [user?.id, token]);
 
   useEffect(() => {
     if (!user?.id || !token || isOwnProfile) return;
@@ -126,6 +149,23 @@ export default function UserProfileScreen({ navigation, route }) {
         .then(r => setMutualFollowers(r?.users || [])).catch(() => {});
   }, [user?.id, token, isOwnProfile]);
 
+  // 30s live refresh — now-playing, taste match, listen stats
+  useEffect(() => {
+    if (!user?.id) return;
+    const isLocked = !!(user.is_private && !user.is_following && authUser?.username !== username);
+    if (isLocked) return;
+    const iv = setInterval(() => {
+      api.get(`/users/${user.id}/now-playing`, token)
+        .then(r => setNowPlaying(r?.now_playing || null)).catch(() => {});
+      api.get(`/users/${user.id}/listening-stats`, token)
+        .then(setListenStats).catch(() => {});
+      if (!isOwnProfile && token)
+        api.get(`/users/${user.id}/taste-match`, token)
+          .then(setTasteMatch).catch(() => {});
+    }, 30000);
+    return () => clearInterval(iv);
+  }, [user?.id, user?.is_private, user?.is_following, token, isOwnProfile, username]);
+
   if (loading || !user) {
     return (
       <View style={[s.root, { paddingTop: insets.top }]}>
@@ -141,10 +181,18 @@ export default function UserProfileScreen({ navigation, route }) {
     );
   }
 
-  const avatar     = user.avatar_url || `https://i.pravatar.cc/200?u=${user.username}`;
-  const isFollowing  = user.is_following || false;
-  const isLocked     = user.is_locked || (user.is_private && !isFollowing && !isOwnProfile);
+  const avatar        = user.avatar_url || `https://i.pravatar.cc/200?u=${user.username}`;
+  const isFollowing   = !isGuest && !user.is_blocked_by_me && (user.is_following || false);
+  const isBlockedByMe = !isGuest && !!user.is_blocked_by_me;
+  const isLocked      = !isBlockedByMe && (user.is_locked || (user.is_private && !isFollowing && !isOwnProfile));
   const requestStatus = user.friend_request_status || 'none';
+
+  const handleUnblock = async () => {
+    try {
+      await api.delete(`/social/unblock/${user.id}`, token);
+      setUser(u => ({ ...u, is_blocked_by_me: false }));
+    } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.unblockFailed')); }
+  };
 
   const genres = listenStats?.top_genres || [];
 
@@ -216,9 +264,41 @@ export default function UserProfileScreen({ navigation, route }) {
 
         {/* ── Identity block ── */}
         <View style={s.identityBlock}>
-          {/* Avatar */}
-          <TouchableOpacity style={s.avatarRing} activeOpacity={0.9} onPress={() => setShowAvatar(true)}>
-            <Image source={{ uri: avatar }} style={s.avatar} />
+          {/* Avatar — tap opens stories if any, else fullscreen avatar */}
+          <TouchableOpacity
+            style={[s.avatarRing, userStories && { borderColor: 'transparent', padding: 3 }]}
+            activeOpacity={0.9}
+            onPress={() => {
+              if (userStories) {
+                navigation.navigate('StoryViewer', {
+                  feed: [{
+                    user_id: user.id,
+                    username: user.username,
+                    user_avatar: user.avatar_url,
+                    user_display_name: user.display_name || user.username,
+                    stories: userStories,
+                  }],
+                  startUserIndex: 0,
+                  startStoryIndex: 0,
+                });
+              } else {
+                setShowAvatar(true);
+              }
+            }}
+          >
+            {userStories ? (
+              <LinearGradient
+                colors={['#FBBF24', '#F43F5E', '#9333EA']}
+                start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }}
+                style={{ width: '100%', height: '100%', borderRadius: 45, padding: 3, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <View style={{ width: '100%', height: '100%', borderRadius: 42, borderWidth: 2, borderColor: '#08060F', overflow: 'hidden' }}>
+                  <Image source={{ uri: avatar }} style={{ width: '100%', height: '100%' }} />
+                </View>
+              </LinearGradient>
+            ) : (
+              <Image source={{ uri: avatar }} style={s.avatar} />
+            )}
             {nowPlaying && (
               <View style={s.nowDot}>
                 <Ionicons name="musical-note" size={7} color="#fff" />
@@ -354,13 +434,36 @@ export default function UserProfileScreen({ navigation, route }) {
             </View>
           )}
 
-          {/* CTA buttons */}
-          {!isOwnProfile && authUser && (
+          {/* CTA buttons — misafir için giriş yap banner'ı */}
+          {!isOwnProfile && isGuest && (
+            <TouchableOpacity
+              style={{ flexDirection:'row', alignItems:'center', gap:10, backgroundColor:'rgba(192,132,252,0.08)',
+                borderWidth:1, borderColor:'rgba(192,132,252,0.2)', borderRadius:14, padding:14, marginBottom:16 }}
+              onPress={() => navigation.navigate('Auth')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="person-add-outline" size={20} color="#C084FC" />
+              <View style={{ flex:1 }}>
+                <Text style={{ fontSize:13, fontWeight:'700', color:'#C084FC' }}>Takip etmek için giriş yap</Text>
+                <Text style={{ fontSize:11, color:'rgba(248,248,248,0.4)', marginTop:2 }}>Giriş yap veya kayıt ol</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="rgba(192,132,252,0.5)" />
+            </TouchableOpacity>
+          )}
+          {!isOwnProfile && authUser && !isGuest && isBlockedByMe && (
+            <View style={s.ctaRow}>
+              <TouchableOpacity style={s.unblockBtn} onPress={handleUnblock}>
+                <Ionicons name="ban-outline" size={15} color="#F87171" />
+                <Text style={s.unblockTx}>{t('common.unblock')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {!isOwnProfile && authUser && !isGuest && !isBlockedByMe && (
             <View style={s.ctaRow}>
               <TouchableOpacity
                 style={[s.followBtn, isFollowing && s.followBtnActive, requestStatus === 'sent' && s.followBtnPending]}
                 disabled={requestStatus === 'sent'}
-                onPress={async () => {
+                onPress={() => requireAuth(async () => {
                   try {
                     if (isFollowing) {
                       await api.delete(`/social/follow/${user.id}`, token);
@@ -374,7 +477,7 @@ export default function UserProfileScreen({ navigation, route }) {
                       }
                     }
                   } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
-                }}
+                })}
               >
                 <Ionicons
                   name={isFollowing ? 'checkmark' : requestStatus === 'sent' ? 'time-outline' : isLocked ? 'lock-closed-outline' : 'person-add-outline'}
@@ -386,11 +489,14 @@ export default function UserProfileScreen({ navigation, route }) {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={s.msgBtn} onPress={async () => {
-                try {
-                  const conv = await api.post('/messages/conversations', { participant_ids: [user.id], is_group: false }, token);
-                  navigation.navigate('Chat', { conversationId: conv.id, otherUser: user });
-                } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('profile.chatFailed')); }
+              <TouchableOpacity style={s.msgBtn} onPress={() => {
+                navigation.navigate('Chat', {
+                  conversationId: null,
+                  recipientId: user.id,
+                  recipientUsername: user.username,
+                  recipientName: user.display_name || user.username,
+                  recipientAvatar: user.avatar_url,
+                });
               }}>
                 <Ionicons name="chatbubble-ellipses-outline" size={18} color="#C084FC" />
                 <Text style={s.msgTx}>Mesaj</Text>
@@ -431,6 +537,25 @@ export default function UserProfileScreen({ navigation, route }) {
             }
           }}
         />}
+
+        {/* ── Ortak Takipçiler ── */}
+        {!isOwnProfile && displayMutualFollowers.length > 0 ? (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Ortak Takipçiler</Text>
+            <View style={s.mutualCard}>
+              <View style={s.mutualAvatars}>
+                {displayMutualFollowers.slice(0,4).map((u,i) => (
+                  <Image key={i} source={{ uri: u.avatar_url || `https://i.pravatar.cc/40?u=${u.username}` }}
+                    style={[s.mutualAvatar, { marginLeft: i === 0 ? 0 : -10, zIndex: 4-i }]} />
+                ))}
+              </View>
+              <Text style={s.mutualTx} numberOfLines={2}>
+                <Text style={s.mutualName}>{displayMutualFollowers[0]?.display_name || displayMutualFollowers[0]?.username}</Text>
+                {displayMutualFollowers.length > 1 ? ` ve ${displayMutualFollowers.length - 1} kişi daha takip ediyor` : ' takip ediyor'}
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {/* ── Taste Match (other users) ── */}
         {!isOwnProfile && tasteMatch?.match_percentage != null ? (
@@ -478,6 +603,33 @@ export default function UserProfileScreen({ navigation, route }) {
           </View>
         ) : null; })()}
 
+        {/* ── Now Playing ── */}
+        {nowPlaying ? (
+          <View style={s.section}>
+            <View style={s.nowCard}>
+              <LinearGradient
+                colors={['rgba(192,132,252,0.15)', 'rgba(251,146,60,0.06)']}
+                style={StyleSheet.absoluteFill} start={{ x:0, y:0 }} end={{ x:1, y:1 }} />
+              <View style={s.nowLeft}>
+                <Image
+                  source={{ uri: nowPlaying.cover_url || `https://picsum.photos/seed/${nowPlaying.title}/80/80` }}
+                  style={s.nowCover}
+                />
+              </View>
+              <View style={s.nowMid}>
+                <Text style={s.nowTag}>ŞU AN DİNLİYOR</Text>
+                <Text style={s.nowTitle} numberOfLines={1}>{nowPlaying.title}</Text>
+                <Text style={s.nowArtist} numberOfLines={1}>{nowPlaying.artist || ''}</Text>
+              </View>
+              <View style={s.nowWaves}>
+                {[10, 18, 12, 22, 14, 20, 10].map((h, i) => (
+                  <View key={i} style={[s.wave, { height: h, opacity: i % 2 === 0 ? 1 : 0.5 }]} />
+                ))}
+              </View>
+            </View>
+          </View>
+        ) : null}
+
         {/* ── Favori Sanatçılar ── */}
         {!isLocked && displayFavArtists.length > 0 ? (
           <View style={s.section}>
@@ -513,52 +665,6 @@ export default function UserProfileScreen({ navigation, route }) {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </View>
-        ) : null}
-
-        {/* ── Ortak Takipçiler ── */}
-        {!isOwnProfile && displayMutualFollowers.length > 0 ? (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Ortak Takipçiler</Text>
-            <View style={s.mutualCard}>
-              <View style={s.mutualAvatars}>
-                {displayMutualFollowers.slice(0,4).map((u,i) => (
-                  <Image key={i} source={{ uri: u.avatar_url || `https://i.pravatar.cc/40?u=${u.username}` }}
-                    style={[s.mutualAvatar, { marginLeft: i === 0 ? 0 : -10, zIndex: 4-i }]} />
-                ))}
-              </View>
-              <Text style={s.mutualTx} numberOfLines={2}>
-                <Text style={s.mutualName}>{displayMutualFollowers[0]?.display_name || displayMutualFollowers[0]?.username}</Text>
-                {displayMutualFollowers.length > 1 ? ` ve ${displayMutualFollowers.length - 1} kişi daha takip ediyor` : ' takip ediyor'}
-              </Text>
-            </View>
-          </View>
-        ) : null}
-
-        {/* ── Now Playing ── */}
-        {nowPlaying ? (
-          <View style={s.section}>
-            <View style={s.nowCard}>
-              <LinearGradient
-                colors={['rgba(192,132,252,0.15)', 'rgba(251,146,60,0.06)']}
-                style={StyleSheet.absoluteFill} start={{ x:0, y:0 }} end={{ x:1, y:1 }} />
-              <View style={s.nowLeft}>
-                <Image
-                  source={{ uri: nowPlaying.cover_url || `https://picsum.photos/seed/${nowPlaying.title}/80/80` }}
-                  style={s.nowCover}
-                />
-              </View>
-              <View style={s.nowMid}>
-                <Text style={s.nowTag}>ŞU AN DİNLİYOR</Text>
-                <Text style={s.nowTitle} numberOfLines={1}>{nowPlaying.title}</Text>
-                <Text style={s.nowArtist} numberOfLines={1}>{nowPlaying.artist || ''}</Text>
-              </View>
-              <View style={s.nowWaves}>
-                {[10, 18, 12, 22, 14, 20, 10].map((h, i) => (
-                  <View key={i} style={[s.wave, { height: h, opacity: i % 2 === 0 ? 1 : 0.5 }]} />
-                ))}
-              </View>
-            </View>
           </View>
         ) : null}
 
@@ -623,66 +729,165 @@ export default function UserProfileScreen({ navigation, route }) {
       </Modal>
 
       {/* ── More menu ── */}
-      <Modal visible={showMenu} transparent animationType="fade">
-        <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
-          <View style={s.sheet} onStartShouldSetResponder={() => true}>
-            {[
-              { icon:'ban-outline',    color:'#F87171', label: t('common.block'),    danger: true,
-                fn: async () => { await api.post(`/social/block/${user.id}`, {}, token); Alert.alert(t('profile.blocked'), t('profile.userBlocked')); navigation.goBack(); } },
-              { icon:'eye-off-outline',color:'#FBBF24', label: t('profile.restricted'),
-                fn: async () => { await api.post(`/social/restrict/${user.id}`, {}, token); Alert.alert(t('profile.restricted'), t('profile.userRestricted')); } },
-              { icon: isMuted ? 'volume-high-outline' : 'notifications-off-outline',
-                color:'#60A5FA', label: isMuted ? t('common.unmute') : t('common.mute'),
-                fn: async () => {
-                  if (isMuted) { await api.delete(`/social/mute/${user.id}`, token); setIsMuted(false); }
-                  else { await api.post(`/social/mute/${user.id}?mute_stories=true&mute_posts=true&mute_notifications=true`, {}, token); setIsMuted(true); }
-                } },
-              { icon:'flag-outline',   color:'#FB923C', label: t('profile.reportUser'),
-                fn: () => { setShowMenu(false); setShowReport(true); } },
-            ].map((item, idx) => (
-              <TouchableOpacity key={idx} style={s.menuRow} onPress={async () => {
-                setShowMenu(false);
-                try { await item.fn(); }
-                catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
-              }}>
-                <View style={[s.menuIcon, { backgroundColor: item.color + '22' }]}>
-                  <Ionicons name={item.icon} size={18} color={item.color} />
-                </View>
-                <Text style={[s.menuTx, item.danger && { color:'#F87171' }]}>{item.label}</Text>
-                <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
+      {/* ── Menu sheet ── */}
+      {Platform.OS === 'web' ? (
+        showMenu ? (
+          <View style={{ position:'absolute', top:0, left:0, right:0, bottom:0, zIndex:100 }}>
+            <TouchableOpacity
+              style={{ position:'absolute', top:0, left:0, right:0, bottom:0, backgroundColor:'rgba(8,6,15,0.78)' }}
+              activeOpacity={1}
+              onPress={() => setShowMenu(false)}
+            />
+            <View style={[s.sheet, { position:'absolute', bottom:0, left:0, right:0, paddingBottom: insets.bottom + 12 }]}>
+              <View style={s.sheetHandle} />
+              {[
+                ...(isBlockedByMe ? [
+                  { icon:'ban-outline', color:'#4ADE80', label: t('common.unblock'),
+                    fn: async () => { await handleUnblock(); } },
+                ] : !isGuest ? [
+                  { icon:'ban-outline',    color:'#F87171', label: t('common.block'),    danger: true,
+                    fn: async () => {
+                      await api.post(`/social/block/${user.id}`, {}, token);
+                      setUser(u => ({ ...u, is_following: false, is_blocked_by_me: true, followers_count: Math.max(0, (u.followers_count || 0) - 1) }));
+                      Alert.alert(t('profile.blocked'), t('profile.userBlocked'));
+                      navigation.goBack();
+                    } },
+                  { icon:'eye-off-outline',color:'#FBBF24', label: t('profile.restrict'),
+                    fn: async () => { await api.post(`/social/restrict/${user.id}`, {}, token); Alert.alert(t('profile.restricted'), t('profile.userRestricted')); } },
+                  { icon: isMuted ? 'volume-high-outline' : 'notifications-off-outline',
+                    color:'#60A5FA', label: isMuted ? t('common.unmute') : t('common.mute'),
+                    fn: async () => {
+                      if (isMuted) { await api.delete(`/social/mute/${user.id}`, token); setIsMuted(false); }
+                      else { await api.post(`/social/mute/${user.id}?mute_stories=true&mute_posts=true&mute_notifications=true`, {}, token); setIsMuted(true); }
+                    } },
+                ] : []),
+                { icon:'flag-outline', color:'#FB923C', label: t('profile.reportUser'),
+                  fn: () => { setShowMenu(false); setShowReport(true); } },
+              ].map((item, idx) => (
+                <TouchableOpacity key={idx} style={s.menuRow} onPress={async () => {
+                  setShowMenu(false);
+                  try { await item.fn(); }
+                  catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
+                }}>
+                  <View style={[s.menuIcon, { backgroundColor: item.color + '22' }]}>
+                    <Ionicons name={item.icon} size={18} color={item.color} />
+                  </View>
+                  <Text style={[s.menuTx, item.danger && { color:'#F87171' }]}>{item.label}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={s.cancelBtn} onPress={() => setShowMenu(false)}>
+                <Text style={s.cancelTx}>{t('common.cancel')}</Text>
               </TouchableOpacity>
-            ))}
-            <TouchableOpacity style={s.cancelBtn} onPress={() => setShowMenu(false)}>
-              <Text style={s.cancelTx}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
+            </View>
           </View>
-        </TouchableOpacity>
-      </Modal>
+        ) : null
+      ) : (
+        <Modal visible={showMenu} transparent animationType="slide" onRequestClose={() => setShowMenu(false)}>
+          <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
+            <View style={[s.sheet, { paddingBottom: insets.bottom + 12 }]} onStartShouldSetResponder={() => true}>
+              <View style={s.sheetHandle} />
+              {[
+                ...(isBlockedByMe ? [
+                  { icon:'ban-outline', color:'#4ADE80', label: t('common.unblock'),
+                    fn: async () => { await handleUnblock(); } },
+                ] : !isGuest ? [
+                  { icon:'ban-outline',    color:'#F87171', label: t('common.block'),    danger: true,
+                    fn: async () => {
+                      await api.post(`/social/block/${user.id}`, {}, token);
+                      setUser(u => ({ ...u, is_following: false, is_blocked_by_me: true, followers_count: Math.max(0, (u.followers_count || 0) - 1) }));
+                      Alert.alert(t('profile.blocked'), t('profile.userBlocked'));
+                      navigation.goBack();
+                    } },
+                  { icon:'eye-off-outline',color:'#FBBF24', label: t('profile.restrict'),
+                    fn: async () => { await api.post(`/social/restrict/${user.id}`, {}, token); Alert.alert(t('profile.restricted'), t('profile.userRestricted')); } },
+                  { icon: isMuted ? 'volume-high-outline' : 'notifications-off-outline',
+                    color:'#60A5FA', label: isMuted ? t('common.unmute') : t('common.mute'),
+                    fn: async () => {
+                      if (isMuted) { await api.delete(`/social/mute/${user.id}`, token); setIsMuted(false); }
+                      else { await api.post(`/social/mute/${user.id}?mute_stories=true&mute_posts=true&mute_notifications=true`, {}, token); setIsMuted(true); }
+                    } },
+                ] : []),
+                { icon:'flag-outline', color:'#FB923C', label: t('profile.reportUser'),
+                  fn: () => { setShowMenu(false); setShowReport(true); } },
+              ].map((item, idx) => (
+                <TouchableOpacity key={idx} style={s.menuRow} onPress={async () => {
+                  setShowMenu(false);
+                  try { await item.fn(); }
+                  catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('common.operationFailed')); }
+                }}>
+                  <View style={[s.menuIcon, { backgroundColor: item.color + '22' }]}>
+                    <Ionicons name={item.icon} size={18} color={item.color} />
+                  </View>
+                  <Text style={[s.menuTx, item.danger && { color:'#F87171' }]}>{item.label}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={s.cancelBtn} onPress={() => setShowMenu(false)}>
+                <Text style={s.cancelTx}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
 
-      {/* ── Report modal ── */}
-      <Modal visible={showReport} transparent animationType="slide">
-        <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={() => setShowReport(false)}>
-          <View style={[s.sheet, { paddingBottom: insets.bottom + 24 }]} onStartShouldSetResponder={() => true}>
-            <Text style={s.reportTitle}>{t('profile.reportTitle', { username: user?.username })}</Text>
-            <Text style={s.reportSub}>{t('profile.reportWhy')}</Text>
-            {REPORT_REASONS(t).map(r => (
-              <TouchableOpacity key={r.value} style={s.reportRow} onPress={async () => {
-                try {
-                  await api.post('/reports', { reported_id: user.id, report_type: 'user', reason: r.value }, token);
-                  setShowReport(false);
-                  Alert.alert(t('profile.reportThanks'), t('profile.reportReceived'));
-                } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('profile.reportFailed')); }
-              }}>
-                <Text style={s.reportRowTx}>{r.label}</Text>
-                <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
+      {/* ── Report sheet ── */}
+      {Platform.OS === 'web' ? (
+        showReport ? (
+          <View style={{ position:'absolute', top:0, left:0, right:0, bottom:0, zIndex:100 }}>
+            <TouchableOpacity
+              style={{ position:'absolute', top:0, left:0, right:0, bottom:0, backgroundColor:'rgba(8,6,15,0.78)' }}
+              activeOpacity={1}
+              onPress={() => setShowReport(false)}
+            />
+            <View style={[s.sheet, { position:'absolute', bottom:0, left:0, right:0, paddingBottom: insets.bottom + 24 }]}>
+              <View style={s.sheetHandle} />
+              <Text style={s.reportTitle}>{t('profile.reportTitle', { username: user?.username })}</Text>
+              <Text style={s.reportSub}>{t('profile.reportWhy')}</Text>
+              {REPORT_REASONS(t).map(r => (
+                <TouchableOpacity key={r.value} style={s.reportRow} onPress={async () => {
+                  try {
+                    await api.post('/reports', { reported_id: user.id, report_type: 'user', reason: r.value }, token);
+                    setShowReport(false);
+                    Alert.alert(t('profile.reportThanks'), t('profile.reportReceived'));
+                  } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('profile.reportFailed')); }
+                }}>
+                  <Text style={s.reportRowTx}>{r.label}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={s.cancelBtn} onPress={() => setShowReport(false)}>
+                <Text style={s.cancelTx}>{t('common.cancel')}</Text>
               </TouchableOpacity>
-            ))}
-            <TouchableOpacity style={s.cancelBtn} onPress={() => setShowReport(false)}>
-              <Text style={s.cancelTx}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
+            </View>
           </View>
-        </TouchableOpacity>
-      </Modal>
+        ) : null
+      ) : (
+        <Modal visible={showReport} transparent animationType="slide" onRequestClose={() => setShowReport(false)}>
+          <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={() => setShowReport(false)}>
+            <View style={[s.sheet, { paddingBottom: insets.bottom + 24 }]} onStartShouldSetResponder={() => true}>
+              <View style={s.sheetHandle} />
+              <Text style={s.reportTitle}>{t('profile.reportTitle', { username: user?.username })}</Text>
+              <Text style={s.reportSub}>{t('profile.reportWhy')}</Text>
+              {REPORT_REASONS(t).map(r => (
+                <TouchableOpacity key={r.value} style={s.reportRow} onPress={async () => {
+                  try {
+                    await api.post('/reports', { reported_id: user.id, report_type: 'user', reason: r.value }, token);
+                    setShowReport(false);
+                    Alert.alert(t('profile.reportThanks'), t('profile.reportReceived'));
+                  } catch (e) { Alert.alert(t('common.error'), e?.data?.detail || t('profile.reportFailed')); }
+                }}>
+                  <Text style={s.reportRowTx}>{r.label}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(248,248,248,0.2)" />
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={s.cancelBtn} onPress={() => setShowReport(false)}>
+                <Text style={s.cancelTx}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -766,6 +971,12 @@ const s = StyleSheet.create({
   msgBtn:       { flexDirection:'row', alignItems:'center', gap:7, paddingVertical:13, paddingHorizontal:20,
                   borderRadius:24, backgroundColor:'rgba(192,132,252,0.1)', borderWidth:1.5, borderColor:'rgba(192,132,252,0.3)' },
   msgTx:        { color:'#C084FC', fontSize:14, fontWeight:'600' },
+  unblockBtn:   { flex:1, flexDirection:'row', alignItems:'center', justifyContent:'center', gap:7,
+                  backgroundColor:'rgba(248,113,113,0.1)', borderWidth:1.5, borderColor:'rgba(248,113,113,0.4)', paddingVertical:13, borderRadius:24 },
+  unblockTx:    { color:'#F87171', fontSize:14, fontWeight:'700' },
+  blockedBadge: { flexDirection:'row', alignItems:'center', gap:6, paddingVertical:13, paddingHorizontal:18,
+                  borderRadius:24, backgroundColor:'rgba(248,113,113,0.06)', borderWidth:1, borderColor:'rgba(248,113,113,0.2)' },
+  blockedBadgeTx:{ color:'rgba(248,113,113,0.7)', fontSize:13, fontWeight:'500' },
 
   /* Sections */
   section:      { paddingHorizontal:20, paddingTop:8 },
@@ -820,9 +1031,10 @@ const s = StyleSheet.create({
   artistPlaysTx:{ fontSize:12, color:'rgba(248,248,248,0.3)' },
 
   /* Modals */
-  overlay:      { flex:1, backgroundColor:'rgba(8,6,15,0.78)', justifyContent:'flex-end' },
+  overlay:      { flex:1, backgroundColor:'rgba(8,6,15,0.78)', justifyContent:'flex-end', zIndex:100 },
   sheet:        { backgroundColor:'#120E20', borderTopLeftRadius:26, borderTopRightRadius:26,
                   padding:24, borderWidth:1, borderColor:'rgba(255,255,255,0.07)' },
+  sheetHandle:  { width:40, height:4, borderRadius:2, backgroundColor:'rgba(255,255,255,0.18)', alignSelf:'center', marginBottom:16 },
   menuRow:      { flexDirection:'row', alignItems:'center', gap:14, paddingVertical:14,
                   borderBottomWidth:1, borderBottomColor:'rgba(255,255,255,0.05)' },
   menuIcon:     { width:36, height:36, borderRadius:18, alignItems:'center', justifyContent:'center' },

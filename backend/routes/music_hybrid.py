@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
+import asyncio
 import os
 import httpx
 import re
@@ -263,3 +264,225 @@ async def _resolve_transcoding(transcoding_url: str, client_id: str) -> str | No
     except Exception as e:
         logger.error(f"[resolve-transcoding] {e}")
         return None
+
+
+# ---------------------------------------------------------------------------
+# Home — günlük ana sayfa verileri (24h cache)
+# ---------------------------------------------------------------------------
+
+def _fmt_plays(n: int) -> str:
+    """Oynatma sayısını okunabilir formata çevirir: 1234567 → '1.2M'"""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.0f}K"
+    return str(n)
+
+
+def _parse_sc_chart_track(item: dict, rank: int) -> dict | None:
+    """SC charts collection item'ını düz track dict'e çevirir."""
+    t = item.get("track") or item  # charts wrap in {"score":…, "track":{…}}
+    if not t or not t.get("id"):
+        return None
+    tcs = t.get("media", {}).get("transcodings", [])
+    full_prog = next((x for x in tcs if x.get("format", {}).get("protocol") == "progressive" and not x.get("snipped")), None)
+    full_hls  = next((x for x in tcs if x.get("format", {}).get("protocol") == "hls"         and not x.get("snipped")), None)
+    tc = full_prog or full_hls
+    track_id = str(t["id"])
+    return {
+        "id":          track_id,
+        "rank":        rank,
+        "title":       t.get("title", ""),
+        "artist":      t.get("user", {}).get("username", ""),
+        "artist_name": t.get("user", {}).get("username", ""),
+        "cover_url":   (t.get("artwork_url") or "").replace("-large", "-t500x500"),
+        "thumbnail":   (t.get("artwork_url") or "").replace("-large", "-t500x500"),
+        "duration":    t.get("duration", 0) // 1000,
+        "plays_approx": _fmt_plays(t.get("playback_count") or 0),
+        "source":      "soundcloud",
+        "audio_url":   f"/music-hybrid/stream/{track_id}",
+        # store transcoding for stream resolution
+        "_tc_url":     tc["url"] if tc else None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Ülke → SoundCloud region kodu eşlemesi
+# ---------------------------------------------------------------------------
+
+# SC'nin chart API'sinde desteklediği region kodları (ISO alpha-2)
+_SC_SUPPORTED_REGIONS: set[str] = {
+    "TR", "US", "GB", "DE", "FR", "BR", "AU", "CA", "IT", "ES",
+    "NL", "SE", "NZ", "IE", "NO", "DK", "FI", "AT", "CH", "BE",
+    "PL", "RU", "JP", "KR", "IN", "MX", "AR", "CL", "CO", "ZA",
+    "PT", "HU", "CZ", "RO", "GR", "IL", "NG", "EG", "ID", "PH",
+    "TH", "MY", "SG", "PK", "UA", "AZ",
+}
+
+# Ülke adı (küçük harf) veya ISO kodu → ISO alpha-2
+_COUNTRY_TO_ISO: dict[str, str] = {
+    # ISO kodlar (kendileri)
+    **{c: c for c in _SC_SUPPORTED_REGIONS},
+    # Türkçe ve İngilizce isimler
+    "turkey": "TR", "türkiye": "TR", "turkiye": "TR",
+    "united states": "US", "usa": "US", "america": "US",
+    "united kingdom": "GB", "uk": "GB", "britain": "GB", "england": "GB",
+    "germany": "DE", "deutschland": "DE", "almanya": "DE",
+    "france": "FR", "fransa": "FR",
+    "brazil": "BR", "brasil": "BR", "brezilya": "BR",
+    "australia": "AU", "avustralya": "AU",
+    "canada": "CA", "kanada": "CA",
+    "italy": "IT", "italia": "IT", "italya": "IT",
+    "spain": "ES", "españa": "ES", "ispanya": "ES",
+    "netherlands": "NL", "holland": "NL", "hollanda": "NL",
+    "sweden": "SE", "isvec": "SE", "isveç": "SE",
+    "new zealand": "NZ", "yeni zelanda": "NZ",
+    "ireland": "IE", "irlanda": "IE",
+    "norway": "NO", "norveç": "NO", "norvec": "NO",
+    "denmark": "DK", "danimarka": "DK",
+    "finland": "FI", "finlandiya": "FI",
+    "austria": "AT", "avusturya": "AT",
+    "switzerland": "CH", "isvicre": "CH", "isviçre": "CH",
+    "belgium": "BE", "belçika": "BE", "belcika": "BE",
+    "poland": "PL", "polonya": "PL",
+    "russia": "RU", "rusya": "RU",
+    "japan": "JP", "japonya": "JP",
+    "south korea": "KR", "korea": "KR", "güney kore": "KR", "guney kore": "KR",
+    "india": "IN", "hindistan": "IN",
+    "mexico": "MX", "méxico": "MX", "meksika": "MX",
+    "argentina": "AR", "arjantin": "AR",
+    "chile": "CL", "şili": "CL", "sili": "CL",
+    "colombia": "CO", "kolombiya": "CO",
+    "south africa": "ZA", "güney afrika": "ZA", "guney afrika": "ZA",
+    "portugal": "PT", "portekiz": "PT",
+    "hungary": "HU", "macaristan": "HU",
+    "czech republic": "CZ", "czechia": "CZ", "çek cumhuriyeti": "CZ",
+    "romania": "RO", "romanya": "RO",
+    "greece": "GR", "yunanistan": "GR",
+    "israel": "IL", "israil": "IL",
+    "nigeria": "NG", "nijerya": "NG",
+    "egypt": "EG", "mısır": "EG", "misir": "EG",
+    "indonesia": "ID", "endonezya": "ID",
+    "philippines": "PH", "filipinler": "PH",
+    "thailand": "TH", "tayland": "TH",
+    "malaysia": "MY", "malezya": "MY",
+    "singapore": "SG", "singapur": "SG",
+    "pakistan": "PK",
+    "ukraine": "UA", "ukrayna": "UA",
+    "azerbaijan": "AZ", "azerbaycan": "AZ",
+}
+
+
+def _resolve_sc_region(country: str | None) -> str | None:
+    """Ülke adı veya ISO kodu → desteklenen SC region kodu (yoksa None → global)."""
+    if not country:
+        return None
+    key = country.strip().lower()
+    iso = _COUNTRY_TO_ISO.get(key) or _COUNTRY_TO_ISO.get(country.strip().upper())
+    return iso if iso and iso in _SC_SUPPORTED_REGIONS else None
+
+
+async def _fetch_sc_charts(kind: str, genre: str, limit: int, cid: str,
+                           region: str | None = None) -> list:  # type: ignore[return]
+    """SoundCloud charts endpoint'ini çağırır. region=None → global."""
+    try:
+        url = (
+            f"https://api-v2.soundcloud.com/charts"
+            f"?kind={kind}&genre={quote(genre)}&limit={limit}"
+            f"&client_id={cid}&linked_partitioning=1"
+        )
+        if region:
+            url += f"&region={quote(f'soundcloud:regions:{region}')}"
+        async with httpx.AsyncClient(headers=SC_HEADERS, timeout=12.0) as client:
+            resp = await client.get(url)
+            if resp.status_code in (401, 403):
+                return []
+            data = resp.json()
+            return data.get("collection", [])
+    except Exception as e:
+        logger.error(f"[charts] {kind}/{genre} region={region}: {e}")
+        return []
+
+
+async def _build_home_data(region: str | None = None) -> dict:
+    """SC'den günlük home verilerini çeker ve formatlar. region=None → global."""
+    cid = await sc_scraper.get_client_id()
+    if not cid:
+        cid = await sc_scraper.invalidate_and_refresh()
+    if not cid:
+        logger.error("[home] SC client_id alınamadı")
+        return {"featured": [], "trending": [], "for_you": []}
+
+    results = await asyncio.gather(
+        _fetch_sc_charts("trending", "soundcloud:genres:all-music", 20, cid, region),
+        _fetch_sc_charts("top",      "soundcloud:genres:all-music", 10, cid, region),
+    )
+    trending_raw: list = results[0]
+    for_you_raw: list  = results[1]
+
+    # Ülke verisi yoksa fallback: global trending
+    if not trending_raw and region:
+        logger.info(f"[home] {region} için veri yok, global'e düşüyor")
+        fallback = await asyncio.gather(
+            _fetch_sc_charts("trending", "soundcloud:genres:all-music", 20, cid, None),
+            _fetch_sc_charts("top",      "soundcloud:genres:all-music", 10, cid, None),
+        )
+        trending_raw = fallback[0]
+        for_you_raw  = fallback[1]
+
+    featured  = []
+    trending  = []
+    for_you   = []
+    labels    = ["TRENDING", "HOT NOW", "NEW RELEASE", "FEATURED", "TOP PICK",
+                 "VIRAL",    "CHART",   "RISING",      "POPULAR",  "MUST HEAR"]
+
+    for i, item in enumerate(trending_raw[:20]):
+        track = _parse_sc_chart_track(item, i + 1)
+        if not track:
+            continue
+        if track.get("_tc_url"):
+            await redis_client.set(f"sc_transcoding:{track['id']}", track["_tc_url"], ex=3600)
+        clean = {k: v for k, v in track.items() if k != "_tc_url"}
+        if i < 10:
+            clean["label"] = labels[i % len(labels)]
+            featured.append(clean)
+        else:
+            trending.append(clean)
+
+    for i, item in enumerate(for_you_raw):
+        track = _parse_sc_chart_track(item, i + 1)
+        if not track:
+            continue
+        if track.get("_tc_url"):
+            await redis_client.set(f"sc_transcoding:{track['id']}", track["_tc_url"], ex=3600)
+        clean = {k: v for k, v in track.items() if k != "_tc_url"}
+        for_you.append(clean)
+
+    return {"featured": featured, "trending": trending, "for_you": for_you,
+            "region": region or "global"}
+
+
+@music_hybrid_router.get("/home")
+async def get_home_data(
+    country: str | None = Query(None, description="Ülke adı veya ISO kodu (TR, Brazil, Türkiye…)"),
+    force_refresh: bool = Query(False),
+):
+    """
+    Ana sayfa müzik verileri — ülkeye özgü, 24 saat SoundCloud cache.
+    country parametresi boşsa global trending döner.
+    """
+    region = _resolve_sc_region(country)
+    cache_key = f"dashboard:home:v2:{region or 'global'}"
+
+    if not force_refresh:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+
+    data = await _build_home_data(region)
+
+    if data.get("featured") or data.get("trending"):
+        await redis_client.set(cache_key, json.dumps(data), ex=86400)  # 24 saat
+
+    logger.info(f"[home] region={region or 'global'} → {len(data['featured'])} featured")
+    return data

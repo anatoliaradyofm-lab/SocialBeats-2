@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, Image,
-  ActivityIndicator, Alert, ScrollView, Switch} from 'react-native';
+  ActivityIndicator, ScrollView, Switch} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -15,6 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getApiUrl } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Alert } from '../components/ui/AppAlert';
 
 const mediaUri = (uri) => {
   if (!uri) return null;

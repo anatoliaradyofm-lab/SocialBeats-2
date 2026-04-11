@@ -4,7 +4,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,6 +14,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Alert } from '../components/ui/AppAlert';
 
 const PRI   = '#C084FC';
 const GREEN = '#4ADE80';
@@ -24,7 +25,7 @@ export default function FollowingListScreen({ navigation, route }) {
   const styles = createStyles(colors);
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { token, user: currentUser } = useAuth();
+  const { token, user: currentUser, isGuest } = useAuth();
   const { userId, displayName } = route.params || {};
 
   // Kendi takip listemi mi yoksa başkasının mı?
@@ -38,16 +39,17 @@ export default function FollowingListScreen({ navigation, route }) {
   const [followStates, setFollowStates] = useState({});
 
   const load = useCallback(async () => {
-    if (!userId || !token) return;
+    if (!userId) return;
     try {
       const res = await api.get(`/users/${userId}/following?limit=100`, token);
       const list = res?.users || [];
       setUsers(list);
       // Kendi listesinde: tüm kişiler zaten takip ediliyor (true)
       // Başkasının listesinde: API'dan gelen is_following kullan
-      const ownList = !userId || userId === currentUser?.id || userId === 'preview-1';
+      const ownList = !isGuest && (!userId || userId === currentUser?.id || userId === 'preview-1');
       const states = {};
-      list.forEach(u => { states[u.id] = ownList ? true : !!u.is_following; });
+      // Misafir modunda takip durumu her zaman false
+      list.forEach(u => { states[u.id] = !isGuest && (ownList ? true : !!u.is_following); });
       setFollowStates(states);
       setLocked(false);
     } catch (e) {
@@ -62,6 +64,13 @@ export default function FollowingListScreen({ navigation, route }) {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const handleToggleFollow = async (item) => {
+    if (isGuest || !token) {
+      Alert.alert('Giriş Gerekli', 'Takip etmek için giriş yapmanız gerekiyor.', [
+        { text: 'İptal', style: 'cancel' },
+        { text: 'Giriş Yap', onPress: () => navigation.navigate('Auth') },
+      ]);
+      return;
+    }
     const isFollowing = followStates[item.id] ?? false;
     if (isFollowing) {
       Alert.alert(

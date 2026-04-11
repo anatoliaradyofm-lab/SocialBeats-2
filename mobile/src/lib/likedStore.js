@@ -25,7 +25,7 @@ export function isLiked(trackId) {
 }
 
 export function getLikedTracks() {
-  return Object.values(_store);
+  return Object.values(_store).sort((a, b) => (b.likedAt || 0) - (a.likedAt || 0));
 }
 
 export function toggleLike(track) {
@@ -43,6 +43,7 @@ export function toggleLike(track) {
       audio_url: track.audio_url || track.stream_url || '',
       duration:  track.duration || 0,
       source:    track.source || '',
+      likedAt:   Date.now(),
     };
   }
   _save();

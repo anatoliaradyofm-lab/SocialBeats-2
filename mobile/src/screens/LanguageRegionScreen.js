@@ -1,66 +1,174 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, FlatList, Platform, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
-import i18n from '../i18n';
+import i18n, { SUPPORTED_LANGUAGES } from '../i18n';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COUNTRIES } from '../lib/countries';
-
-const LANGUAGES = [
-  { code: 'tr', label: 'Türkçe',    flag: '🇹🇷' },
-  { code: 'en', label: 'English',   flag: '🇬🇧' },
-  { code: 'de', label: 'Deutsch',   flag: '🇩🇪' },
-  { code: 'fr', label: 'Français',  flag: '🇫🇷' },
-  { code: 'es', label: 'Español',   flag: '🇪🇸' },
-  { code: 'it', label: 'Italiano',  flag: '🇮🇹' },
-  { code: 'pt', label: 'Português', flag: '🇵🇹' },
-  { code: 'ru', label: 'Русский',   flag: '🇷🇺' },
-  { code: 'ar', label: 'العربية',   flag: '🇸🇦' },
-  { code: 'ja', label: '日本語',     flag: '🇯🇵' },
-  { code: 'ko', label: '한국어',     flag: '🇰🇷' },
-  { code: 'zh', label: '中文',       flag: '🇨🇳' },
-  { code: 'hi', label: 'हिन्दी',    flag: '🇮🇳' },
-  { code: 'id', label: 'Indonesia', flag: '🇮🇩' },
-  { code: 'nl', label: 'Nederlands',flag: '🇳🇱' },
-  { code: 'pl', label: 'Polski',    flag: '🇵🇱' },
-  { code: 'uk', label: 'Українська',flag: '🇺🇦' },
-  { code: 'vi', label: 'Tiếng Việt',flag: '🇻🇳' },
-  { code: 'th', label: 'ไทย',       flag: '🇹🇭' },
-  { code: 'ms', label: 'Melayu',    flag: '🇲🇾' },
-];
+import localizationService from '../services/LocalizationService';
+import { useTranslation } from 'react-i18next';
 
 export default function LanguageRegionScreen({ navigation }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
+
   const [selected, setSelected] = useState(() => {
     try { return localStorage.getItem('sb_language') || i18n.language || 'tr'; } catch { return i18n.language || 'tr'; }
   });
-  const [query, setQuery] = useState('');
+  const [showLangModal, setShowLangModal] = useState(false);
+  const [langQuery, setLangQuery] = useState('');
 
-  // Country state
   const [selectedCountry, setSelectedCountry] = useState(() => {
     try { return localStorage.getItem('sb_country') || ''; } catch { return ''; }
   });
   const [showCountryModal, setShowCountryModal] = useState(false);
   const [countryQuery, setCountryQuery] = useState('');
 
-  const handleSelect = (code) => {
+  const handleSelect = async (code) => {
     setSelected(code);
-    i18n.changeLanguage(code);
+    setShowLangModal(false);
+    setLangQuery('');
+    await i18n.changeLanguage(code);
     try { localStorage.setItem('sb_language', code); } catch {}
+    try { await localizationService.saveLanguage(code); } catch {}
   };
 
   const handleCountrySelect = (country) => {
     setSelectedCountry(country.name);
     setShowCountryModal(false);
+    setCountryQuery('');
     try { localStorage.setItem('sb_country', country.name); } catch {}
   };
 
-  const filtered = LANGUAGES.filter(l => l.label.toLowerCase().includes(query.toLowerCase()));
+  const selectedLang = SUPPORTED_LANGUAGES.find(l => l.code === selected);
+  const filteredLangs = SUPPORTED_LANGUAGES.filter(l =>
+    l.name.toLowerCase().includes(langQuery.toLowerCase())
+  );
   const filteredCountries = COUNTRIES.filter(c =>
     c.name.toLowerCase().includes(countryQuery.toLowerCase())
   );
+
+  const LangModalContent = () => (
+    <View style={[cm.sheet, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={cm.handle} />
+      <View style={cm.headerRow}>
+        <Text style={[cm.title, { color: colors.text }]}>{t('settings.selectLanguage')}</Text>
+        <TouchableOpacity onPress={() => { setShowLangModal(false); setLangQuery(''); }} style={cm.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="close" size={22} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View>
+      <View style={[cm.searchRow, { backgroundColor: 'rgba(255,255,255,0.07)' }]}>
+        <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+        <TextInput
+          style={[cm.searchInput, { color: colors.text }]}
+          placeholder={t('settings.searchLanguagePlaceholder')}
+          placeholderTextColor={colors.textMuted}
+          value={langQuery}
+          onChangeText={setLangQuery}
+          autoFocus={Platform.OS !== 'web'}
+        />
+        {langQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setLangQuery('')}>
+            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
+      <FlatList
+        data={filteredLangs}
+        keyExtractor={l => l.code}
+        keyboardShouldPersistTaps="handled"
+        style={{ maxHeight: 380 }}
+        renderItem={({ item }) => {
+          const active = selected === item.code;
+          return (
+            <TouchableOpacity
+              style={cm.optRow}
+              onPress={() => handleSelect(item.code)}
+              activeOpacity={0.72}
+            >
+              <Text style={cm.flag}>{item.flag}</Text>
+              <Text style={[cm.optLabel, { color: active ? colors.primary : colors.text, fontWeight: active ? '700' : '500' }]}>
+                {item.name}
+              </Text>
+              {active && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+            </TouchableOpacity>
+          );
+        }}
+      />
+    </View>
+  );
+
+  const CountryModalContent = () => (
+    <View style={[cm.sheet, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={cm.handle} />
+      <View style={cm.headerRow}>
+        <Text style={[cm.title, { color: colors.text }]}>{t('settings.selectCountryTitle')}</Text>
+        <TouchableOpacity onPress={() => { setShowCountryModal(false); setCountryQuery(''); }} style={cm.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="close" size={22} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View>
+      <View style={[cm.searchRow, { backgroundColor: 'rgba(255,255,255,0.07)' }]}>
+        <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+        <TextInput
+          style={[cm.searchInput, { color: colors.text }]}
+          placeholder={t('settings.searchCountry')}
+          placeholderTextColor={colors.textMuted}
+          value={countryQuery}
+          onChangeText={setCountryQuery}
+          autoFocus={Platform.OS !== 'web'}
+        />
+        {countryQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setCountryQuery('')}>
+            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
+      <FlatList
+        data={filteredCountries}
+        keyExtractor={c => c.code}
+        keyboardShouldPersistTaps="handled"
+        style={{ maxHeight: 380 }}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={cm.optRow}
+            onPress={() => handleCountrySelect(item)}
+            activeOpacity={0.72}
+          >
+            <Text style={cm.flag}>{item.flag}</Text>
+            <Text style={[cm.optLabel, { color: selectedCountry === item.name ? colors.primary : colors.text, fontWeight: selectedCountry === item.name ? '700' : '500' }]}>
+              {item.name}
+            </Text>
+            {selectedCountry === item.name && (
+              <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+            )}
+          </TouchableOpacity>
+        )}
+      />
+    </View>
+  );
+
+  const ModalWrapper = ({ visible, onClose, children }) => {
+    if (Platform.OS === 'web') {
+      if (!visible) return null;
+      return (
+        <View style={[StyleSheet.absoluteFill, cm.overlay]} pointerEvents="box-none">
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+          {children}
+        </View>
+      );
+    }
+    return (
+      <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+        <Pressable style={cm.overlay} onPress={onClose}>
+          <Pressable onPress={e => e.stopPropagation()}>
+            {children}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+  };
 
   return (
     <View style={[s.root, { backgroundColor: colors.background }]}>
@@ -74,100 +182,49 @@ export default function LanguageRegionScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: colors.text }]}>Dil ve Bölge</Text>
+        <Text style={[s.headerTitle, { color: colors.text }]}>{t('settings.languageRegion')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Country section */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
-        <Text style={[s.sectionTitle, { color: colors.textMuted }]}>BÖLGE</Text>
+      <View style={s.body}>
+        {/* Bölge */}
+        <Text style={[s.sectionTitle, { color: colors.textMuted }]}>{t('settings.region')}</Text>
         <TouchableOpacity
-          style={[s.card, { backgroundColor: colors.card, borderColor: colors.glassBorder, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }]}
+          style={[s.selectorRow, { backgroundColor: colors.card, borderColor: colors.glassBorder }]}
           onPress={() => { setCountryQuery(''); setShowCountryModal(true); }}
           activeOpacity={0.8}
         >
           <Text style={{ fontSize: 22 }}>
             {selectedCountry ? (COUNTRIES.find(c => c.name === selectedCountry)?.flag ?? '🌍') : '🌍'}
           </Text>
-          <Text style={{ flex: 1, color: selectedCountry ? colors.text : colors.textMuted, fontSize: 15, fontWeight: '600' }}>
-            {selectedCountry || 'Ülke seçin'}
+          <Text style={[s.selectorLabel, { color: selectedCountry ? colors.text : colors.textMuted }]}>
+            {selectedCountry || t('settings.selectCountry')}
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.textGhost} />
+        </TouchableOpacity>
+
+        {/* Dil */}
+        <Text style={[s.sectionTitle, { color: colors.textMuted, marginTop: 24 }]}>{t('settings.languageSection')}</Text>
+        <TouchableOpacity
+          style={[s.selectorRow, { backgroundColor: colors.card, borderColor: colors.glassBorder }]}
+          onPress={() => { setLangQuery(''); setShowLangModal(true); }}
+          activeOpacity={0.8}
+        >
+          <Text style={{ fontSize: 22 }}>{selectedLang?.flag ?? '🌐'}</Text>
+          <Text style={[s.selectorLabel, { color: colors.text }]}>
+            {selectedLang?.name ?? t('settings.selectLanguage')}
           </Text>
           <Ionicons name="chevron-forward" size={16} color={colors.textGhost} />
         </TouchableOpacity>
       </View>
 
-      {/* Country modal */}
-      <Modal visible={showCountryModal} animationType="slide" transparent onRequestClose={() => setShowCountryModal(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: '#130D22', borderRadius: 20, maxHeight: '80%', paddingBottom: 24 }}>
-            <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 8 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)' }} />
-            </View>
-            <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700', paddingHorizontal: 20, paddingBottom: 12 }}>Ülke Seç</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12, marginHorizontal: 16, marginBottom: 8, paddingHorizontal: 12 }}>
-              <Ionicons name="search-outline" size={16} color={colors.textMuted} />
-              <TextInput
-                style={{ flex: 1, color: colors.text, fontSize: 15, paddingVertical: 10, paddingLeft: 8 }}
-                placeholder="Ülke ara..."
-                placeholderTextColor={colors.textMuted}
-                value={countryQuery}
-                onChangeText={setCountryQuery}
-                autoFocus
-              />
-            </View>
-            <FlatList
-              data={filteredCountries}
-              keyExtractor={c => c.code}
-              keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingHorizontal: 20, gap: 12 }}
-                  onPress={() => handleCountrySelect(item)}
-                >
-                  <Text style={{ width: 34, fontSize: 22 }}>{item.flag}</Text>
-                  <Text style={{ flex: 1, color: selectedCountry === item.name ? colors.primary : colors.text, fontSize: 15, fontWeight: selectedCountry === item.name ? '700' : '500' }}>
-                    {item.name}
-                  </Text>
-                  {selectedCountry === item.name && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </View>
-      </Modal>
+      <ModalWrapper visible={showLangModal} onClose={() => { setShowLangModal(false); setLangQuery(''); }}>
+        <LangModalContent />
+      </ModalWrapper>
 
-      <Text style={[s.sectionTitle, { color: colors.textMuted, paddingHorizontal: 16, paddingTop: 16 }]}>DİL</Text>
-
-      <View style={[s.searchWrap, { backgroundColor: colors.surface, borderColor: colors.glassBorder, marginHorizontal: 16, marginTop: 8 }]}>
-        <Ionicons name="search-outline" size={18} color={colors.textMuted} />
-        <TextInput
-          style={[s.searchInput, { color: colors.text }]}
-          placeholder="Dil ara..."
-          placeholderTextColor={colors.textMuted}
-          value={query}
-          onChangeText={setQuery}
-        />
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 32 }]}>
-        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.glassBorder }]}>
-          {filtered.map((lang, i) => {
-            const active = selected === lang.code;
-            return (
-              <TouchableOpacity
-                key={lang.code}
-                style={[s.row, i < filtered.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}
-                onPress={() => handleSelect(lang.code)}
-                activeOpacity={0.72}
-              >
-                <Text style={s.flag}>{lang.flag}</Text>
-                <Text style={[s.langLabel, { color: colors.text }]}>{lang.label}</Text>
-                {active && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </ScrollView>
+      <ModalWrapper visible={showCountryModal} onClose={() => { setShowCountryModal(false); setCountryQuery(''); }}>
+        <CountryModalContent />
+      </ModalWrapper>
     </View>
   );
 }
@@ -177,12 +234,22 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1 },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
-  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderRadius: 14, borderWidth: 1 },
-  searchInput: { flex: 1, fontSize: 15 },
+  body: { paddingHorizontal: 16, paddingTop: 20 },
   sectionTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8 },
-  scroll: { padding: 16, gap: 16 },
-  card: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 16 },
-  flag: { fontSize: 22 },
-  langLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
+  selectorRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 20, borderWidth: 1 },
+  selectorLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
+});
+
+const cm = StyleSheet.create({
+  overlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
+  sheet:     { backgroundColor: '#130D22', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderColor: 'rgba(192,132,252,0.15)' },
+  handle:    { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginTop: 12, marginBottom: 4 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12 },
+  title:     { fontSize: 17, fontWeight: '700' },
+  closeBtn:  { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, marginHorizontal: 16, marginBottom: 8, paddingHorizontal: 12, gap: 8 },
+  searchInput: { flex: 1, color: '#fff', fontSize: 15, paddingVertical: 10 },
+  optRow:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingHorizontal: 20, gap: 12 },
+  flag:      { width: 34, fontSize: 22 },
+  optLabel:  { flex: 1, fontSize: 15 },
 });

@@ -7,7 +7,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity,
-  Image, ActivityIndicator, Dimensions, Alert,
+  Image, ActivityIndicator, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
+import { Alert } from '../components/ui/AppAlert';
 
 const { width: W } = Dimensions.get('window');
 const COL_W = (W - 48) / 2;

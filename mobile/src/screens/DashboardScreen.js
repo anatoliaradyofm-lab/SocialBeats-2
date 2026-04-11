@@ -1,7 +1,7 @@
 /**
  * DashboardScreen — NOVA Design System v3.0
  * 2025 Bento-grid home screen · Music social hub
- * Inspired by: Spotify Wrapped aesthetic · Apple Music 2025 · Mobbin top apps
+ * QENARA Design System · 2025 premium music experience
  * Hero cards · Story rings · Horizontal scrollers · Now trending
  */
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
@@ -19,7 +19,10 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
+import { getRecentTracks } from '../services/historyService';
+import { getLocale } from '../lib/localeStore';
 import NativeAdSlot from '../components/ads/NativeAdSlot';
+import { Alert } from '../components/ui/AppAlert';
 
 const { width: W } = Dimensions.get('window');
 const PHONE_INNER_W = 374; // web preview phone frame inner width (390 - 8*2 border)
@@ -27,49 +30,13 @@ const HERO_W = typeof window !== 'undefined'
   ? Math.round(PHONE_INNER_W * 0.72)   // web: fixed phone width
   : Math.round(W * 0.72);               // native: real screen width
 
-// ── Placeholder Data ──────────────────────────────────────────────────────────
-const FEATURED = [
-  { id:'f0', title:'Midnight Pulse',   artist:'Aurora X',       label:'NEW RELEASE', grad:['#1A0A2E','#9333EA','#08060F'] },
-  { id:'f1', title:'Neon Dreams',      artist:'The Midnight',   label:'TRENDING',    grad:['#7C2D12','#EA580C','#08060F'] },
-  { id:'f2', title:'Rose Gold',        artist:'Lana Wave',      label:'HOT NOW',     grad:['#500724','#9D174D','#08060F'] },
-  { id:'f3', title:'Electric Soul',    artist:'Daft Vision',    label:'NEW RELEASE', grad:['#1E3A5F','#2563EB','#08060F'] },
-  { id:'f4', title:'Crimson Tide',     artist:'Nova Beat',      label:'FEATURED',    grad:['#7F1D1D','#DC2626','#08060F'] },
-  { id:'f5', title:'Golden Hour',      artist:'Sun Collective', label:'TRENDING',    grad:['#78350F','#D97706','#08060F'] },
-  { id:'f6', title:'Deep Space',       artist:'Cosmo Funk',     label:'HOT NOW',     grad:['#0F172A','#4338CA','#08060F'] },
-  { id:'f7', title:'Velvet Underground',artist:'Echo Drift',   label:'NEW RELEASE', grad:['#500724','#BE185D','#08060F'] },
-  { id:'f8', title:'Arctic Flow',      artist:'Frost Wave',     label:'FEATURED',    grad:['#0C4A6E','#0891B2','#08060F'] },
-  { id:'f9', title:'Jungle Rhythm',    artist:'Tropik',         label:'TRENDING',    grad:['#14532D','#16A34A','#08060F'] },
-];
-
-const PLAYLISTS = Array.from({ length: 8 }, (_, i) => ({
-  id: `pl-${i}`,
-  name: ['Chill Vibes','Workout Mix','Rainy Day','Party Time','Focus Mode','Road Trip','Morning Coffee','Night Owl'][i],
-  cover: `https://picsum.photos/seed/pl${i * 7}/200/200`,
-  count: [24,18,32,15,20,28,12,22][i],
-}));
-
-const RECENT = Array.from({ length: 8 }, (_, i) => ({
-  id: `rc-${i}`,
-  title:  ['Blinding Lights','Levitating','Peaches','Stay','Kiss Me More','Good 4 U','Montero','Butter'][i],
-  artist: ['The Weeknd','Dua Lipa','Justin Bieber','Kid Laroi','Doja Cat','Olivia Rodrigo','Lil Nas X','BTS'][i],
-  cover:  `https://picsum.photos/seed/rc${i * 3}/120/120`,
-}));
-
+// ── Genres (static — görsel amaçlı) ──────────────────────────────────────────
 const GENRES = [
   { id: 'g0', label: 'Pop',        emoji: '✨', grad: ['#4C1D95', '#C084FC'] },
   { id: 'g1', label: 'Hip-Hop',    emoji: '🔥', grad: ['#7C2D12', '#FB923C'] },
   { id: 'g2', label: 'R&B',        emoji: '🎵', grad: ['#500724', '#DB2777'] },
   { id: 'g3', label: 'Electronic', emoji: '⚡', grad: ['#1E3A5F', '#60A5FA'] },
 ];
-
-const TRENDING = Array.from({ length: 6 }, (_, i) => ({
-  id: `tr-${i}`,
-  rank: i + 1,
-  title:  ['Shape of You','Dance Monkey','Rockstar','One Dance','Closer','Sunflower'][i],
-  artist: ['Ed Sheeran','Tones and I','Post Malone','Drake','Chainsmokers','Post Malone'][i],
-  cover:  `https://picsum.photos/seed/tr${i * 5}/80/80`,
-  plays:  ['1.2B','980M','850M','720M','650M','600M'][i],
-}));
 
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -87,8 +54,8 @@ function SectionHeader({ title, onSeeAll, colors }) {
   );
 }
 const sh = StyleSheet.create({
-  row: { flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingHorizontal:20, marginBottom:8, marginTop:6 },
-  title: { fontSize:15, fontWeight:'600', lineHeight:20, letterSpacing:-0.1 },
+  row: { flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingHorizontal:20, marginBottom:10, marginTop:20 },
+  title: { fontSize:17, fontWeight:'700', lineHeight:22, letterSpacing:-0.3 },
   link: { fontSize:12, fontWeight:'400', letterSpacing:0.1 },
 });
 
@@ -125,16 +92,67 @@ function useDragScroll() {
 
 export default function DashboardScreen({ navigation }) {
   const { colors }      = useTheme();
-  const { user, token } = useAuth();
+  const { user, token, isGuest } = useAuth();
+  const requireAuth = (screenOrCb) => {
+    if (isGuest || !token) {
+      Alert.alert('Giriş Gerekli', 'Bu özelliği kullanmak için giriş yapmanız gerekiyor.', [
+        { text: 'İptal', style: 'cancel' },
+        { text: 'Giriş Yap', onPress: () => navigation.navigate('Auth') },
+      ]);
+      return;
+    }
+    if (typeof screenOrCb === 'function') screenOrCb();
+    else navigation.navigate(screenOrCb);
+  };
   const { playTrack }   = usePlayer() || {};
   const { t }           = useTranslation();
   const featuredRef     = useDragScroll();
+  const forYouRef       = useDragScroll();
+  const recentRef       = useDragScroll();
   const insets          = useSafeAreaInsets();
 
   const [refreshing, setRefreshing]       = useState(false);
   const [unreadMsgCount, setUnreadMsgCount]   = useState(0);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
+
+  // ── Home Data (SoundCloud — 24h cache) ────────────────────────
+  const [homeData,    setHomeData]    = useState({ featured: [], trending: [], for_you: [] });
+  const [homeLoading, setHomeLoading] = useState(true);
+
+  const loadHomeData = useCallback(async (forceRefresh = false) => {
+    try {
+      const country = user?.country || user?.location_country || getLocale().countryCode || '';
+      let url = country
+        ? `/music-hybrid/home?country=${encodeURIComponent(country)}`
+        : '/music-hybrid/home';
+      if (forceRefresh) url += (url.includes('?') ? '&' : '?') + 'force_refresh=true';
+      const res = await api.get(url);
+      if (res && (res.featured?.length || res.trending?.length)) {
+        setHomeData(res);
+      }
+    } catch (e) {
+      // sessizce geç — veriler zaten boş array
+    } finally {
+      setHomeLoading(false);
+    }
+  }, [user?.country, user?.location_country]);
+
+  useEffect(() => { loadHomeData(); }, [loadHomeData]);
+
+  // ── Dinleme Geçmişi (Kaldığın Yerden) ─────────────────────────
+  const [recentHistory, setRecentHistory] = useState([]);
+
+  const loadRecentHistory = useCallback(async () => {
+    try {
+      const tracks = await getRecentTracks(5);
+      setRecentHistory(tracks);
+    } catch { /* sessizce geç */ }
+  }, []);
+
+  useEffect(() => { loadRecentHistory(); }, [loadRecentHistory]);
+  // Ekrana dönünce geçmişi yenile
+  useFocusEffect(useCallback(() => { loadRecentHistory(); }, [loadRecentHistory]));
 
   // ── Stories ────────────────────────────────────────────────
   const [storiesFeed, setStoriesFeed]   = useState([]);
@@ -148,7 +166,9 @@ export default function DashboardScreen({ navigation }) {
         api.get('/stories/my', token),
       ]);
       if (feedRes.status === 'fulfilled') {
-        setStoriesFeed(Array.isArray(feedRes.value) ? feedRes.value : []);
+        const allFeed = Array.isArray(feedRes.value) ? feedRes.value : [];
+        // Own stories shown via the separate "Hikayem" button — exclude from feed row
+        setStoriesFeed(allFeed.filter(g => g.user_id !== user?.id));
       }
       if (myRes.status === 'fulfilled') {
         const mine = Array.isArray(myRes.value) ? myRes.value : [];
@@ -158,6 +178,7 @@ export default function DashboardScreen({ navigation }) {
   }, [token]);
 
   useEffect(() => { loadStories(); }, [loadStories]);
+  useFocusEffect(useCallback(() => { loadStories(); }, [loadStories]));
 
   const fetchUnreadCounts = useCallback(() => {
     if (!token) return;
@@ -215,9 +236,9 @@ export default function DashboardScreen({ navigation }) {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadStories();
+    await Promise.allSettled([loadStories(), loadHomeData(true), loadRecentHistory()]);
     setTimeout(() => setRefreshing(false), 800);
-  }, [loadStories]);
+  }, [loadStories, loadHomeData, loadRecentHistory]);
 
   const s = createStyles(colors, insets);
 
@@ -292,7 +313,7 @@ export default function DashboardScreen({ navigation }) {
               </Text>
             </View>
             <View style={s.headerRight}>
-              <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Conversations')}>
+              <TouchableOpacity style={s.headerIconBtn} onPress={() => requireAuth('Conversations')}>
                 <Ionicons name="chatbubble-outline" size={20} color="#F8F8F8" />
                 {unreadMsgCount > 0 && (
                   <View style={[s.msgBadge, { backgroundColor: colors.accent || '#FB923C' }]}>
@@ -300,7 +321,7 @@ export default function DashboardScreen({ navigation }) {
                   </View>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')}>
+              <TouchableOpacity style={s.headerIconBtn} onPress={() => requireAuth('Notifications')}>
                 <Ionicons name="notifications-outline" size={20} color="#F8F8F8" />
                 {unreadNotifCount > 0 && (
                   <View style={[s.msgBadge, { backgroundColor: '#FF3B30' }]}>
@@ -309,10 +330,16 @@ export default function DashboardScreen({ navigation }) {
                 )}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={s.avatarWrap}>
-                <Image
-                  source={{ uri: user?.avatar || `https://i.pravatar.cc/80?u=${user?.id}` }}
-                  style={s.avatar}
-                />
+                {isGuest ? (
+                  <View style={[s.avatar, { backgroundColor: 'rgba(192,132,252,0.15)', alignItems: 'center', justifyContent: 'center' }]}>
+                    <Ionicons name="person-outline" size={16} color="#C084FC" />
+                  </View>
+                ) : (
+                  <Image
+                    source={{ uri: user?.avatar_url || user?.avatar || `https://i.pravatar.cc/80?u=${user?.id}` }}
+                    style={s.avatar}
+                  />
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -320,17 +347,17 @@ export default function DashboardScreen({ navigation }) {
 
         {/* ── Stories ─────────────────────────────────────────────── */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.storiesScroll} contentContainerStyle={s.storiesContent}>
-          {/* Your story */}
-          <TouchableOpacity
+          {/* Your story — misafirde gösterme */}
+          {!isGuest && <TouchableOpacity
             style={s.storyWrap}
             activeOpacity={0.85}
-            onPress={() => {
+            onPress={() => requireAuth(() => {
               if (myStory) {
                 navigation.navigate('StoryViewer', {
                   feed: [{
                     username: user?.username || 'me',
                     user_display_name: user?.display_name || user?.username || 'Me',
-                    user_avatar: user?.avatar || `https://i.pravatar.cc/80?u=${user?.id}`,
+                    user_avatar: user?.avatar_url || user?.avatar || `https://i.pravatar.cc/80?u=${user?.id}`,
                     user_id: user?.id,
                     stories: myStory,
                   }],
@@ -340,7 +367,7 @@ export default function DashboardScreen({ navigation }) {
               } else {
                 navigation.navigate('StoryCreate');
               }
-            }}
+            })}
           >
             {/* Ring: renkli = hikaye var, gri = yok */}
             {myStory ? (
@@ -351,16 +378,24 @@ export default function DashboardScreen({ navigation }) {
               >
                 <View style={s.storyAvatarWrap}>
                   <Image
-                    source={{ uri: user?.avatar || `https://i.pravatar.cc/80?u=${user?.id}` }}
+                    source={{ uri: user?.avatar_url || user?.avatar || `https://i.pravatar.cc/80?u=${user?.id}` }}
                     style={s.storyAvatar}
                   />
+                  {/* Yeni hikaye ekle — iç badge tıklanınca StoryCreate açılır */}
+                  <TouchableOpacity
+                    style={[s.storyAddBadge, { backgroundColor: colors.primary }]}
+                    onPress={() => navigation.navigate('StoryCreate')}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Ionicons name="add" size={11} color="#FFF" />
+                  </TouchableOpacity>
                 </View>
               </LinearGradient>
             ) : (
               <View style={s.storyRingInactive}>
                 <View style={s.storyAvatarWrap}>
                   <Image
-                    source={{ uri: user?.avatar || `https://i.pravatar.cc/80?u=${user?.id}` }}
+                    source={{ uri: user?.avatar_url || user?.avatar || `https://i.pravatar.cc/80?u=${user?.id}` }}
                     style={s.storyAvatar}
                   />
                   <View style={[s.storyAddBadge, { backgroundColor: colors.primary }]}>
@@ -372,7 +407,7 @@ export default function DashboardScreen({ navigation }) {
             <Text style={[s.storyUser, { color: colors.textSecondary }]} numberOfLines={1} selectable={false}>
               Hikayem
             </Text>
-          </TouchableOpacity>
+          </TouchableOpacity>}
 
           {/* Other users' stories */}
           {storiesFeed.map((group, idx) => {
@@ -383,11 +418,11 @@ export default function DashboardScreen({ navigation }) {
                 key={group.user_id || group.username || idx}
                 style={s.storyWrap}
                 activeOpacity={0.85}
-                onPress={() => navigation.navigate('StoryViewer', {
+                onPress={() => requireAuth(() => navigation.navigate('StoryViewer', {
                   feed: storiesFeed,
                   startUserIndex: idx,
                   startStoryIndex: 0,
-                })}
+                }))}
               >
                 {hasUnseen ? (
                   <LinearGradient
@@ -459,40 +494,67 @@ export default function DashboardScreen({ navigation }) {
           horizontal
           nestedScrollEnabled
           showsHorizontalScrollIndicator={false}
-
           contentContainerStyle={{ paddingLeft: 20, paddingRight: 20, gap: 12 }}
           decelerationRate="fast"
           snapToInterval={HERO_W + 12}
           snapToAlignment="start"
           style={{ marginBottom: 6 }}
         >
-          {FEATURED.map((f, i) => (
-            <TouchableOpacity key={f.id} activeOpacity={0.95} style={s.heroCard}>
-              <LinearGradient colors={f.grad} start={{ x:0,y:0 }} end={{ x:1,y:1 }} style={StyleSheet.absoluteFill} />
-              <View style={s.heroOverlay}>
-                <View style={s.heroLabel}>
-                  <View style={s.heroBadge}>
-                    <Text style={s.heroBadgeText}>{f.label}</Text>
+          {homeLoading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <View key={i} style={[s.heroCard, { backgroundColor: colors.surface, opacity: 0.35 }]} />
+              ))
+            : homeData.featured.map((f) => (
+                <TouchableOpacity key={f.id} activeOpacity={0.95} style={s.heroCard} onPress={() => playTrack?.(f)}>
+                  {f.cover_url ? (
+                    <Image source={{ uri: f.cover_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  ) : (
+                    <LinearGradient colors={['#1A0A2E','#9333EA','#08060F']} start={{ x:0,y:0 }} end={{ x:1,y:1 }} style={StyleSheet.absoluteFill} />
+                  )}
+                  <LinearGradient
+                    colors={['transparent','rgba(8,6,15,0.55)','rgba(8,6,15,0.92)']}
+                    start={{ x:0, y:0 }} end={{ x:0, y:1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={s.heroOverlay}>
+                    <View style={s.heroLabel}>
+                      <View style={s.heroBadge}>
+                        <Text style={s.heroBadgeText}>{f.label}</Text>
+                      </View>
+                    </View>
+                    <Text style={s.heroTitle} numberOfLines={2}>{f.title}</Text>
+                    <Text style={s.heroArtist} numberOfLines={1}>{f.artist}</Text>
                   </View>
-                </View>
-                <Text style={s.heroTitle}>{f.title}</Text>
-                <Text style={s.heroArtist}>{f.artist}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+                </TouchableOpacity>
+              ))
+          }
         </ScrollView>
 
 
-        {/* ── Made For You (Sana Özel) ──────────────────────────────── */}
-        <SectionHeader title={t('dashboard.madeForYou')} onSeeAll={() => navigation.navigate('Library')} colors={colors} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.hScrollContent} style={s.hScroll}>
-          {PLAYLISTS.map(p => (
-            <TouchableOpacity key={p.id} style={s.playlistCard} onPress={() => navigation.navigate('PlaylistDetail', { playlistId: p.id, playlist: p })} activeOpacity={0.88}>
-              <Image source={{ uri: p.cover }} style={s.playlistCover} />
-              <Text style={[s.playlistName, { color: colors.text }]} numberOfLines={2}>{p.name}</Text>
-              <Text style={[s.playlistCount, { color: colors.textMuted }]}>{p.count} {t('dashboard.tracks')}</Text>
-            </TouchableOpacity>
-          ))}
+        {/* ── Sana Özel — for_you + trending birleşik ──────────────── */}
+        <SectionHeader title={t('dashboard.madeForYou')} colors={colors} />
+        <ScrollView ref={forYouRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.hScrollContent} style={s.hScroll}>
+          {homeLoading
+            ? Array.from({ length: 5 }).map((_, i) => (
+                <View key={i} style={[s.playlistCard, { opacity: 0.3 }]}>
+                  <View style={[s.playlistCover, { backgroundColor: colors.surface }]} />
+                  <View style={{ height: 12, backgroundColor: colors.surface, borderRadius: 6, marginTop: 8, width: 80 }} />
+                </View>
+              ))
+            : [...homeData.for_you, ...homeData.trending].map(p => (
+                <TouchableOpacity key={p.id} style={s.playlistCard} onPress={() => playTrack?.(p)} activeOpacity={0.88}>
+                  {p.cover_url ? (
+                    <Image source={{ uri: p.cover_url }} style={s.playlistCover} />
+                  ) : (
+                    <View style={[s.playlistCover, { backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }]}>
+                      <Ionicons name="musical-note" size={28} color={colors.primary} />
+                    </View>
+                  )}
+                  <Text style={[s.playlistName, { color: colors.text }]} numberOfLines={2}>{p.title}</Text>
+                  <Text style={[s.playlistCount, { color: colors.textMuted }]}>{p.artist}</Text>
+                </TouchableOpacity>
+              ))
+          }
         </ScrollView>
 
         {/* ── Discover People ───────────────────────────────────────── */}
@@ -511,42 +573,80 @@ export default function DashboardScreen({ navigation }) {
         {/* ── Native Reklam ────────────────────────────────────────── */}
         <NativeAdSlot colors={colors} />
 
-        {/* ── Jump Back In (Kaldığın Yerden) ───────────────────────── */}
-        <SectionHeader title={t('dashboard.jumpBackIn')} onSeeAll={() => navigation.navigate('Library')} colors={colors} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.hScrollContent} style={s.hScroll}>
-          {RECENT.map(r => (
-            <TouchableOpacity key={r.id} style={s.recentCard} onPress={() => playTrack?.(r)} activeOpacity={0.85}>
-              <Image source={{ uri: r.cover }} style={s.recentCover} />
-              <View style={s.recentOverlay}>
-                <Ionicons name="play-circle" size={28} color="rgba(255,255,255,0.9)" />
-              </View>
-              <Text style={[s.recentTitle, { color: colors.text }]} numberOfLines={1}>{r.title}</Text>
-              <Text style={[s.recentArtist, { color: colors.textMuted }]} numberOfLines={1}>{r.artist}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {/* ── Kaldığın Yerden — son 5 dinlenen (geçmişten) ─────────── */}
+        {recentHistory.length > 0 && (
+          <>
+            <SectionHeader title={t('dashboard.jumpBackIn')} colors={colors} />
+            <ScrollView ref={recentRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.hScrollContent} style={s.hScroll}>
+              {recentHistory.map(r => (
+                <TouchableOpacity
+                  key={r.trackId}
+                  style={s.recentCard}
+                  onPress={() => playTrack?.({ id: r.trackId, title: r.title, artist: r.artist, cover_url: r.thumbnail, thumbnail: r.thumbnail, audio_url: r.audio_url, source: r.source })}
+                  activeOpacity={0.85}
+                >
+                  {r.thumbnail ? (
+                    <Image source={{ uri: r.thumbnail }} style={s.recentCover} />
+                  ) : (
+                    <View style={[s.recentCover, { backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }]}>
+                      <Ionicons name="musical-note" size={24} color={colors.primary} />
+                    </View>
+                  )}
+                  <View style={s.recentOverlay}>
+                    <Ionicons name="play-circle" size={28} color="rgba(255,255,255,0.9)" />
+                  </View>
+                  <Text style={[s.recentTitle, { color: colors.text }]} numberOfLines={1}>{r.title}</Text>
+                  <Text style={[s.recentArtist, { color: colors.textMuted }]} numberOfLines={1}>{r.artist}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )}
 
         {/* ── Trending Now ──────────────────────────────────────────── */}
-        <SectionHeader title={t('dashboard.trendingNow')} onSeeAll={() => navigation.navigate('Search')} colors={colors} />
+        <SectionHeader title={t('dashboard.trendingNow')} colors={colors} />
         <View style={s.trendList}>
-          {TRENDING.map((tr, i) => (
-            <TouchableOpacity key={tr.id} style={[s.trendRow, { borderBottomColor: colors.border, borderBottomWidth: i < TRENDING.length - 1 ? 1 : 0 }]} onPress={() => playTrack?.(tr)} activeOpacity={0.85}>
-              <Text style={[s.trendRank, { color: i < 3 ? colors.primary : colors.textMuted }]}>
-                {String(tr.rank).padStart(2,'0')}
-              </Text>
-              <Image source={{ uri: tr.cover }} style={s.trendCover} />
-              <View style={s.trendInfo}>
-                <Text style={[s.trendTitle, { color: colors.text }]} numberOfLines={1}>{tr.title}</Text>
-                <Text style={[s.trendArtist, { color: colors.textMuted }]} numberOfLines={1}>{tr.artist}</Text>
-              </View>
-              <View style={s.trendRight}>
-                <Text style={[s.trendPlays, { color: colors.textMuted }]}>{tr.plays}</Text>
-                <TouchableOpacity hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
-                  <Ionicons name="ellipsis-vertical" size={16} color={colors.textMuted} />
+          {homeLoading
+            ? Array.from({ length: 10 }).map((_, i) => (
+                <View key={i} style={[s.trendRow, { borderBottomColor: colors.border, borderBottomWidth: i < 9 ? 1 : 0, opacity: 0.3 }]}>
+                  <View style={{ width: 26, height: 16, backgroundColor: colors.surface, borderRadius: 4 }} />
+                  <View style={[s.trendCover, { backgroundColor: colors.surface }]} />
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <View style={{ height: 13, backgroundColor: colors.surface, borderRadius: 4, width: '70%' }} />
+                    <View style={{ height: 11, backgroundColor: colors.surface, borderRadius: 4, width: '45%' }} />
+                  </View>
+                </View>
+              ))
+            : [...homeData.featured, ...homeData.trending].slice(0, 10).map((tr, i) => (
+                <TouchableOpacity
+                  key={tr.id}
+                  style={[s.trendRow, { borderBottomColor: colors.border, borderBottomWidth: i < 9 ? 1 : 0 }]}
+                  onPress={() => playTrack?.(tr)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[s.trendRank, { color: i < 3 ? colors.primary : colors.textMuted }]}>
+                    {String(i + 1).padStart(2,'0')}
+                  </Text>
+                  {tr.cover_url ? (
+                    <Image source={{ uri: tr.cover_url }} style={s.trendCover} />
+                  ) : (
+                    <View style={[s.trendCover, { backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }]}>
+                      <Ionicons name="musical-note" size={16} color={colors.primary} />
+                    </View>
+                  )}
+                  <View style={s.trendInfo}>
+                    <Text style={[s.trendTitle, { color: colors.text }]} numberOfLines={1}>{tr.title}</Text>
+                    <Text style={[s.trendArtist, { color: colors.textMuted }]} numberOfLines={1}>{tr.artist}</Text>
+                  </View>
+                  <View style={s.trendRight}>
+                    <Text style={[s.trendPlays, { color: colors.textMuted }]}>{tr.plays_approx}</Text>
+                    <TouchableOpacity hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
+                      <Ionicons name="ellipsis-vertical" size={16} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
                 </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          ))}
+              ))
+          }
         </View>
 
         <View style={{ height: 120 }} />

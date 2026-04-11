@@ -218,6 +218,8 @@ export function AuthProvider({ children }) {
     await AsyncStorage.setItem(REMEMBER_ME_KEY, 'false');
     setToken(null);
     setUser(GUEST_USER);
+    setAccounts([]);
+    setCurrentAccountIndex(0);
   }
 
   function exitGuest() {

@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   Switch,
   ActivityIndicator,
-  Alert,
   Modal,
   FlatList,
 } from 'react-native';
@@ -23,6 +22,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Alert } from '../components/ui/AppAlert';
 
 const getSoundName = (id, t) => {
   const map = { default: 'default', chime: 'chime', pop: 'pop', ding: 'ding' };

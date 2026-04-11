@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../services/api';
+import { Alert } from '../components/ui/AppAlert';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function DataBackupScreen({ navigation }) {
   const { colors } = useTheme();
@@ -17,10 +19,27 @@ export default function DataBackupScreen({ navigation }) {
   const clearCache = () => {
     Alert.alert(
       'Önbelleği Temizle',
-      'Tüm önbellek silinecek. İndirilen müzikler etkilenmez.',
+      'Geçici veriler silinecek. Hesap bilgileri ve dil tercihleri korunur.',
       [
         { text: 'İptal', style: 'cancel' },
-        { text: 'Temizle', style: 'destructive', onPress: () => Alert.alert('Başarılı', 'Önbellek temizlendi.') },
+        {
+          text: 'Temizle',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Korunacak anahtarlar: auth, dil tercihi, locale cache
+              const KEEP_KEYS = [
+                'userToken', 'userId', 'user', 'authToken',
+                'preferred_language', '@SocialBeats/locale_cache',
+                'sb_language', 'sb_country',
+              ];
+              const allKeys = await AsyncStorage.getAllKeys();
+              const removeKeys = allKeys.filter(k => !KEEP_KEYS.includes(k));
+              if (removeKeys.length > 0) await AsyncStorage.multiRemove(removeKeys);
+            } catch {}
+            Alert.alert('Başarılı', 'Önbellek temizlendi.');
+          },
+        },
       ]
     );
   };

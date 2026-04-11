@@ -4,8 +4,7 @@
  */
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Alert, Modal, ScrollView, Dimensions, RefreshControl, Keyboard, Pressable} from 'react-native';
+  View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, ScrollView, Dimensions, RefreshControl, Keyboard, Pressable} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +19,7 @@ import { encryptFor, decryptFrom, getOrCreateKeyPair, getPublicKeyB64 } from '..
 import { formatTime as formatLocaleTime } from '../lib/localeUtils';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
+import { Alert } from '../components/ui/AppAlert';
 
 const REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
 const STICKER_PACKS = [

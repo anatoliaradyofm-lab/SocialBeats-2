@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator, I18nManager } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, ActivityIndicator, I18nManager } from 'react-native';
 import { Camera, CameraView } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import { Alert } from '../ui/AppAlert';
 
 export default function StoryCamera({ visible, onCapture, onClose }) {
   const [hasPermission, setHasPermission] = useState(null);
   const [capturing, setCapturing] = useState(false);
+  const [facing, setFacing] = useState('back');
   const cameraRef = useRef(null);
 
   useEffect(() => {
@@ -73,8 +75,11 @@ export default function StoryCamera({ visible, onCapture, onClose }) {
 
   return (
     <View style={styles.container}>
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
+      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} />
       <TouchableOpacity style={styles.closeBtn} onPress={onClose}><Text style={styles.closeText}>✕</Text></TouchableOpacity>
+      <TouchableOpacity style={styles.flipBtn} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
+        <Text style={styles.flipText}>⟲</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={[styles.captureBtn, capturing && styles.captureDisabled]} onPress={capture} disabled={capturing}>
         {capturing ? <ActivityIndicator color="#fff" /> : <View style={styles.captureInner} />}
       </TouchableOpacity>
@@ -91,4 +96,6 @@ const styles = StyleSheet.create({
   captureInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#fff' },
   captureDisabled: { opacity: 0.6 },
   captureText: { color: '#fff', fontSize: 16, textAlign: 'center' },
+  flipBtn: { position: 'absolute', bottom: 62, [I18nManager.isRTL ? 'left' : 'right']: 32, width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  flipText: { color: '#fff', fontSize: 26 },
 });

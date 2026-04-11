@@ -4,7 +4,6 @@ Tests for:
 - Profile tabs API (photos, videos, content summary)
 - Popular content API (discover/popular)
 - For You API (discover/for-you)
-- YouTube playlist API
 - Collaborative playlists API
 """
 
@@ -299,37 +298,6 @@ class TestDiscoverForYouAPI:
         
         assert response.status_code in [401, 403], f"Expected 401/403, got {response.status_code}"
         print("✅ GET /api/discover/for-you - Correctly requires auth")
-
-
-# ============== YOUTUBE PLAYLIST API TESTS ==============
-
-class TestYouTubePlaylistAPI:
-    """Tests for YouTube Playlist endpoints"""
-    
-    def test_get_youtube_playlist_with_valid_id(self, api_client, auth_headers):
-        """GET /api/youtube/playlist/{playlist_id} - Test with a known public playlist"""
-        playlist_id = "PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
-        
-        response = api_client.get(
-            f"{BASE_URL}/api/youtube/playlist/{playlist_id}",
-            headers=auth_headers
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            assert "playlist" in data or "tracks" in data
-            print(f"✅ GET /api/youtube/playlist/{playlist_id} - Success")
-        elif response.status_code == 500:
-            print(f"⚠️ GET /api/youtube/playlist - YouTube API error (expected if API key invalid)")
-        else:
-            print(f"⚠️ GET /api/youtube/playlist - Status: {response.status_code}")
-    
-    def test_get_youtube_playlist_unauthorized(self, api_client):
-        """GET /api/youtube/playlist/{playlist_id} - Should require auth"""
-        response = api_client.get(f"{BASE_URL}/api/youtube/playlist/PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf")
-        
-        assert response.status_code in [401, 403], f"Expected 401/403, got {response.status_code}"
-        print("✅ GET /api/youtube/playlist - Correctly requires auth")
 
 
 # ============== COLLABORATIVE PLAYLISTS API TESTS ==============

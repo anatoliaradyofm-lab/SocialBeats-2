@@ -12,15 +12,6 @@ class Settings:
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
     
-    # YouTube API Configuration
-    YOUTUBE_API_KEY: str = os.environ.get('YOUTUBE_API_KEY', '')
-    YOUTUBE_API_BASE: str = "https://www.googleapis.com/youtube/v3"
-    
-    # Spotify API Configuration
-    SPOTIFY_CLIENT_ID: str = os.environ.get('SPOTIFY_CLIENT_ID', '')
-    SPOTIFY_CLIENT_SECRET: str = os.environ.get('SPOTIFY_CLIENT_SECRET', '')
-    SPOTIFY_REDIRECT_URI: str = os.environ.get('SPOTIFY_REDIRECT_URI', '')
-
     # Detoxify (open source) - text toxicity moderation
     # Uses Detoxify when available; else: local keyword fallback
     DETOXIFY_TOXICITY_THRESHOLD: float = float(os.environ.get('DETOXIFY_TOXICITY_THRESHOLD', '0.5'))

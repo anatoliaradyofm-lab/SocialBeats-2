@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, Alert, Share } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, Share } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../services/api';
+import { Alert } from '../ui/AppAlert';
 
 export default function ProfileExport() {
   const { t } = useTranslation();

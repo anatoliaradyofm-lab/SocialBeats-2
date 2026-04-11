@@ -198,7 +198,7 @@ export default {
         justNow: '剛才', minutesAgo: '{{count}} 分鐘前', hoursAgo: '{{count}} 小時前', daysAgo: '{{count}} 天前',
     },
     onboarding: {
-        page1Title: '探索你的音樂', page1Subtitle: '存取來自 YouTube 和 Spotify 的數百萬首歌曲。',
+        page1Title: '探索你的音樂', page1Subtitle: '透過 SoundCloud 串流數百萬首歌曲。',
         page2Title: '分享與連結', page2Subtitle: '分享音樂、追蹤朋友、發布貼文。',
         page3Title: '個人化', page3Subtitle: '選擇喜愛的類型，獲得個人化推薦。',
         page4Title: '開始吧！', page4Subtitle: '建立帳號並踏入音樂世界！',
@@ -207,7 +207,7 @@ export default {
     offline: { message: '您目前離線 — 部分功能可能無法使用' },
     player: {
         close: '關閉', trackOf: '{{current}} / {{total}} 首', sleepTimer: '睡眠計時器',
-        cancelTimer: '{{minutes}} 分鐘 — 取消', watchOnYouTube: '在 YouTube 上觀看',
+        cancelTimer: '{{minutes}} 分鐘 — 取消', openOnSoundCloud: '在 SoundCloud 上開啟',
         shareMusic: '分享音樂', sharePlaylist: '分享播放清單', songRadio: '歌曲電台',
         radioBasedOn: '基於此的電台', playAll: '全部播放', playbackSpeed: '播放速度',
     },

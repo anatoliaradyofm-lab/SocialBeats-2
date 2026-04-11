@@ -37,7 +37,7 @@ class Track(BaseModel):
     album: str = ""
     duration: int = 0
     cover_url: str = ""
-    source: str = "youtube"
+    source: str = "soundcloud"
     preview_url: Optional[str] = None
     likes_count: int = 0
     comments_count: int = 0
@@ -60,9 +60,9 @@ class Playlist(BaseModel):
 
 # Mock tracks for demo
 MOCK_TRACKS = [
-    {"id": "t1", "title": "Yıldızların Altında", "artist": "Tarkan", "album": "Metamorfoz", "duration": 245, "cover_url": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300", "source": "spotify", "likes_count": 15420, "comments_count": 234, "shares_count": 567},
-    {"id": "t2", "title": "Sen Olsan Bari", "artist": "Aleyna Tilki", "album": "Singles", "duration": 198, "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300", "source": "youtube", "likes_count": 12300, "comments_count": 189, "shares_count": 423},
-    {"id": "t3", "title": "Firuze", "artist": "Sezen Aksu", "album": "Firuze", "duration": 312, "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300", "source": "apple", "likes_count": 28900, "comments_count": 567, "shares_count": 890},
+    {"id": "t1", "title": "Yıldızların Altında", "artist": "Tarkan", "album": "Metamorfoz", "duration": 245, "cover_url": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300", "source": "soundcloud", "likes_count": 15420, "comments_count": 234, "shares_count": 567},
+    {"id": "t2", "title": "Sen Olsan Bari", "artist": "Aleyna Tilki", "album": "Singles", "duration": 198, "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300", "source": "soundcloud", "likes_count": 12300, "comments_count": 189, "shares_count": 423},
+    {"id": "t3", "title": "Firuze", "artist": "Sezen Aksu", "album": "Firuze", "duration": 312, "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300", "source": "soundcloud", "likes_count": 28900, "comments_count": 567, "shares_count": 890},
 ]
 
 # =====================================================
@@ -267,9 +267,8 @@ async def generate_smart_playlist_endpoint(
             }
             search_query = query_map.get(playlist_type, config["name"])
             try:
-                from services.youtube_service import youtube_service
-                youtube_service.set_db(db)
-                tracks = await youtube_service.search(search_query, limit=20)
+                from routes.music_hybrid import _sc_search
+                tracks = await _sc_search(search_query, limit=20)
             except Exception:
                 pass
     except Exception:
@@ -658,13 +657,12 @@ async def add_track_collaborative(
     
     track = next((t for t in MOCK_TRACKS if t["id"] == track_id), None)
     
-    if not track and track_id.startswith("yt_"):
+    if not track and track_id.startswith("sc_"):
         track = {
             "id": track_id,
-            "youtube_id": track_id.replace("yt_", ""),
-            "title": "YouTube Track",
+            "title": "SoundCloud Track",
             "artist": "Unknown",
-            "source": "youtube",
+            "source": "soundcloud",
             "added_by": current_user["id"],
             "added_at": datetime.now(timezone.utc).isoformat()
         }

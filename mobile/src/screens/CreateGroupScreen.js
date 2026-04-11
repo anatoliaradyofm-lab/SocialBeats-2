@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import {
   View, Text, StyleSheet, TextInput, FlatList, Image,
   TouchableOpacity, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Alert} from 'react-native';
+  KeyboardAvoidingView, Platform} from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,7 @@ import api from '../services/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../contexts/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Alert } from '../components/ui/AppAlert';
 
 const MAX_MEMBERS = 8; // kendin + 7 kişi
 const SEARCH_DEBOUNCE = 400;

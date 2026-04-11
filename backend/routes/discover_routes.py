@@ -1,4 +1,4 @@
-# Discover routes - Mixed YouTube + Spotify homepage, cache-only
+# Discover routes - SoundCloud homepage, cache-only
 
 from fastapi import APIRouter, Depends, Query
 from typing import List, Optional
@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 # Fallback mock tracks when cache empty
 MOCK_TRACKS = [
-    {"id": "t1", "title": "Yıldızların Altında", "artist": "Tarkan", "source": "spotify", "spotify_id": "t1", "youtube_id": None, "thumbnail": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300"},
-    {"id": "t2", "title": "Sen Olsan Bari", "artist": "Aleyna Tilki", "source": "youtube", "spotify_id": None, "youtube_id": "t2", "thumbnail": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300"},
+    {"id": "t1", "title": "Yıldızların Altında", "artist": "Tarkan", "source": "soundcloud", "thumbnail": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300"},
+    {"id": "t2", "title": "Sen Olsan Bari", "artist": "Aleyna Tilki", "source": "soundcloud", "thumbnail": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300"},
 ]
 
 
@@ -41,7 +41,7 @@ async def discover_home(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Mixed YouTube + Spotify recommendations for homepage.
+    SoundCloud recommendations for homepage.
     Uses CACHED data only - never hits APIs directly.
     Falls back to mock if cache empty.
     """
@@ -55,49 +55,27 @@ async def discover_home(
     results = []
     seen = set()
 
-    # 1. Spotify trending from cache
-    spotify_key = f"spotify:trending:{country}"
-    spotify_data = await _get_from_cache(spotify_key)
-    if spotify_data:
-        for t in (spotify_data if isinstance(spotify_data, list) else [])[:limit]:
+    # SoundCloud home data from cache
+    sc_key = f"dashboard:home:v2:{country}"
+    sc_data = await _get_from_cache(sc_key)
+    if sc_data and isinstance(sc_data, dict):
+        for t in (sc_data.get("trending") or sc_data.get("featured") or [])[:limit]:
             norm = _normalize_title_artist(t.get("title", ""), t.get("artist", ""))
             if norm in seen:
                 continue
             seen.add(norm)
             results.append({
-                "id": t.get("spotify_id") or t.get("id", ""),
+                "id": t.get("id") or t.get("song_id", ""),
                 "title": t.get("title", ""),
                 "artist": t.get("artist", ""),
-                "source": "spotify",
-                "spotify_id": t.get("spotify_id") or t.get("id"),
-                "youtube_id": t.get("youtube_id"),
-                "thumbnail": t.get("thumbnail") or t.get("cover_url", ""),
-            })
-
-    # 2. YouTube trending from cache
-    yt_key = "youtube:trending"
-    yt_data = await _get_from_cache(yt_key)
-    if yt_data:
-        for t in (yt_data if isinstance(yt_data, list) else [])[:limit]:
-            norm = _normalize_title_artist(t.get("title", ""), t.get("artist", ""))
-            if norm in seen:
-                continue
-            seen.add(norm)
-            vid = t.get("youtube_id") or t.get("id", "")
-            results.append({
-                "id": vid or t.get("song_id", ""),
-                "title": t.get("title", ""),
-                "artist": t.get("artist", ""),
-                "source": "youtube",
-                "spotify_id": t.get("spotify_id"),
-                "youtube_id": vid or t.get("id"),
+                "source": "soundcloud",
                 "thumbnail": t.get("thumbnail") or t.get("cover_url", ""),
             })
 
     # Fallback to mock if empty
     from_cache = len(results) > 0
     if not results:
-        results = [dict(m, id=m.get("spotify_id") or m.get("youtube_id") or m["id"]) for m in MOCK_TRACKS[:limit]]
+        results = [dict(m) for m in MOCK_TRACKS[:limit]]
 
     return {
         "tracks": results[:limit],

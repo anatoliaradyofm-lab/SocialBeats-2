@@ -81,7 +81,7 @@ const gb = StyleSheet.create({
 
 export default function ProfileScreen({ navigation }) {
   const { colors }       = useTheme();
-  const { user, token, logout, updateUser } = useAuth();
+  const { user, token, logout, updateUser, isGuest } = useAuth();
   const { t }            = useTranslation();
   const insets           = useSafeAreaInsets();
 
@@ -90,6 +90,7 @@ export default function ProfileScreen({ navigation }) {
   const [showAvatar,   setShowAvatar]   = useState(false);
   const [listenStats,  setListenStats]  = useState(null);
   const [nowPlaying,   setNowPlaying]   = useState(null);
+  const [myStories,    setMyStories]    = useState(null);
   const scrollY = useRef(new Animated.Value(0)).current;
   /* Always hold latest user to avoid stale-closure in useFocusEffect */
   const userRef = useRef(user);
@@ -109,12 +110,18 @@ export default function ProfileScreen({ navigation }) {
 
   useEffect(() => { loadStats(); }, [loadStats]);
 
-  /* Refresh profile data when returning from ProfileEdit */
+  /* Refresh profile data + own stories when screen focused */
   useFocusEffect(useCallback(() => {
     if (!token) return;
     api.get('/auth/me', token)
       .then(data => {
         if (data?.id) updateUser?.({ ...userRef.current, ...data });
+      })
+      .catch(() => {});
+    api.get('/stories/my', token)
+      .then(res => {
+        const stories = Array.isArray(res) ? res : [];
+        setMyStories(stories.length > 0 ? stories : null);
       })
       .catch(() => {});
   }, [token, updateUser]));
@@ -151,6 +158,48 @@ export default function ProfileScreen({ navigation }) {
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
+
+  if (isGuest || !token) {
+    return (
+      <View style={[s.root, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingTop: insets.top }]}>
+        <LinearGradient
+          colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+          locations={[0, 0.18, 0.32, 1]}
+          start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <TouchableOpacity
+          onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Dashboard')}
+          style={{ position: 'absolute', top: insets.top + 8, left: 16, padding: 8 }}
+        >
+          <Ionicons name="chevron-back" size={24} color="#F8F8F8" />
+        </TouchableOpacity>
+        <View style={{ width: 72, height: 72, borderRadius: 24, backgroundColor: 'rgba(192,132,252,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 24, borderWidth: 1, borderColor: 'rgba(192,132,252,0.3)' }}>
+          <Ionicons name="person-outline" size={36} color="#C084FC" />
+        </View>
+        <Text style={{ fontSize: 22, fontWeight: '800', color: '#F8F8F8', marginBottom: 10, letterSpacing: -0.5 }}>Profilini Oluştur</Text>
+        <Text style={{ fontSize: 14, color: 'rgba(248,248,248,0.45)', textAlign: 'center', lineHeight: 21, marginBottom: 32 }}>
+          Giriş yaparak müzik geçmişini takip et, arkadaşlarını takip et ve daha fazlasını keşfet.
+        </Text>
+        <TouchableOpacity
+          style={{ width: '100%', borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}
+          onPress={() => navigation.navigate('Auth')}
+          activeOpacity={0.88}
+        >
+          <LinearGradient colors={['#9333EA', '#C084FC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ paddingVertical: 15, alignItems: 'center' }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#fff' }}>Giriş Yap</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{ width: '100%', paddingVertical: 14, alignItems: 'center', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(192,132,252,0.3)' }}
+          onPress={() => navigation.navigate('Register')}
+          activeOpacity={0.88}
+        >
+          <Text style={{ fontSize: 15, fontWeight: '600', color: '#C084FC' }}>Kayıt Ol</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={s.root}>
@@ -194,10 +243,30 @@ export default function ProfileScreen({ navigation }) {
 
         {/* ── Identity ── */}
         <View style={s.identityBlock}>
-          {/* Avatar ring */}
-          <TouchableOpacity style={s.avatarRing} activeOpacity={0.9} onPress={() => setShowAvatar(true)}>
+          {/* Avatar ring — tap opens stories if any, otherwise fullscreen avatar */}
+          <TouchableOpacity
+            style={s.avatarRing}
+            activeOpacity={0.9}
+            onPress={() => {
+              if (myStories) {
+                navigation.navigate('StoryViewer', {
+                  feed: [{
+                    username: user?.username || 'me',
+                    user_display_name: user?.display_name || user?.username || 'Me',
+                    user_avatar: user?.avatar_url || user?.avatar || `https://i.pravatar.cc/80?u=${user?.id}`,
+                    user_id: user?.id,
+                    stories: myStories,
+                  }],
+                  startUserIndex: 0,
+                  startStoryIndex: 0,
+                });
+              } else {
+                setShowAvatar(true);
+              }
+            }}
+          >
             <LinearGradient
-              colors={['#9333EA', '#FB923C']}
+              colors={myStories ? ['#9333EA', '#FB923C'] : ['rgba(255,255,255,0.15)', 'rgba(255,255,255,0.08)']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={s.avatarGrad}
             >

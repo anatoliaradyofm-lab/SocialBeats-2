@@ -6,7 +6,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView,
+  ScrollView, ActivityIndicator, KeyboardAvoidingView,
   Platform, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../services/api';
 import { COUNTRIES as WORLD_COUNTRIES } from '../lib/countries';
+import { Alert } from '../components/ui/AppAlert';
+import { getLocale } from '../lib/localeStore';
 
 const COUNTRY_CODES = [
   { code: '+90',   flag: '🇹🇷', name: 'Türkiye',                          maxDigits: 10 },
@@ -247,6 +249,18 @@ export default function RegisterScreen({ navigation }) {
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const timerRef = useRef(null);
 
+  // Cihaz locale'inden ülke ve telefon kodu otomatik doldur
+  useEffect(() => {
+    const { countryCode: cc } = getLocale();
+    if (!cc || cc === 'US') return; // US default, manuel seçim bırak
+    const matched = WORLD_COUNTRIES.find(c => c.code === cc);
+    if (matched) {
+      setCountry(matched.name);
+      const phoneEntry = COUNTRY_CODES.find(c => c.name === matched.name);
+      if (phoneEntry) setCC(phoneEntry.code);
+    }
+  }, []);
+
   useEffect(() => () => clearInterval(timerRef.current), []);
 
   function animateStep(next) {
@@ -322,6 +336,8 @@ export default function RegisterScreen({ navigation }) {
         gender,
       });
       if (res?.access_token || res?.token) {
+        // Persist country selection so LanguageRegionScreen & ProfileEditScreen stay in sync
+        if (country) { try { localStorage.setItem('sb_country', country); } catch {} }
         await loginWithToken(res.access_token || res.token, res.user);
         navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
       }
@@ -365,6 +381,10 @@ export default function RegisterScreen({ navigation }) {
       <View style={s.header}>
         {step > 1 ? (
           <TouchableOpacity onPress={() => animateStep(1)} style={s.backBtn}>
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+        ) : navigation.canGoBack() ? (
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
         ) : (
@@ -529,7 +549,7 @@ export default function RegisterScreen({ navigation }) {
                   </LinearGradient>
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => navigation.navigate('PhoneLogin')} style={s.loginLink}>
+                <TouchableOpacity onPress={() => navigation.navigate('PhoneLogin', { hideBack: true })} style={s.loginLink}>
                   <Text style={[s.loginLinkText, { color: colors.textMuted }]}>
                     Hesabın var mı? <Text style={{ color: colors.primary }}>Giriş Yap</Text>
                   </Text>

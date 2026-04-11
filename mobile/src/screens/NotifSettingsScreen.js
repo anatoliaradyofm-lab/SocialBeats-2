@@ -7,18 +7,20 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../services/api';
-
-const NOTIF_ITEMS = [
-  { key: 'push',     label: 'Push Bildirimleri',  sub: 'Tüm anlık bildirimleri al',             icon: 'phone-portrait-outline',   color: '#A78BFA' },
-  { key: 'messages', label: 'Mesaj Bildirimleri', sub: 'Yeni mesaj geldiğinde bildir',           icon: 'chatbubble-outline',        color: '#60A5FA' },
-  { key: 'likes',    label: 'Beğeni Bildirimleri',sub: 'Gönderilerin beğenildiğinde bildir',     icon: 'heart-outline',             color: '#F87171' },
-  { key: 'follows',  label: 'Takip Bildirimleri', sub: 'Yeni takipçi kazandığında bildir',       icon: 'person-add-outline',        color: '#34D399' },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function NotifSettingsScreen({ navigation }) {
   const { colors } = useTheme();
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
+
+  const NOTIF_ITEMS = [
+    { key: 'push',     label: t('settings.pushNotif'),   sub: t('settings.pushNotifSub'),   icon: 'phone-portrait-outline', color: '#A78BFA' },
+    { key: 'messages', label: t('settings.msgNotif'),    sub: t('settings.msgNotifSub'),    icon: 'chatbubble-outline',     color: '#60A5FA' },
+    { key: 'likes',    label: t('settings.likeNotif'),   sub: t('settings.likeNotifSub'),   icon: 'heart-outline',          color: '#F87171' },
+    { key: 'follows',  label: t('settings.followNotif'), sub: t('settings.followNotifSub'), icon: 'person-add-outline',     color: '#34D399' },
+  ];
 
   const DEFAULT_SETTINGS = { push: true, messages: true, likes: true, follows: true };
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -53,7 +55,7 @@ export default function NotifSettingsScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: colors.text }]}>Bildirim Ayarları</Text>
+        <Text style={[s.headerTitle, { color: colors.text }]}>{t('settings.notificationSettings')}</Text>
         <View style={{ width: 40, alignItems: 'center' }}>
           {saving && <ActivityIndicator size="small" color={colors.primary} />}
         </View>

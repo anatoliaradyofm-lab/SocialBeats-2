@@ -60,13 +60,13 @@ class Track(BaseModel):
     album: str = ""
     duration: int = 0
     cover_url: str = ""
-    source: str = "youtube"
+    source: str = "soundcloud"
 
 # Mock tracks for demo
 MOCK_TRACKS = [
-    {"id": "t1", "title": "Yıldızların Altında", "artist": "Tarkan", "album": "Metamorfoz", "duration": 245, "cover_url": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300", "source": "spotify"},
-    {"id": "t2", "title": "Sen Olsan Bari", "artist": "Aleyna Tilki", "album": "Singles", "duration": 198, "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300", "source": "youtube"},
-    {"id": "t3", "title": "Firuze", "artist": "Sezen Aksu", "album": "Firuze", "duration": 312, "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300", "source": "apple"},
+    {"id": "t1", "title": "Yıldızların Altında", "artist": "Tarkan", "album": "Metamorfoz", "duration": 245, "cover_url": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300", "source": "soundcloud"},
+    {"id": "t2", "title": "Sen Olsan Bari", "artist": "Aleyna Tilki", "album": "Singles", "duration": 198, "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300", "source": "soundcloud"},
+    {"id": "t3", "title": "Firuze", "artist": "Sezen Aksu", "album": "Firuze", "duration": 312, "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300", "source": "soundcloud"},
 ]
 
 # =====================================================
@@ -546,30 +546,16 @@ async def reply_to_story(
 # STORY REACTIONS
 # =====================================================
 
-@router.post("/reaction")
-async def add_story_reaction(
-    data: dict = None,
-    story_id: str = None,
-    reaction: str = None,
-    current_user: dict = Depends(get_current_user)
-):
-    """Add a reaction to a story"""
-    if data and isinstance(data, dict):
-        story_id = data.get("story_id", story_id)
-        reaction = data.get("emoji") or data.get("reaction", reaction) or "❤️"
-    if not story_id:
-        raise HTTPException(status_code=400, detail="story_id required")
+async def _do_story_reaction(story_id: str, reaction: str, current_user: dict):
+    """Shared reaction logic used by both reaction endpoints."""
     story = await db.stories.find_one({"id": story_id}, {"_id": 0})
     if not story:
         raise HTTPException(status_code=404, detail="Story not found")
-    
     now = datetime.now(timezone.utc).isoformat()
-    
     existing = await db.story_reactions.find_one({
         "story_id": story_id,
         "user_id": current_user["id"]
     })
-    
     if existing:
         await db.story_reactions.update_one(
             {"id": existing["id"]},
@@ -585,18 +571,83 @@ async def add_story_reaction(
             "reaction": reaction,
             "created_at": now
         })
-        
         if story["user_id"] != current_user["id"]:
+            # DM conversation + message (tepki de mesaj olarak gitsin)
+            story_owner_id = story["user_id"]
+            conversation = await db.conversations.find_one({
+                "is_group": False,
+                "participants": {"$all": [current_user["id"], story_owner_id], "$size": 2}
+            })
+            if not conversation:
+                conversation_id = str(uuid.uuid4())
+                await db.conversations.insert_one({
+                    "id": conversation_id,
+                    "is_group": False,
+                    "participants": [current_user["id"], story_owner_id],
+                    "created_at": now,
+                    "last_message_at": now,
+                })
+            else:
+                conversation_id = conversation["id"]
+            story_preview = {
+                "story_id": story_id,
+                "story_type": story.get("story_type", "text"),
+                "media_url": story.get("media_url"),
+                "text": story.get("text", "")[:100] if story.get("text") else None,
+                "background_color": story.get("background_color"),
+            }
+            await db.messages.insert_one({
+                "id": str(uuid.uuid4()),
+                "conversation_id": conversation_id,
+                "sender_id": current_user["id"],
+                "content_type": "STORY_REACTION",
+                "content": reaction,
+                "story_id": story_id,
+                "story_preview": story_preview,
+                "reactions": [],
+                "read_by": [current_user["id"]],
+                "is_delivered": True,
+                "created_at": now,
+            })
+            await db.conversations.update_one(
+                {"id": conversation_id},
+                {"$set": {"last_message_at": now, "last_message": reaction}}
+            )
+            # Push bildirim
             await notify_user(
-                recipient_id=story["user_id"],
+                recipient_id=story_owner_id,
                 sender_id=current_user["id"],
                 notification_type="story_reaction",
                 title=f"{current_user['username']} hikayenize tepki verdi",
                 body=reaction,
                 data={"story_id": story_id}
             )
-    
     return {"message": "Reaction added", "reaction": reaction}
+
+@router.post("/{story_id}/react")
+async def react_to_story(
+    story_id: str,
+    data: dict = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Add a reaction to a story (frontend-compatible path)"""
+    reaction = (data or {}).get("reaction") or (data or {}).get("emoji") or "❤️"
+    return await _do_story_reaction(story_id, reaction, current_user)
+
+@router.post("/reaction")
+async def add_story_reaction(
+    data: dict = None,
+    story_id: str = None,
+    reaction: str = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Add a reaction to a story (legacy path)"""
+    if data and isinstance(data, dict):
+        story_id = data.get("story_id", story_id)
+        reaction = data.get("emoji") or data.get("reaction", reaction) or "❤️"
+    if not story_id:
+        raise HTTPException(status_code=400, detail="story_id required")
+    return await _do_story_reaction(story_id, reaction or "❤️", current_user)
 
 @router.get("/{story_id}/reactions")
 async def get_story_reactions(story_id: str, current_user: dict = Depends(get_current_user)):
@@ -873,3 +924,73 @@ async def search_story_music(q: str = "", limit: int = 10, current_user: dict = 
         if not any(r["id"] == c.get("id") for r in results):
             results.append({"id": c.get("id", ""), "title": c.get("title", ""), "artist": c.get("artist", ""), "cover_url": c.get("thumbnail", ""), "source": c.get("source", "")})
     return {"tracks": results[:limit]}
+
+# =====================================================
+# STORY REPORT
+# =====================================================
+
+@router.post("/{story_id}/report")
+async def report_story(
+    story_id: str,
+    data: dict = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Report a story for inappropriate content"""
+    story = await db.stories.find_one({"id": story_id}, {"_id": 0})
+    if not story:
+        raise HTTPException(status_code=404, detail="Hikaye bulunamadı")
+    if story["user_id"] == current_user["id"]:
+        raise HTTPException(status_code=400, detail="Kendi hikayenizi şikayet edemezsiniz")
+
+    reason = (data or {}).get("reason", "inappropriate")
+    now = datetime.now(timezone.utc).isoformat()
+
+    existing = await db.story_reports.find_one({
+        "story_id": story_id,
+        "reporter_id": current_user["id"]
+    })
+    if existing:
+        return {"message": "Zaten şikayet edildi"}
+
+    await db.story_reports.insert_one({
+        "id": str(uuid.uuid4()),
+        "story_id": story_id,
+        "story_owner_id": story["user_id"],
+        "reporter_id": current_user["id"],
+        "reporter_username": current_user["username"],
+        "reason": reason,
+        "created_at": now,
+        "status": "pending"
+    })
+    return {"message": "Hikaye şikayet edildi", "reason": reason}
+
+# =====================================================
+# STORY MUTE (kullanıcının hikayelerini sustur)
+# =====================================================
+
+@router.post("/{story_id}/mute")
+async def mute_story_user(
+    story_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Mute/unmute a user's stories"""
+    story = await db.stories.find_one({"id": story_id}, {"_id": 0})
+    if not story:
+        raise HTTPException(status_code=404, detail="Hikaye bulunamadı")
+    target_user_id = story["user_id"]
+    if target_user_id == current_user["id"]:
+        raise HTTPException(status_code=400, detail="Kendinizi susturamazsınız")
+
+    muted_list = current_user.get("muted_story_users", [])
+    if target_user_id in muted_list:
+        await db.users.update_one(
+            {"id": current_user["id"]},
+            {"$pull": {"muted_story_users": target_user_id}}
+        )
+        return {"message": "Susturma kaldırıldı", "muted": False, "user_id": target_user_id}
+    else:
+        await db.users.update_one(
+            {"id": current_user["id"]},
+            {"$addToSet": {"muted_story_users": target_user_id}}
+        )
+        return {"message": "Hikayeler susturuldu", "muted": True, "user_id": target_user_id}

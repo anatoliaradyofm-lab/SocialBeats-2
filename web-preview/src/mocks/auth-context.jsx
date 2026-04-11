@@ -33,24 +33,32 @@ export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(PREVIEW_USER);
+  const [token, setToken] = useState('preview-token');
+
+  const isGuest = user?.isGuest === true;
 
   const value = {
     user,
-    token: 'preview-token',
-    isAuthenticated: true,
-    isGuest: false,
+    token,
+    isAuthenticated: !isGuest && !!token,
+    isGuest,
     loading: false,
     login:   (email, password) => Promise.resolve({ access_token: 'mock-token', user: PREVIEW_USER }),
-    logout:  () => setUser(PREVIEW_USER),
+    logout:  () => { setUser(null); setToken(null); return Promise.resolve(); },
     register:(data) => { if (data?.username) setUser(u => ({ ...u, username: data.username, display_name: data.name || data.username, email: data.email || u.email })); return Promise.resolve({ access_token: 'mock-token', user: PREVIEW_USER }); },
     updateUser: (data) => setUser(u => {
       const next = { ...u, ...data };
       try { localStorage.setItem('_mock_user', JSON.stringify(next)); } catch {}
       return next;
     }),
-    loginAsGuest: () => { setUser({ ...PREVIEW_USER, isGuest: true }); return Promise.resolve(); },
-    enterAsGuest: () => { setUser({ ...PREVIEW_USER, isGuest: true }); return Promise.resolve(); },
-    exitGuest:    () => setUser(PREVIEW_USER),
+    loginWithToken: (authToken, userData) => {
+      setToken(authToken || 'preview-token');
+      setUser(userData && typeof userData === 'object' ? { ...PREVIEW_USER, ...userData, isGuest: false } : PREVIEW_USER);
+      return Promise.resolve();
+    },
+    loginAsGuest: () => { setUser({ id: 'guest', username: 'misafir', display_name: 'Misafir', isGuest: true }); setToken(null); return Promise.resolve(); },
+    enterAsGuest: () => { setUser({ id: 'guest', username: 'misafir', display_name: 'Misafir', isGuest: true }); setToken(null); return Promise.resolve(); },
+    exitGuest:    () => { setUser(PREVIEW_USER); setToken('preview-token'); },
     switchAccount: () => {},
     accounts: [PREVIEW_USER],
     currentAccountIndex: 0,

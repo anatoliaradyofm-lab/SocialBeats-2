@@ -1539,12 +1539,6 @@ async def services_status():
             "message": "SoundCloud arama aktif (main.py microservice)",
             "free": True, "key_required": False,
         },
-        "deezer": {
-            "status": "ok",
-            "message": "Deezer arama aktif (ücretsiz, anahtar gerektirmez)",
-            "endpoint": "https://api.deezer.com/search",
-            "free": True, "key_required": False,
-        },
         "translate": {
             "status": "ok",
             "message": "MyMemory Translation API (ücretsiz, anahtar gerektirmez, 5000 kelime/gün)",
@@ -1838,7 +1832,7 @@ async def get_followers(
     ).skip(offset).limit(limit).to_list(limit)
     ids = [f["follower_id"] for f in follows]
     users = await db.users.find(
-        {"id": {"$in": ids}},
+        {"id": {"$in": ids}, "is_frozen": {"$ne": True}},
         {"_id": 0, "password": 0, "email": 0}
     ).to_list(len(ids))
     my_following = set(f["following_id"] for f in await db.follows.find(
@@ -1876,7 +1870,7 @@ async def get_following(
     ).skip(offset).limit(limit).to_list(limit)
     ids = [f["following_id"] for f in follows]
     users = await db.users.find(
-        {"id": {"$in": ids}},
+        {"id": {"$in": ids}, "is_frozen": {"$ne": True}},
         {"_id": 0, "password": 0, "email": 0}
     ).to_list(len(ids))
     my_following = set(f["following_id"] for f in await db.follows.find(
@@ -1943,14 +1937,14 @@ async def get_subscription_status(current_user: dict = Depends(get_current_user)
 # ============== MOCK DATA ==============
 
 MOCK_TRACKS = [
-    {"id": "t1", "title": "Yıldızların Altında", "artist": "Tarkan", "album": "Metamorfoz", "duration": 245, "cover_url": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300", "source": "spotify", "likes_count": 15420, "comments_count": 234, "shares_count": 567},
-    {"id": "t2", "title": "Sen Olsan Bari", "artist": "Aleyna Tilki", "album": "Singles", "duration": 198, "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300", "source": "youtube", "likes_count": 12300, "comments_count": 189, "shares_count": 423},
-    {"id": "t3", "title": "Firuze", "artist": "Sezen Aksu", "album": "Firuze", "duration": 312, "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300", "source": "apple", "likes_count": 28900, "comments_count": 567, "shares_count": 890},
-    {"id": "t4", "title": "Cevapsız Çınlama", "artist": "maNga", "album": "e-akustik", "duration": 256, "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300", "source": "spotify", "likes_count": 19800, "comments_count": 345, "shares_count": 612},
-    {"id": "t5", "title": "Unuttun mu Beni", "artist": "Mabel Matiz", "album": "Gök Nerede", "duration": 223, "cover_url": "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=300", "source": "youtube", "likes_count": 16700, "comments_count": 278, "shares_count": 445},
-    {"id": "t6", "title": "Duman", "artist": "Duman", "album": "Darmaduman", "duration": 287, "cover_url": "https://images.unsplash.com/photo-1504898770365-14faca6a7320?w=300", "source": "spotify", "likes_count": 22100, "comments_count": 456, "shares_count": 789},
-    {"id": "t7", "title": "Kuzu Kuzu", "artist": "Tarkan", "album": "Karma", "duration": 234, "cover_url": "https://images.unsplash.com/photo-1487180144351-b8472da7d491?w=300", "source": "apple", "likes_count": 31200, "comments_count": 678, "shares_count": 1023},
-    {"id": "t8", "title": "Şımarık", "artist": "Tarkan", "album": "Ölürüm Sana", "duration": 201, "cover_url": "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=300", "source": "youtube", "likes_count": 45600, "comments_count": 890, "shares_count": 1567},
+    {"id": "t1", "title": "Yıldızların Altında", "artist": "Tarkan", "album": "Metamorfoz", "duration": 245, "cover_url": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300", "source": "soundcloud", "likes_count": 15420, "comments_count": 234, "shares_count": 567},
+    {"id": "t2", "title": "Sen Olsan Bari", "artist": "Aleyna Tilki", "album": "Singles", "duration": 198, "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300", "source": "soundcloud", "likes_count": 12300, "comments_count": 189, "shares_count": 423},
+    {"id": "t3", "title": "Firuze", "artist": "Sezen Aksu", "album": "Firuze", "duration": 312, "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300", "source": "soundcloud", "likes_count": 28900, "comments_count": 567, "shares_count": 890},
+    {"id": "t4", "title": "Cevapsız Çınlama", "artist": "maNga", "album": "e-akustik", "duration": 256, "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300", "source": "soundcloud", "likes_count": 19800, "comments_count": 345, "shares_count": 612},
+    {"id": "t5", "title": "Unuttun mu Beni", "artist": "Mabel Matiz", "album": "Gök Nerede", "duration": 223, "cover_url": "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=300", "source": "soundcloud", "likes_count": 16700, "comments_count": 278, "shares_count": 445},
+    {"id": "t6", "title": "Duman", "artist": "Duman", "album": "Darmaduman", "duration": 287, "cover_url": "https://images.unsplash.com/photo-1504898770365-14faca6a7320?w=300", "source": "soundcloud", "likes_count": 22100, "comments_count": 456, "shares_count": 789},
+    {"id": "t7", "title": "Kuzu Kuzu", "artist": "Tarkan", "album": "Karma", "duration": 234, "cover_url": "https://images.unsplash.com/photo-1487180144351-b8472da7d491?w=300", "source": "soundcloud", "likes_count": 31200, "comments_count": 678, "shares_count": 1023},
+    {"id": "t8", "title": "Şımarık", "artist": "Tarkan", "album": "Ölürüm Sana", "duration": 201, "cover_url": "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=300", "source": "soundcloud", "likes_count": 45600, "comments_count": 890, "shares_count": 1567},
 ]
 
 MOCK_ARTISTS = [
@@ -2785,7 +2779,7 @@ async def add_track_comment(
 
 @api_router.post("/services/connect/{service_type}")
 async def connect_service(service_type: str, current_user: dict = Depends(get_current_user)):
-    if service_type not in ["youtube", "spotify", "apple"]:
+    if service_type not in ["soundcloud", "audius"]:
         raise HTTPException(status_code=400, detail="Invalid service type")
     
     now = datetime.now(timezone.utc).isoformat()
@@ -3305,17 +3299,15 @@ async def add_track_collaborative(
     if not is_owner and not is_collaborator:
         raise HTTPException(status_code=403, detail="Bu playlist'e şarkı ekleyemezsiniz")
     
-    # Find track (try mock tracks first, then YouTube format)
+    # Find track (try mock tracks first, then SoundCloud format)
     track = next((t for t in MOCK_TRACKS if t["id"] == track_id), None)
-    
-    if not track and track_id.startswith("yt_"):
-        # YouTube track
+
+    if not track and track_id.startswith("sc_"):
         track = {
             "id": track_id,
-            "youtube_id": track_id.replace("yt_", ""),
-            "title": "YouTube Track",
+            "title": "SoundCloud Track",
             "artist": "Unknown",
-            "source": "youtube",
+            "source": "soundcloud",
             "added_by": current_user["id"],
             "added_at": datetime.now(timezone.utc).isoformat()
         }
@@ -3362,9 +3354,8 @@ async def get_listening_stats(current_user: dict = Depends(get_current_user)):
             {"name": "Electronic", "percentage": 5},
         ],
         platform_breakdown={
-            "spotify": 45,
-            "youtube": 35,
-            "apple": 20
+            "soundcloud": 70,
+            "audius": 30,
         }
     )
 
@@ -4425,6 +4416,26 @@ async def send_push_notification(
     settings = await db.user_settings.find_one({"user_id": recipient_id})
     if settings and pref_key and not settings.get(pref_key, True):
         return {"success": True, "reason": "Saved to DB, push disabled"}
+
+    # Check simple notification preferences (NotifSettingsScreen → /notifications/preferences)
+    simple_prefs_doc = await db.notification_settings.find_one(
+        {"user_id": recipient_id}, {"_id": 0, "preferences": 1}
+    )
+    if simple_prefs_doc and simple_prefs_doc.get("preferences"):
+        prefs = simple_prefs_doc["preferences"]
+        if not prefs.get("push", True):
+            return {"success": True, "reason": "Saved to DB, push disabled by user"}
+        simple_type_map = {
+            "follow": "follows",
+            "message": "messages",
+            "new_message": "messages",
+            "like": "likes",
+            "story_like": "likes",
+        }
+        simple_key = simple_type_map.get(notification_type)
+        if simple_key and not prefs.get(simple_key, True):
+            return {"success": True, "reason": "Saved to DB, push disabled for type"}
+
     if settings and settings.get("quiet_hours_enabled"):
         current_time = datetime.now(timezone.utc).strftime("%H:%M")
         start = settings.get("quiet_hours_start", "22:00")
@@ -4647,7 +4658,10 @@ async def freeze_account(
             "is_online": False
         }}
     )
-    
+
+    # Remove from all followers/following lists while frozen
+    await db.follows.delete_many({"$or": [{"follower_id": user_id}, {"following_id": user_id}]})
+
     try:
         if credentials:
             await db.token_blacklist.insert_one({
@@ -4658,7 +4672,7 @@ async def freeze_account(
         await db.user_sessions.delete_many({"user_id": user_id})
     except Exception:
         pass
-        
+
     return {"message": "Hesabınız donduruldu"}
 
 @api_router.post("/account/unfreeze")
@@ -5046,7 +5060,7 @@ class SearchHistoryItem(BaseModel):
 async def search(
     q: str,
     type: str = "all",  # all, users, tracks, posts, playlists
-    platform: str = "all",  # all, youtube, apple_music
+    platform: str = "all",  # all, soundcloud, audius
     duration: str = "all",  # all, short, medium, long
     sort: str = "relevance",  # relevance, date, views, likes
     date: str = "all",  # all, hour, day, week, month - tarih filtresi (posts için)
@@ -5063,8 +5077,6 @@ async def search(
         "tracks": [],
         "posts": [],
         "playlists": [],
-        "youtube": [],
-        "apple_music": [],
         "search_engine": "meilisearch" if meili_service.is_available() else "mongodb",
     }
 
@@ -5254,7 +5266,7 @@ async def get_search_categories(limit: int = 20, current_user: dict = Depends(ge
             return {"genres": cats.get("genres", []), "platforms": cats.get("platforms", [])}
     except Exception:
         pass
-    return {"genres": ["pop", "rock", "hiphop", "electronic", "jazz", "acoustic"], "platforms": ["YouTube", "Spotify"]}
+    return {"genres": ["pop", "rock", "hiphop", "electronic", "jazz", "acoustic"], "platforms": ["SoundCloud", "Audius"]}
 
 @api_router.get("/search/popular")
 @api_router.get("/search/trending")
@@ -6214,13 +6226,17 @@ async def get_user_stats(
         start_date = now - timedelta(days=7)
     elif period == "month":
         start_date = now - timedelta(days=30)
+    elif period == "90d":
+        start_date = now - timedelta(days=90)
+    elif period == "180d":
+        start_date = now - timedelta(days=180)
     elif period == "year":
         start_date = now - timedelta(days=365)
     else:
         start_date = datetime(2020, 1, 1, tzinfo=timezone.utc)
-    
+
     start_date_str = start_date.isoformat()
-    
+
     # Get listening history
     play_history = await db.play_history.find({
         "user_id": current_user["id"],
@@ -7057,8 +7073,8 @@ async def discover_users(
     """Discover all registered users sorted by activity. Filters: country, city, gender."""
     user_id = current_user["id"]
 
-    # Only exclude self
-    match_filter = {"id": {"$ne": user_id}}
+    # Exclude self, frozen accounts, and deleted accounts
+    match_filter = {"id": {"$ne": user_id}, "is_frozen": {"$ne": True}}
 
     and_clauses = []
 
@@ -7244,12 +7260,34 @@ async def get_user_listening_stats(user_id: str, current_user=Depends(get_curren
                 for a in ls["top_artists"][:5]
             ]
 
+    # Add percentage to each genre based on relative count
+    total_genre_count = sum(g.get("count", 0) for g in top_genres) or 1
+    for g in top_genres:
+        g["percentage"] = round(g.get("count", 0) * 100 / total_genre_count)
+
+    # Weekly listening per day (last 7 days, oldest→newest)
+    seven_days_ago = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    weekly_buckets: dict = {}
+    for i in range(6, -1, -1):
+        day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        weekly_buckets[day] = 0
+    for h in history:
+        played_at = h.get("played_at", "")
+        if isinstance(played_at, str) and len(played_at) >= 10:
+            day = played_at[:10]
+            if day >= seven_days_ago and day in weekly_buckets:
+                weekly_buckets[day] += h.get("duration", 180) // 60
+    weekly_minutes_per_day = [weekly_buckets[d] for d in sorted(weekly_buckets.keys())]
+    total_hours_this_week = sum(weekly_minutes_per_day) // 60
+
     return {
-        "total_minutes":  total_minutes,
-        "total_tracks":   total_tracks,
-        "unique_artists": len(artist_counts) or (ls.get("unique_artists", 0) if ls else 0),
-        "top_genres":     top_genres,
-        "top_artists":    top_artists,
+        "total_minutes":           total_minutes,
+        "total_tracks":            total_tracks,
+        "unique_artists":          len(artist_counts) or (ls.get("unique_artists", 0) if ls else 0),
+        "top_genres":              top_genres,
+        "top_artists":             top_artists,
+        "weekly_minutes_per_day":  weekly_minutes_per_day,
+        "total_hours_this_week":   total_hours_this_week,
     }
 
 
@@ -8313,19 +8351,13 @@ async def get_realtime_trending(
     current_user: dict = Depends(get_current_user)
 ):
     """Get real-time trending content"""
-    youtube_trending = [
-        {"platform_id": f"yt_{i}", "title": f"Trending Song {i}", "artist": f"Artist {i}", "count": random.randint(100, 1000)}
+    sc_trending = [
+        {"platform_id": f"sc_{i}", "title": f"Trending Song {i}", "artist": f"Artist {i}", "count": random.randint(100, 1000)}
         for i in range(10)
     ]
-    
-    apple_trending = [
-        {"platform_id": f"am_{i}", "title": f"Apple Hit {i}", "artist": f"Artist {i}", "count": random.randint(50, 500)}
-        for i in range(10)
-    ]
-    
+
     return {
-        "youtube": youtube_trending,
-        "apple": apple_trending,
+        "soundcloud": sc_trending,
         "period": period,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
@@ -11872,33 +11904,16 @@ async def delete_webauthn_credential(
 
 @api_router.post("/playlists/sync")
 async def sync_playlists(
-    platform: str = Form(...),  # spotify, apple_music, youtube_music
+    platform: str = Form(...),  # soundcloud, audius
     access_token: str = Form(default=None),
     current_user: dict = Depends(get_current_user)
 ):
     """Sync playlists from external platforms"""
     user_id = current_user["id"]
     now = datetime.now(timezone.utc)
-    
-    # Mock sync result (in production, would use actual platform APIs)
+
+    # Mock sync result
     synced_playlists = []
-    
-    if platform == "spotify":
-        synced_playlists = [
-            {"name": "Spotify Beğenilenler", "track_count": random.randint(50, 200), "source": "spotify"},
-            {"name": "Keşfet Haftalık", "track_count": 30, "source": "spotify"},
-            {"name": "Release Radar", "track_count": 30, "source": "spotify"},
-        ]
-    elif platform == "apple_music":
-        synced_playlists = [
-            {"name": "Favorilerim", "track_count": random.randint(30, 150), "source": "apple_music"},
-            {"name": "Yeni Müzik Karması", "track_count": 25, "source": "apple_music"},
-        ]
-    elif platform == "youtube_music":
-        synced_playlists = [
-            {"name": "Beğendiğim Müzikler", "track_count": random.randint(40, 180), "source": "youtube_music"},
-            {"name": "Süper Karışık", "track_count": 50, "source": "youtube_music"},
-        ]
     
     # Store sync info
     for playlist in synced_playlists:
@@ -11938,7 +11953,7 @@ async def get_sync_status(
     """Get playlist sync status for all platforms"""
     user = await db.users.find_one({"id": current_user["id"]}, {"_id": 0})
     
-    platforms = ["spotify", "apple_music", "youtube_music"]
+    platforms = ["soundcloud", "audius"]
     status = {}
     
     for platform in platforms:
@@ -13138,7 +13153,7 @@ async def list_exports(
 
 @api_router.post("/data/import")
 async def import_user_data(
-    source_platform: str = Form(...),  # spotify, apple_music, youtube_music, other
+    source_platform: str = Form(...),  # soundcloud, audius, other
     import_type: str = Form(default="playlists"),  # playlists, history, all
     data_file: UploadFile = File(default=None),
     current_user: dict = Depends(get_current_user)
@@ -15889,7 +15904,7 @@ fastapi_app.include_router(api_router)
 try:
     from routes.discover_routes import router as discover_router
     fastapi_app.include_router(discover_router, prefix="/api")
-    logging.info("Discover router loaded (home, mixed YouTube+Spotify)")
+    logging.info("Discover router loaded (home, SoundCloud)")
 except ImportError as e:
     logging.warning(f"Could not load discover router: {e}")
 
@@ -16128,18 +16143,47 @@ async def start_scheduler():
         CronTrigger(minute=0, hour=f"*/{remod_hours}", timezone="Europe/Istanbul"),
         id="text_remoderation",
     )
-    # Daily cache warming at 00:00 UTC - Spotify trending + YouTube trending
-    async def _warm_music_cache_job():
+    # Daily SoundCloud home data refresh at 00:05 UTC — popular içerikler her gün yenilenir
+    async def _refresh_sc_home_job():
         try:
-            from services.cache_warming import warm_music_cache
-            await warm_music_cache(db)
+            from routes.music_hybrid import _build_home_data, redis_client as sc_redis
+            # Tüm büyük müzik pazarları — global + 50 ülke
+            regions = [
+                None,                          # global fallback
+                # Avrupa
+                "TR", "GB", "DE", "FR", "ES", "IT", "NL", "SE", "NO", "DK",
+                "FI", "PL", "PT", "RU", "UA", "BE", "AT", "CH", "IE", "GR",
+                "CZ", "HU", "RO", "SK", "RS",
+                # Amerika
+                "US", "BR", "CA", "MX", "AR", "CO", "CL", "PE",
+                # Asya-Pasifik
+                "AU", "IN", "JP", "KR", "SG", "ID", "MY", "TH", "PH", "TW",
+                "HK", "VN", "NZ", "PK",
+                # Orta Doğu & Afrika
+                "SA", "AE", "EG", "ZA", "NG", "IL", "MA",
+            ]
+            refreshed = 0
+            import json as _json
+            import asyncio as _asyncio
+            for region in regions:
+                try:
+                    data = await _build_home_data(region)
+                    if data.get("featured") or data.get("trending"):
+                        key = f"dashboard:home:v2:{region or 'global'}"
+                        await sc_redis.set(key, _json.dumps(data), ex=86400)
+                        refreshed += 1
+                    await _asyncio.sleep(0.3)  # rate-limit koruması
+                except Exception as e:
+                    logging.warning(f"SC home refresh failed for region={region}: {e}")
+            logging.info(f"SC home cache refreshed for {refreshed}/{len(regions)} regions")
         except Exception as e:
-            logging.error(f"Cache warming job failed: {e}")
+            logging.error(f"SC home refresh job failed: {e}")
     scheduler.add_job(
-        _warm_music_cache_job,
-        CronTrigger(hour=0, minute=0, timezone="UTC"),
-        id="music_cache_warming",
+        _refresh_sc_home_job,
+        CronTrigger(hour=0, minute=5, timezone="UTC"),
+        id="sc_home_daily_refresh",
     )
+
     scheduler.add_job(auto_delete_flagged_content, 'interval', hours=6, id='auto_delete_flagged')
 
     async def _auto_backup_job():
@@ -16160,6 +16204,7 @@ async def start_scheduler():
     logging.info(f"Scheduler: text re-moderation every {remod_hours}h")
     logging.info("Scheduler: auto-delete flagged content every 6h")
     logging.info("Scheduler: music cache warming daily 00:00 UTC")
+    logging.info("Scheduler: SoundCloud home refresh daily 00:05 UTC")
     logging.info("Scheduler: auto backup daily 03:00 UTC")
     logging.info("Scheduler started (weekly summary Pazar 20:00)")
     logging.info("Socket.IO server started at /api/socket.io")

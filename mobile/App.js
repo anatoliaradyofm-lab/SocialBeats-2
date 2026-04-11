@@ -20,10 +20,10 @@ import { InterstitialAdProvider } from './src/contexts/InterstitialAdContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import MiniPlayer from './src/components/player/MiniPlayer';
 import FullPlayer from './src/components/player/FullPlayer';
-import YouTubePlayerMobile from './src/components/player/YouTubePlayerMobile';
 import notificationService from './src/services/notificationService';
 import { navigate, navigationRef } from './src/navigation/navigationRef';
 import ErrorBoundary from './src/components/ErrorBoundary';
+import { AppAlertPortal } from './src/components/ui/AppAlert';
 import localizationService from './src/services/LocalizationService';
 import OnboardingScreen, { isOnboardingCompleted } from './src/screens/OnboardingScreen';
 import OfflineBanner from './src/components/OfflineBanner';
@@ -133,17 +133,10 @@ export default function App() {
         await initFromStorage();
         const localeData = await localizationService.initialize();
 
-        // i18n dilini otomatik algılanan dile ayarla (kullanıcı tercihi yoksa)
-        const currentLang = i18n.language;
+        // i18n dilini ayarla: manuel seçim varsa onu uygula, yoksa otomatik algıla
         const detectedLang = localeData.language;
-
-        // Sadece ilk açılışta otomatik dil değişimi yap
-        if (!currentLang || currentLang === 'tr') {
-          const hasManualSelection = await localizationService._loadFromCache();
-          if (!hasManualSelection?.manuallySelected) {
-            await i18n.changeLanguage(detectedLang);
-            console.log(`Language auto-set to: ${detectedLang} for region: ${localeData.countryCode}`);
-          }
+        if (detectedLang && detectedLang !== i18n.language) {
+          await i18n.changeLanguage(detectedLang);
         }
 
         applyRTL(i18n.language);
@@ -224,13 +217,13 @@ export default function App() {
                           <PlayerProvider>
                             <ThemedStatusBar />
                             <OfflineBanner />
+                            <AppAlertPortal />
                             <AppNavigator onRouteChanged={setActiveRoute} />
                             {!isFeedActive && (
                               <>
                                 <MiniPlayer />
                                 <FullPlayer />
-                                <YouTubePlayerMobile />
-                              </>
+</>
                             )}
                           </PlayerProvider>
                         </NotificationHandler>

@@ -1,7 +1,7 @@
 /**
  * FullPlayer — NOVA Design System v3.0
  * Immersive full-screen music player · 2025 premium experience
- * Inspired by: Apple Music 2025 · Spotify full player · Tidal · Mobbin players
+ * QENARA full-screen player · Tidal · Mobbin players
  * Blurred album art backdrop · Waveform seek · Gesture dismiss · Lyrics preview
  */
 import React, { useState, useRef, useEffect } from 'react';

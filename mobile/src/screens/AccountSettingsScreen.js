@@ -6,17 +6,13 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../services/api';
-
-const MSG_OPTIONS = [
-  { key: 'everyone',  label: 'Herkes' },
-  { key: 'followers', label: 'Takipçilerim' },
-  { key: 'none',      label: 'Hiç Kimse' },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function AccountSettingsScreen({ navigation }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
+  const { t } = useTranslation();
 
   const [privateProfile, setPrivateProfile]     = useState(false);
   const [msgPermission, setMsgPermission]       = useState('everyone');
@@ -52,14 +48,20 @@ export default function AccountSettingsScreen({ navigation }) {
     saveProfile({ message_permission: key });
   };
 
-  const msgLabel = MSG_OPTIONS.find(o => o.key === msgPermission)?.label ?? 'Herkes';
+  const MSG_OPTIONS = [
+    { key: 'everyone',  label: t('settings.msgEveryone') },
+    { key: 'followers', label: t('settings.msgFollowers') },
+    { key: 'none',      label: t('settings.msgNone') },
+  ];
+
+  const msgLabel = MSG_OPTIONS.find(o => o.key === msgPermission)?.label ?? t('settings.msgEveryone');
 
   const ALL_ROWS = [
-    { key: 'msg',      label: 'Mesaj İzinleri',            icon: 'chatbubble-outline',  color: '#34D399', type: 'modal',  sub: msgLabel },
-    { key: 'privacy',  label: 'Profil Gizliliği',          icon: 'eye-off-outline',     color: '#A78BFA', type: 'toggle', sub: 'Profilin yalnızca takipçilere görünür' },
-    { key: 'blocked',  label: 'Engellenen Kullanıcılar',   icon: 'ban-outline',         color: '#F87171', nav: 'BlockedUsers' },
-    { key: 'freeze',   label: 'Hesabı Dondur',             icon: 'snow-outline',        color: '#60A5FA', nav: 'FreezeAccount' },
-    { key: 'delete',   label: 'Hesabımı Kalıcı Sil',       icon: 'trash-outline',       color: '#F87171', nav: 'DeleteAccount', danger: true },
+    { key: 'msg',      label: t('settings.messagePermissions'),    icon: 'chatbubble-outline',  color: '#34D399', type: 'modal',  sub: msgLabel },
+    { key: 'privacy',  label: t('settings.profilePrivacy'),        icon: 'eye-off-outline',     color: '#A78BFA', type: 'toggle', sub: t('settings.profilePrivacySub') },
+    { key: 'blocked',  label: t('settings.blockedUsersRow'),       icon: 'ban-outline',         color: '#F87171', nav: 'BlockedUsers' },
+    { key: 'freeze',   label: t('settings.freezeAccount'),         icon: 'snow-outline',        color: '#60A5FA', nav: 'FreezeAccount' },
+    { key: 'delete',   label: t('settings.deleteAccountPermanent'),icon: 'trash-outline',       color: '#F87171', nav: 'DeleteAccount', danger: true },
   ];
 
   return (
@@ -74,7 +76,7 @@ export default function AccountSettingsScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: colors.text }]}>Hesap Ayarları</Text>
+        <Text style={[s.headerTitle, { color: colors.text }]}>{t('settings.accountSettings')}</Text>
         <View style={{ width: 40 }}>
           {saving && <ActivityIndicator size="small" color={colors.primary} />}
         </View>
@@ -150,8 +152,8 @@ export default function AccountSettingsScreen({ navigation }) {
             <Pressable style={StyleSheet.absoluteFill} onPress={() => setMsgModalVisible(false)} />
             <View style={[s.sheet, { backgroundColor: colors.card, borderColor: colors.glassBorder }]} onStartShouldSetResponder={() => true}>
               <View style={[s.sheetHandle, { backgroundColor: colors.textGhost }]} />
-              <Text style={[s.sheetTitle, { color: colors.text }]}>Mesaj İzinleri</Text>
-              <Text style={[s.sheetSub, { color: colors.textMuted }]}>Kimler sana mesaj gönderebilir?</Text>
+              <Text style={[s.sheetTitle, { color: colors.text }]}>{t('settings.messagePermissions')}</Text>
+              <Text style={[s.sheetSub, { color: colors.textMuted }]}>{t('settings.whoCanMessage')}</Text>
               {MSG_OPTIONS.map((opt, i) => {
                 const active = msgPermission === opt.key;
                 return (
@@ -175,8 +177,8 @@ export default function AccountSettingsScreen({ navigation }) {
           <Pressable style={s.backdrop} onPress={() => setMsgModalVisible(false)}>
             <Pressable style={[s.sheet, { backgroundColor: colors.card, borderColor: colors.glassBorder }]} onPress={() => {}}>
               <View style={[s.sheetHandle, { backgroundColor: colors.textGhost }]} />
-              <Text style={[s.sheetTitle, { color: colors.text }]}>Mesaj İzinleri</Text>
-              <Text style={[s.sheetSub, { color: colors.textMuted }]}>Kimler sana mesaj gönderebilir?</Text>
+              <Text style={[s.sheetTitle, { color: colors.text }]}>{t('settings.messagePermissions')}</Text>
+              <Text style={[s.sheetSub, { color: colors.textMuted }]}>{t('settings.whoCanMessage')}</Text>
               {MSG_OPTIONS.map((opt, i) => {
                 const active = msgPermission === opt.key;
                 return (

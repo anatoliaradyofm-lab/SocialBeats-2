@@ -7,7 +7,6 @@ import {
   Image,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,16 +19,18 @@ import { useTranslation } from 'react-i18next';
 import { formatDate as formatLocaleDate } from '../lib/localeUtils';
 
 import { HISTORY_KEY, MAX_HISTORY, addToListeningHistory } from '../services/historyService';
+import { Alert } from '../components/ui/AppAlert';
 
 export default function ListeningHistoryScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { playTrack } = usePlayer();
-  const { token } = useAuth();
+  const { token, isGuest } = useAuth();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const loadHistory = useCallback(async () => {
+    if (isGuest) { setLoading(false); return; }
     setLoading(true);
     try {
       if (token) {
@@ -119,6 +120,27 @@ export default function ListeningHistoryScreen({ navigation }) {
       <Ionicons name="play-circle" size={28} color="#8B5CF6" />
     </TouchableOpacity>
   );
+
+  if (isGuest) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }]}>
+        <LinearGradient colors={['#1A0A2E', '#100620', '#08060F', '#08060F']} locations={[0, 0.18, 0.32, 1]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, { position: 'absolute', top: insets.top + 8, left: 16 }]}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: 'rgba(139,92,246,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 20, borderWidth: 1, borderColor: 'rgba(139,92,246,0.3)' }}>
+          <Ionicons name="time-outline" size={32} color="#8B5CF6" />
+        </View>
+        <Text style={{ fontSize: 20, fontWeight: '800', color: '#F8F8F8', marginBottom: 8 }}>Dinleme Geçmişi</Text>
+        <Text style={{ fontSize: 14, color: 'rgba(248,248,248,0.45)', textAlign: 'center', lineHeight: 20, marginBottom: 28 }}>Dinleme geçmişini takip etmek için giriş yap.</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Auth')} style={{ borderRadius: 14, overflow: 'hidden' }}>
+          <LinearGradient colors={['#A78BFA', '#7C3AED']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ paddingHorizontal: 32, paddingVertical: 14 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFF' }}>Giriş Yap</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

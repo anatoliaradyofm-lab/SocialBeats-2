@@ -13,13 +13,13 @@ import { setLocale } from '../lib/localeStore';
 
 const PREFERRED_LANGUAGE_KEY = 'preferred_language';
 const CACHE_KEY = '@SocialBeats/locale_cache';
-const SUPPORTED_LANGS = ['tr', 'en', 'de', 'fr', 'es', 'it', 'ar', 'ru', 'zh', 'ja', 'pt', 'pt-BR', 'nl', 'pl', 'el', 'hi', 'id', 'vi', 'fil', 'th', 'ur', 'ms', 'ko'];
+const SUPPORTED_LANGS = ['tr', 'en', 'de', 'fr', 'es', 'it', 'ar', 'ru', 'zh', 'zh-TW', 'ja', 'ko', 'pt', 'pt-BR', 'nl', 'pl', 'el', 'hi', 'bn', 'id', 'ms', 'vi', 'fil', 'th', 'ur', 'fa', 'ta', 'te', 'uk', 'ro', 'af', 'sw', 'ha', 'yo', 'zu'];
 
 function normalizeLang(code) {
   if (!code || typeof code !== 'string') return 'en';
   const base = code.split(/[-_]/)[0].toLowerCase();
   if (code.toLowerCase().includes('pt-br')) return 'pt-BR';
-  const map = { pt: 'pt', 'pt-br': 'pt-BR', fil: 'fil', ur: 'ur', zh: 'zh', hi: 'hi', id: 'id', vi: 'vi', th: 'th', ms: 'ms', ar: 'ar', ja: 'ja', ko: 'ko', de: 'de', fr: 'fr', es: 'es', it: 'it', ru: 'ru', tr: 'tr', pl: 'pl', nl: 'nl', el: 'el', en: 'en' };
+  const map = { pt: 'pt', 'pt-br': 'pt-BR', fil: 'fil', ur: 'ur', fa: 'fa', ta: 'ta', te: 'te', zh: 'zh', 'zh-tw': 'zh-TW', hi: 'hi', bn: 'bn', id: 'id', vi: 'vi', th: 'th', ms: 'ms', ar: 'ar', ja: 'ja', ko: 'ko', de: 'de', fr: 'fr', es: 'es', it: 'it', ru: 'ru', tr: 'tr', pl: 'pl', nl: 'nl', el: 'el', en: 'en', uk: 'uk', ro: 'ro', af: 'af', sw: 'sw', ha: 'ha', yo: 'yo', zu: 'zu' };
   return map[base] || (SUPPORTED_LANGS.includes(base) ? base : 'en');
 }
 
@@ -72,12 +72,12 @@ export default {
   async saveLanguage(lang) {
     await AsyncStorage.setItem(PREFERRED_LANGUAGE_KEY, lang);
     const cached = await this._loadFromCache();
-    setLocale(lang, cached?.countryCode || 'US');
-    if (cached) {
-      cached.language = lang;
-      cached.manuallySelected = true;
-      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cached));
-    }
+    const countryCode = cached?.countryCode || 'US';
+    setLocale(lang, countryCode);
+    const next = cached
+      ? { ...cached, language: lang, manuallySelected: true }
+      : { language: lang, countryCode, manuallySelected: true };
+    await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(next));
   },
 
   async _loadFromCache() {

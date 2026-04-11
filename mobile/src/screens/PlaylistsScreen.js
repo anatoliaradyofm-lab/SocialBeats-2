@@ -3,9 +3,10 @@
  * Liste görünümü · Beğenilen + Son Dinlenen pinned playlist olarak · FAB · Rename modal
  */
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
-  RefreshControl, TextInput, ActivityIndicator, Alert, Animated, Pressable, Modal, Platform,
+  RefreshControl, TextInput, ActivityIndicator, Animated, Pressable, Modal, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
+import { Alert } from '../components/ui/AppAlert';
 import {
   getStoredTrackCount,
   getPlaylistsCache,
@@ -71,7 +73,15 @@ const PINNED = [
 // ─── 4-image collage cover ───────────────────────────────────────────────────
 function CollageCover({ covers, size }) {
   const half = size / 2;
-  if (!covers?.length) return <View style={{ width: size, height: size, backgroundColor: '#333', borderRadius: 12 }} />;
+  if (!covers?.length) return (
+    <LinearGradient
+      colors={['#4C1D95', '#7C3AED', '#C084FC']}
+      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+      style={{ width: size, height: size, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}
+    >
+      <Ionicons name="musical-notes" size={size * 0.42} color="rgba(255,255,255,0.85)" />
+    </LinearGradient>
+  );
   if (covers.length < 4) {
     return <Image source={{ uri: covers[0] }} style={{ width: size, height: size, borderRadius: 12 }} />;
   }
@@ -209,14 +219,18 @@ const bm = StyleSheet.create({
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function PlaylistsScreen({ navigation }) {
-  const { colors }      = useTheme();
-  const { user, token } = useAuth();
-  const { t }           = useTranslation();
+  const { colors }              = useTheme();
+  const { user, token, isGuest } = useAuth();
+  const { t }                   = useTranslation();
   const insets          = useSafeAreaInsets();
 
   const [loading, setLoading]         = useState(!_cache);
   const [refreshing, setRefreshing]   = useState(false);
-  const [playlists, setPlaylists]     = useState(() => _cache || PLACEHOLDER);
+  const [playlists, setPlaylists]     = useState(() => {
+    if (isGuest) return (_cache || []).filter(p => String(p.id).startsWith('local-'));
+    // Gerçek kullanıcı: local- prefix'li (misafir) listeler gösterilmez
+    return (_cache || PLACEHOLDER).filter(p => !String(p.id).startsWith('local-'));
+  });
 
   // Keep module cache in sync so remounts restore state
   const setPlaylistsCached = useCallback((updater) => {
@@ -237,15 +251,30 @@ export default function PlaylistsScreen({ navigation }) {
 
   // ── Load ─────────────────────────────────────────────────────────────────
   const loadPlaylists = useCallback(async () => {
+    if (isGuest || !token) { setLoading(false); return; }
     try {
       const res  = await api.get('/playlists', token);
       const list = Array.isArray(res) ? res : res?.playlists || res?.items || [];
-      if (list.length > 0) setPlaylistsCached(list);
+      if (list.length > 0) {
+        // Gerçek kullanıcı: sadece API'dan gelen listeler (local- prefix'liler dahil edilmez)
+        setPlaylistsCached(list.filter(p => !String(p.id).startsWith('local-')));
+      }
     } catch (_) {}
     finally { setLoading(false); }
-  }, [token]);
+  }, [token, isGuest]);
 
   useEffect(() => { loadPlaylists(); }, [loadPlaylists]);
+
+  // Ekrana dönüldüğünde cache'den güncelle (silme sonrası listeyi yenile)
+  useFocusEffect(useCallback(() => {
+    const fresh = getPlaylistsCache();
+    if (isGuest) {
+      setPlaylists(fresh.filter(p => String(p.id).startsWith('local-')));
+    } else {
+      // Gerçek kullanıcı: local- prefix'li listeler de gösterilir (API onaylayana kadar)
+      setPlaylistsCached(fresh);
+    }
+  }, [isGuest]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -257,21 +286,20 @@ export default function PlaylistsScreen({ navigation }) {
   const handleCreate = async () => {
     if (!inputVal.trim()) return;
     setSaving(true);
-    // Optimistic insert with temp id
-    const tempId = `temp-${Date.now()}`;
+    const tempId = `local-${Date.now()}`;
     const newItem = { id: tempId, name: inputVal.trim(), covers: [], track_count: 0, updated: 'Şimdi' };
     setPlaylistsCached(p => [newItem, ...p]);
     setCreateModal(false);
     setInputVal('');
     setSaving(false);
+    // Misafirde sadece local kayıt — API çağrısı yok
+    if (isGuest || !token) return;
     try {
       const res = await api.post('/playlists', { name: newItem.name }, token);
-      // Replace temp item with real one if server returns id
       if (res?.id) {
         setPlaylistsCached(p => p.map(pl => pl.id === tempId ? { ...newItem, ...res } : pl));
       }
     } catch {
-      // Revert on error
       setPlaylistsCached(p => p.filter(pl => pl.id !== tempId));
       Alert.alert('Hata', 'Oynatma listesi oluşturulamadı.');
     }
@@ -311,12 +339,14 @@ export default function PlaylistsScreen({ navigation }) {
             <Text style={s.greeting}>Merhaba 👋</Text>
             <Text style={s.title}>Kütüphanem</Text>
           </View>
-          <TouchableOpacity
-            style={[s.iconBtn, { backgroundColor: colors.surface }]}
-            onPress={() => { setShowSearch(v => !v); if (showSearch) setSearch(''); }}
-          >
-            <Ionicons name={showSearch ? 'close' : 'search'} size={20} color={colors.text} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              style={[s.iconBtn, { backgroundColor: colors.surface }]}
+              onPress={() => { setShowSearch(v => !v); if (showSearch) setSearch(''); }}
+            >
+              <Ionicons name={showSearch ? 'close' : 'search'} size={20} color={colors.text} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Search bar */}
@@ -385,7 +415,7 @@ export default function PlaylistsScreen({ navigation }) {
               <Text style={[s.emptyTitle, { color: colors.text }]}>Henüz playlist yok</Text>
               <Text style={[s.emptySub, { color: colors.textMuted }]}>İlk oynatma listeni oluştur</Text>
               <TouchableOpacity style={s.emptyBtn} onPress={() => setCreateModal(true)}>
-                <LinearGradient colors={['#A78BFA', '#7C3AED']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.emptyBtnGrad]}>
+                <LinearGradient colors={['#A78BFA', '#7C3AED']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.emptyBtnGrad}>
                   <Ionicons name="add" size={18} color="#FFF" />
                   <Text style={s.emptyBtnText}>Oluştur</Text>
                 </LinearGradient>

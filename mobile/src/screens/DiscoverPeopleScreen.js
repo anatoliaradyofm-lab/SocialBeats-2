@@ -13,6 +13,7 @@ import api from '../services/api';
 import { getLocale } from '../lib/localeStore';
 import { useTheme } from '../contexts/ThemeContext';
 import { COUNTRIES } from '../lib/countries';
+import { Alert } from '../components/ui/AppAlert';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -69,7 +70,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
   const styles = createStyles(colors);
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { token, user: authUser } = useAuth();
+  const { token, user: authUser, isGuest } = useAuth();
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -124,7 +125,6 @@ export default function DiscoverPeopleScreen({ navigation }) {
   filtersRef.current = { country: selectedCountry, city: selectedCity, gender: selectedGender };
 
   const fetchUsers = useCallback(async (reset = false) => {
-    if (!token) return;
     if (!reset && loadingMoreRef.current) return;
 
     const { country, city, gender } = filtersRef.current;
@@ -145,15 +145,18 @@ export default function DiscoverPeopleScreen({ navigation }) {
       if (reset) {
         setUsers(list);
         const followed = new Set();
-        list.forEach(u => { if (u.is_following) followed.add(u.id); });
+        // Misafir modunda takip durumu her zaman boş — API yanıtı yoksayılır
+        if (!isGuest) list.forEach(u => { if (u.is_following) followed.add(u.id); });
         setFollowedIds(followed);
       } else {
         setUsers(prev => [...prev, ...list]);
-        setFollowedIds(prev => {
-          const next = new Set(prev);
-          list.forEach(u => { if (u.is_following) next.add(u.id); });
-          return next;
-        });
+        if (!isGuest) {
+          setFollowedIds(prev => {
+            const next = new Set(prev);
+            list.forEach(u => { if (u.is_following) next.add(u.id); });
+            return next;
+          });
+        }
       }
       offsetRef.current += list.length;
       setOffset(offsetRef.current);
@@ -183,7 +186,8 @@ export default function DiscoverPeopleScreen({ navigation }) {
       const res = await api.get(`/search?q=${enc}&type=users&limit=20`, token);
       const list = res?.users || [];
       const followMap = {};
-      list.forEach(u => { followMap[u.id] = u.is_following ?? false; });
+      // Misafir modunda takip durumu her zaman false
+      list.forEach(u => { followMap[u.id] = !isGuest && (u.is_following ?? false); });
       setSearchFollowing(prev => ({ ...prev, ...followMap }));
       setSearchResults(list);
     } catch {
@@ -206,6 +210,13 @@ export default function DiscoverPeopleScreen({ navigation }) {
   }, [searchQuery]);
 
   const handleSearchFollow = async (userId) => {
+    if (isGuest || !token) {
+      Alert.alert('Giriş Gerekli', 'Takip etmek için giriş yapmanız gerekiyor.', [
+        { text: 'İptal', style: 'cancel' },
+        { text: 'Giriş Yap', onPress: () => navigation.navigate('Auth') },
+      ]);
+      return;
+    }
     const isFollowing = searchFollowing[userId];
     setSearchFollowing(prev => ({ ...prev, [userId]: !isFollowing }));
     try {
@@ -221,7 +232,6 @@ export default function DiscoverPeopleScreen({ navigation }) {
 
   // İlk yükleme ve filtre değişimlerinde yeniden yükle
   useEffect(() => {
-    if (!token) return;
     fetchUsers(true);
   }, [token, selectedCountry, selectedCity, selectedGender]);
 
@@ -245,22 +255,62 @@ export default function DiscoverPeopleScreen({ navigation }) {
   };
 
   const handleFollow = async (userId) => {
+    if (isGuest || !token) {
+      Alert.alert('Giriş Gerekli', 'Takip etmek için giriş yapmanız gerekiyor.', [
+        { text: 'İptal', style: 'cancel' },
+        { text: 'Giriş Yap', onPress: () => navigation.navigate('Auth') },
+      ]);
+      return;
+    }
+    const wasFollowing = followedIds.has(userId);
+    // Optimistic update
+    setFollowedIds(prev => {
+      const next = new Set(prev);
+      if (wasFollowing) next.delete(userId); else next.add(userId);
+      return next;
+    });
+    setUsers(prev => prev.map(u =>
+      u.id === userId
+        ? { ...u, follower_count: Math.max(0, (u.follower_count || 0) + (wasFollowing ? -1 : 1)) }
+        : u
+    ));
     try {
-      await api.post(`/social/follow/${userId}`, {}, token);
-      setFollowedIds(prev => new Set([...prev, userId]));
-
-      if (!followAnimations.current[userId]) {
-        followAnimations.current[userId] = new Animated.Value(0);
+      if (wasFollowing) {
+        await api.delete(`/social/follow/${userId}`, token);
+      } else {
+        await api.post(`/social/follow/${userId}`, {}, token);
+        if (!followAnimations.current[userId]) {
+          followAnimations.current[userId] = new Animated.Value(0);
+        }
+        Animated.sequence([
+          Animated.timing(followAnimations.current[userId], { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.delay(1500),
+          Animated.timing(followAnimations.current[userId], { toValue: 0, duration: 300, useNativeDriver: true }),
+        ]).start();
       }
-      Animated.sequence([
-        Animated.timing(followAnimations.current[userId], { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.delay(1500),
-        Animated.timing(followAnimations.current[userId], { toValue: 0, duration: 300, useNativeDriver: true }),
-      ]).start();
-    } catch {}
+    } catch {
+      // Revert optimistic update
+      setFollowedIds(prev => {
+        const next = new Set(prev);
+        if (wasFollowing) next.add(userId); else next.delete(userId);
+        return next;
+      });
+      setUsers(prev => prev.map(u =>
+        u.id === userId
+          ? { ...u, follower_count: Math.max(0, (u.follower_count || 0) + (wasFollowing ? 1 : -1)) }
+          : u
+      ));
+    }
   };
 
   const handleMessage = (user) => {
+    if (isGuest || !token) {
+      Alert.alert('Giriş Gerekli', 'Mesaj göndermek için giriş yapmanız gerekiyor.', [
+        { text: 'İptal', style: 'cancel' },
+        { text: 'Giriş Yap', onPress: () => navigation.navigate('Auth') },
+      ]);
+      return;
+    }
     navigation.navigate('Chat', {
       conversationId: null,
       recipientId: user.id,
@@ -381,7 +431,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
               <View style={styles.statItem}><Text style={styles.statNumber}>{formatCount(user.following_count)}</Text><Text style={styles.statLabel}>Takip</Text></View>
             </View>
             <View style={styles.actionButtons}>
-              <TouchableOpacity style={[styles.followButton, isFollowed && styles.followedButton]} onPress={() => !isFollowed && handleFollow(user.id)} activeOpacity={0.8}>
+              <TouchableOpacity style={[styles.followButton, isFollowed && styles.followedButton]} onPress={() => handleFollow(user.id)} activeOpacity={0.8}>
                 <Ionicons name={isFollowed ? 'checkmark' : 'person-add'} size={20} color="#fff" />
                 <Text style={styles.followButtonText}>{isFollowed ? 'Takip Ediliyor' : 'Takip Et'}</Text>
               </TouchableOpacity>
@@ -502,7 +552,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={[styles.followButton, isFollowed && styles.followedButton]}
-              onPress={() => !isFollowed && handleFollow(user.id)}
+              onPress={() => handleFollow(user.id)}
               activeOpacity={0.8}
             >
               <Ionicons
@@ -633,7 +683,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
               keyExtractor={(item) => String(item.id)}
               contentContainerStyle={{ paddingVertical: 8 }}
               renderItem={({ item }) => {
-                const isFollowed = searchFollowing[item.id] ?? (item.is_following ?? false);
+                const isFollowed = !isGuest && (searchFollowing[item.id] ?? (item.is_following ?? false));
                 return (
                   <TouchableOpacity
                     style={styles.searchUserRow}

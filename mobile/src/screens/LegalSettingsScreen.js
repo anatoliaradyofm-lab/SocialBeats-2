@@ -9,9 +9,8 @@ const LEGAL_ITEMS = [
   { label: 'Kullanım Koşulları',              icon: 'document-text-outline',    color: '#A78BFA', action: 'terms' },
   { label: 'Gizlilik Politikası',             icon: 'shield-outline',           color: '#60A5FA', action: 'privacy' },
   { label: 'Çerez Politikası',                icon: 'information-circle-outline',color: '#FBBF24', action: 'cookies' },
-  { label: 'Açık Kaynak Lisansları',          icon: 'code-slash-outline',       color: '#34D399', action: 'licenses' },
   { label: 'Topluluk Kuralları',              icon: 'people-outline',           color: '#F472B6', action: 'community' },
-  { label: 'GDPR / KVKK İşlemleri',          icon: 'finger-print-outline',     color: '#9CA3AF', action: 'gdpr' },
+  { label: 'Açık Kaynak Lisansları',          icon: 'code-slash-outline',       color: '#34D399', action: 'licenses' },
 ];
 
 export default function LegalSettingsScreen({ navigation }) {
@@ -21,8 +20,6 @@ export default function LegalSettingsScreen({ navigation }) {
   const handleItem = (action) => {
     if (action === 'licenses') {
       navigation.navigate('Licenses');
-    } else if (action === 'gdpr') {
-      navigation.navigate('DataExport');
     } else {
       // Open webview or external link
       const urls = {

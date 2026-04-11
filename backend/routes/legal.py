@@ -624,7 +624,7 @@ Kuralları ihlal eden hesaplar uyarı almadan kapatılabilir."""
 
 Uygulamamızda sunulan müzik içerikleri üçüncü taraf kaynaklardan sağlanmaktadır. Bu içeriklerin telif hakları ilgili sahiplerine aittir.
 
-• YouTube ve diğer platformlardan gelen içerikler, ilgili platformların kullanım koşullarına tabidir
+• SoundCloud ve diğer platformlardan gelen içerikler, ilgili platformların kullanım koşullarına tabidir
 • Kullanıcılar paylaştıkları içeriklerden kendileri sorumludur
 • Telif hakkı ihlali tespit edilen içerikler kaldırılır
 
@@ -727,7 +727,7 @@ Accounts violating rules may be closed without warning."""
 
 Music content in our app is provided from third-party sources. Copyrights belong to respective owners.
 
-• Content from YouTube and other platforms is subject to their terms of service
+• Content from SoundCloud and other platforms is subject to their terms of service
 • Users are responsible for content they share
 • Content with copyright infringement will be removed
 
@@ -945,28 +945,14 @@ LICENSES = {
                 "ar": "مكتبة التدويل"
             }
         },
-        {
-            "name": "Spotipy",
-            "version": "2.x",
-            "license": "MIT",
-            "url": "https://github.com/spotipy-dev/spotipy",
-            "description": {
-                "tr": "Spotify Web API istemcisi (Resmi API)",
-                "en": "Spotify Web API client (Official API)",
-                "de": "Spotify Web API Client (Offizielle API)",
-                "fr": "Client API Web Spotify (API officielle)",
-                "es": "Cliente de API web de Spotify (API oficial)",
-                "ar": "عميل واجهة برمجة تطبيقات Spotify (واجهة برمجة تطبيقات رسمية)"
-            }
-        }
     ],
     "third_party_services": {
         "tr": {
             "title": "Üçüncü Taraf Servisler",
             "content": """Bu uygulama aşağıdaki üçüncü taraf servisleri kullanmaktadır:
 
-• YouTube (Google LLC) - Müzik içerik arama ve metadata
-• Spotify (Spotify AB) - Resmi API üzerinden müzik verileri
+• SoundCloud (SoundCloud Ltd.) - Müzik içerik arama ve metadata
+• Audius (Audius Inc.) - Merkezi olmayan müzik platformu
 • Firebase (Google LLC) - Kimlik doğrulama ve bildirimler
 • MyMemory Translation - Çeviri servisi
 
@@ -976,8 +962,8 @@ Bu servislerin kullanımı, ilgili şirketlerin kullanım koşullarına tabidir.
             "title": "Third-Party Services",
             "content": """This app uses the following third-party services:
 
-• YouTube (Google LLC) - Music content search and metadata
-• Spotify (Spotify AB) - Music data via official API
+• SoundCloud (SoundCloud Ltd.) - Music content search and metadata
+• Audius (Audius Inc.) - Decentralized music platform
 • Firebase (Google LLC) - Authentication and notifications
 • MyMemory Translation - Translation service
 
@@ -985,19 +971,19 @@ Use of these services is subject to the respective companies' terms of service."
         },
         "de": {
             "title": "Drittanbieterdienste",
-            "content": "Diese App nutzt YouTube, Spotify, Firebase und MyMemory. Die Nutzung unterliegt den jeweiligen Nutzungsbedingungen."
+            "content": "Diese App nutzt SoundCloud, Audius, Firebase und MyMemory. Die Nutzung unterliegt den jeweiligen Nutzungsbedingungen."
         },
         "fr": {
             "title": "Services tiers",
-            "content": "Cette application utilise YouTube, Spotify, Firebase et MyMemory. L'utilisation est soumise aux conditions d'utilisation respectives."
+            "content": "Cette application utilise SoundCloud, Audius, Firebase et MyMemory. L'utilisation est soumise aux conditions d'utilisation respectives."
         },
         "es": {
             "title": "Servicios de terceros",
-            "content": "Esta aplicación utiliza YouTube, Spotify, Firebase y MyMemory. El uso está sujeto a los términos de servicio respectivos."
+            "content": "Esta aplicación utiliza SoundCloud, Audius, Firebase y MyMemory. El uso está sujeto a los términos de servicio respectivos."
         },
         "ar": {
             "title": "خدمات الطرف الثالث",
-            "content": "يستخدم هذا التطبيق YouTube وSpotify وFirebase وMyMemory. يخضع الاستخدام لشروط الخدمة الخاصة بكل منها."
+            "content": "يستخدم هذا التطبيق SoundCloud وAudius وFirebase وMyMemory. يخضع الاستخدام لشروط الخدمة الخاصة بكل منها."
         }
     },
     "disclaimer": {

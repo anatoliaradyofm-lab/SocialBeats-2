@@ -13,6 +13,7 @@ import NativeAdSlot from '../components/ads/NativeAdSlot';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getLikedTracks, toggleLike, subscribe as likedSubscribe } from '../lib/likedStore';
+import { useAuth } from '../contexts/AuthContext';
 
 function toTrack(item) {
   const cover = item.cover || item.thumbnail || item.cover_url;
@@ -34,8 +35,9 @@ export default function LikedScreen({ navigation }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { playTrack } = usePlayer();
+  const { isGuest } = useAuth();
 
-  const [likedItems, setLikedItems] = useState(() => getLikedTracks());
+  const [likedItems, setLikedItems] = useState(() => isGuest ? [] : getLikedTracks());
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = () => {
@@ -46,8 +48,9 @@ export default function LikedScreen({ navigation }) {
 
   // Re-render when liked store changes (e.g. user likes/unlikes from player)
   useEffect(() => {
+    if (isGuest) return;
     return likedSubscribe(() => setLikedItems(getLikedTracks()));
-  }, []);
+  }, [isGuest]);
 
   const removeLike = (id) => {
     const track = likedItems.find(t => String(t.id) === String(id));
@@ -75,6 +78,27 @@ export default function LikedScreen({ navigation }) {
       </TouchableOpacity>
     </TouchableOpacity>
   );
+
+  if (isGuest) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }]}>
+        <LinearGradient colors={['#1A0A2E', '#100620', '#08060F', '#08060F']} locations={[0, 0.18, 0.32, 1]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, { position: 'absolute', top: insets.top + 8, left: 16 }]}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: 'rgba(225,29,72,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 20, borderWidth: 1, borderColor: 'rgba(225,29,72,0.3)' }}>
+          <Ionicons name="heart-outline" size={32} color="#E11D48" />
+        </View>
+        <Text style={{ fontSize: 20, fontWeight: '800', color: '#F8F8F8', marginBottom: 8 }}>Beğenilen Şarkılar</Text>
+        <Text style={{ fontSize: 14, color: 'rgba(248,248,248,0.45)', textAlign: 'center', lineHeight: 20, marginBottom: 28 }}>Beğendiğin şarkıları kaydetmek için giriş yap.</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Auth')} style={{ borderRadius: 14, overflow: 'hidden' }}>
+          <LinearGradient colors={['#A78BFA', '#7C3AED']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ paddingHorizontal: 32, paddingVertical: 14 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFF' }}>Giriş Yap</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

@@ -5,19 +5,28 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-
-const CATEGORIES = [
-  { name: 'AccountSettings',      label: 'Hesap Ayarları',                      icon: 'person-circle-outline',  color: '#A78BFA' },
-  { name: 'NotifSettings',        label: 'Bildirim Ayarları',                   icon: 'notifications-outline',  color: '#F87171' },
-  { name: 'LanguageRegion',       label: 'Dil ve Bölge',                        icon: 'language-outline',       color: '#FBBF24' },
-  { name: 'DataBackup',           label: 'Veri ve Yedekleme',                   icon: 'cloud-outline',          color: '#60A5FA' },
-  { name: 'LegalSettings',        label: 'Kullanım Koşulları ve Gizlilik',      icon: 'document-text-outline',  color: '#9CA3AF' },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function SettingsScreen({ navigation }) {
-  const { colors }        = useTheme();
-  const { user, logout }  = useAuth();
-  const insets            = useSafeAreaInsets();
+  const { colors }               = useTheme();
+  const { user, logout, isGuest, exitGuest } = useAuth();
+  const insets                   = useSafeAreaInsets();
+  const { t }                    = useTranslation();
+
+  const CATEGORIES = [
+    { name: 'AccountSettings', label: t('settings.accountSettings'),   icon: 'person-circle-outline',  color: '#A78BFA' },
+    { name: 'NotifSettings',   label: t('settings.notificationSettings'), icon: 'notifications-outline', color: '#F87171' },
+    { name: 'LanguageRegion',  label: t('settings.languageRegion'),    icon: 'language-outline',       color: '#FBBF24' },
+    { name: 'DataBackup',      label: t('settings.dataBackup'),        icon: 'cloud-outline',          color: '#60A5FA' },
+    { name: 'LegalSettings',   label: t('settings.legalAndPrivacy'),   icon: 'document-text-outline',  color: '#9CA3AF' },
+  ];
+
+  const GUEST_CATEGORIES = [
+    { name: 'LanguageRegion', label: t('settings.languageRegion'),  icon: 'language-outline',      color: '#FBBF24' },
+    { name: 'LegalSettings',  label: t('settings.legalAndPrivacy'), icon: 'document-text-outline', color: '#9CA3AF' },
+  ];
+
+  const visibleCategories = isGuest ? GUEST_CATEGORIES : CATEGORIES;
 
   return (
     <View style={[s.root, { backgroundColor: colors.background }]}>
@@ -32,34 +41,50 @@ export default function SettingsScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: colors.text }]}>Ayarlar</Text>
+        <Text style={[s.headerTitle, { color: colors.text }]}>{t('settings.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 32 }]}>
 
-        {/* Profile Card */}
-        <TouchableOpacity
-          style={[s.profileCard, { backgroundColor: colors.card, borderColor: colors.glassBorder }]}
-          onPress={() => navigation.navigate('ProfileEdit')}
-          activeOpacity={0.88}
-        >
-          <LinearGradient colors={colors.gradPrimary} start={{ x:0,y:0 }} end={{ x:1,y:1 }} style={s.avatarRing}>
-            <Image source={{ uri: user?.avatar_url || `https://i.pravatar.cc/100?u=${user?.id}` }} style={s.avatar} />
-          </LinearGradient>
-          <View style={{ flex: 1, gap: 3 }}>
-            <Text style={[s.profileName, { color: colors.text }]}>{user?.display_name || user?.username || 'Kullanıcı'}</Text>
-            <Text style={[s.profileSub, { color: colors.textMuted }]}>{user?.phone || user?.username || 'Profili düzenle'}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textGhost} />
-        </TouchableOpacity>
+        {/* Profile Card — misafir için giriş yap CTA */}
+        {isGuest ? (
+          <TouchableOpacity
+            style={[s.profileCard, { backgroundColor: 'rgba(192,132,252,0.08)', borderColor: 'rgba(192,132,252,0.25)' }]}
+            onPress={() => navigation.navigate('Auth')}
+            activeOpacity={0.88}
+          >
+            <View style={[s.avatarRing, { backgroundColor: 'rgba(192,132,252,0.15)', alignItems: 'center', justifyContent: 'center' }]}>
+              <Ionicons name="person-outline" size={22} color="#C084FC" />
+            </View>
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={[s.profileName, { color: colors.text }]}>{t('settings.guestUser')}</Text>
+              <Text style={[s.profileSub, { color: '#C084FC' }]}>{t('settings.loginOrRegister')}</Text>
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[s.profileCard, { backgroundColor: colors.card, borderColor: colors.glassBorder }]}
+            onPress={() => navigation.navigate('ProfileEdit')}
+            activeOpacity={0.88}
+          >
+            <LinearGradient colors={colors.gradPrimary} start={{ x:0,y:0 }} end={{ x:1,y:1 }} style={s.avatarRing}>
+              <Image source={{ uri: user?.avatar_url || `https://i.pravatar.cc/100?u=${user?.id}` }} style={s.avatar} />
+            </LinearGradient>
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={[s.profileName, { color: colors.text }]}>{user?.display_name || user?.username || 'Kullanıcı'}</Text>
+              <Text style={[s.profileSub, { color: colors.textMuted }]}>{user?.phone || user?.username || t('settings.editProfile')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textGhost} />
+          </TouchableOpacity>
+        )}
 
-        {/* 7 Kategori */}
+        {/* Kategoriler */}
         <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.glassBorder }]}>
-          {CATEGORIES.map((cat, i) => (
+          {visibleCategories.map((cat, i) => (
             <TouchableOpacity
               key={cat.name}
-              style={[s.row, i < CATEGORIES.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}
+              style={[s.row, i < visibleCategories.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}
               onPress={() => navigation.navigate(cat.name)}
               activeOpacity={0.72}
             >
@@ -72,22 +97,32 @@ export default function SettingsScreen({ navigation }) {
           ))}
         </View>
 
-        {/* Logout */}
-        <TouchableOpacity
-          style={[s.logoutBtn, { backgroundColor: colors.errorBg, borderColor: colors.error + '40' }]}
-          onPress={() => {
-            if (typeof window !== 'undefined' && window.__sbForceLogout) {
-              window.__sbForceLogout();
-            } else {
-              logout?.();
-              try { navigation.reset({ index: 0, routes: [{ name: 'Login' }] }); } catch (_) {}
-            }
-          }}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="log-out-outline" size={20} color={colors.error} />
-          <Text style={[s.logoutText, { color: colors.error }]}>Çıkış Yap</Text>
-        </TouchableOpacity>
+        {/* Giriş Yap (misafir) / Çıkış Yap (normal) */}
+        {isGuest ? (
+          <TouchableOpacity
+            style={[s.logoutBtn, { backgroundColor: 'rgba(192,132,252,0.1)', borderColor: 'rgba(192,132,252,0.3)' }]}
+            onPress={() => navigation.navigate('Auth')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="log-in-outline" size={20} color="#C084FC" />
+            <Text style={[s.logoutText, { color: '#C084FC' }]}>{t('login.title')}</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[s.logoutBtn, { backgroundColor: colors.errorBg, borderColor: colors.error + '40' }]}
+            onPress={() => {
+              if (typeof window !== 'undefined' && window.__sbForceLogout) {
+                window.__sbForceLogout();
+              } else {
+                logout?.();
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="log-out-outline" size={20} color={colors.error} />
+            <Text style={[s.logoutText, { color: colors.error }]}>{t('settings.logout')}</Text>
+          </TouchableOpacity>
+        )}
 
         <Text style={[s.version, { color: colors.textGhost }]}>SocialBeats v3.3.0</Text>
       </ScrollView>

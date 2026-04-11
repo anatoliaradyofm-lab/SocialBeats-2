@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Share, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Share } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { getApiUrl } from '../../services/api';
+import { Alert } from '../ui/AppAlert';
 
 export default function ProfileShareQR() {
   const { user } = useAuth();

@@ -7,7 +7,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  KeyboardAvoidingView, Platform, ScrollView, Alert,
+  KeyboardAvoidingView, Platform, ScrollView,
   ActivityIndicator, Animated, FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../services/api';
+import { Alert } from '../components/ui/AppAlert';
 
 const COUNTRY_CODES = [
   { code: '+90',   flag: '🇹🇷', name: 'Türkiye',                          maxDigits: 10 },
@@ -218,14 +219,18 @@ const COUNTRY_CODES = [
   { code: '+263',  flag: '🇿🇼', name: 'Zimbabwe',                         maxDigits: 9  },
 ];
 
-export default function PhoneLoginScreen({ navigation }) {
+export default function PhoneLoginScreen({ navigation, route }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { loginWithToken, loginAsGuest } = useAuth();
 
   const handleGuest = async () => {
-    await loginAsGuest();
-    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+    try {
+      await loginAsGuest();
+    } catch (_) {}
+    // Native: AppNavigator state değişikliğiyle geçer
+    // Web: doğrudan Dashboard'a yönlendir
+    try { navigation.navigate('Dashboard'); } catch (_) {}
   };
 
   const [step, setStep]           = useState(1); // 1=phone, 2=otp, 3=username
@@ -328,9 +333,11 @@ export default function PhoneLoginScreen({ navigation }) {
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
           {/* Header */}
-          <TouchableOpacity style={s.backBtn} onPress={() => step > 1 ? setStep(s => s - 1) : navigation.goBack()}>
-            <Ionicons name="chevron-back" size={24} color={colors.text} />
-          </TouchableOpacity>
+          {(step > 1 || (navigation.canGoBack() && !route?.params?.hideBack)) && (
+            <TouchableOpacity style={s.backBtn} onPress={() => step > 1 ? setStep(s => s - 1) : navigation.goBack()}>
+              <Ionicons name="chevron-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+          )}
 
           <Animated.View style={[s.inner, { opacity: fadeAnim }]}>
 
@@ -424,9 +431,10 @@ export default function PhoneLoginScreen({ navigation }) {
                     <Text style={[s.dividerText, { color: colors.textGhost }]}>veya</Text>
                     <View style={[s.dividerLine, { backgroundColor: colors.border }]} />
                   </View>
-                  <TouchableOpacity style={[s.guestBtn, { borderColor: colors.glassBorder }]} onPress={handleGuest} activeOpacity={0.75}>
-                    <Ionicons name="person-outline" size={17} color={colors.textMuted} />
-                    <Text style={[s.guestText, { color: colors.textMuted }]}>Misafir olarak devam et</Text>
+                  <TouchableOpacity style={s.btnWrap} onPress={handleGuest} activeOpacity={0.85}>
+                    <LinearGradient colors={colors.gradPrimary || ['#8B5CF6', '#C084FC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.btn}>
+                      <Text style={s.btnText}>Misafir olarak devam et</Text>
+                    </LinearGradient>
                   </TouchableOpacity>
                 </>
               )}
@@ -598,7 +606,5 @@ function createStyles(colors, insets) {
     dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18, marginBottom: 4 },
     dividerLine: { flex: 1, height: 1 },
     dividerText: { fontSize: 12, fontWeight: '500' },
-    guestBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 1, marginTop: 8 },
-    guestText: { fontSize: 14, fontWeight: '500' },
   });
 }

@@ -1,4 +1,4 @@
-# Music Cache Service - Generic MongoDB-backed cache for YouTube + Spotify
+# Music Cache Service - Generic MongoDB-backed cache for SoundCloud + Audius
 # Quota-safe: All API calls go through cache first.
 # TTL: Pass ttl_hours=None or 0 for unlimited (never expire). Default is unlimited.
 # Collection: music_cache with { key, value (JSON), cached_at }

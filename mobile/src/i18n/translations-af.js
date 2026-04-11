@@ -233,7 +233,7 @@ export default {
     },
     onboarding: {
         page1Title: 'Ontdek jou musiek',
-        page1Subtitle: 'Toegang tot miljoene liedjies van YouTube en Spotify.',
+        page1Subtitle: 'Stroom miljoene liedjies via SoundCloud.',
         page2Title: 'Deel en verbind', page2Subtitle: 'Deel musiek, volg vriende, skep plasings.',
         page3Title: 'Personaliseer', page3Subtitle: 'Kies jou gunsteling genres, kry persoonlike aanbevelings.',
         page4Title: 'Kom ons begin!', page4Subtitle: 'Skep jou rekening en tree die musiekwêreld binne!',
@@ -242,7 +242,7 @@ export default {
     offline: { message: 'Jy is vanlyn — Sommige kenmerke mag nie beskikbaar wees nie' },
     player: {
         close: 'Sluit', trackOf: '{{current}} / {{total}} snitte', sleepTimer: 'Slaaptydhouer',
-        cancelTimer: '{{minutes}} min — Kanselleer', watchOnYouTube: 'Kyk op YouTube',
+        cancelTimer: '{{minutes}} min — Kanselleer', openOnSoundCloud: 'Maak op SoundCloud oop',
         shareMusic: 'Deel musiek', sharePlaylist: 'Deel speellys', songRadio: 'Liedjieradio',
         radioBasedOn: 'Radio gebaseer op', playAll: 'Speel alles', playbackSpeed: 'Speelspoed',
     },

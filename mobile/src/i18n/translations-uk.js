@@ -520,7 +520,7 @@ export default {
     },
     onboarding: {
         page1Title: 'Відкрийте свою музику',
-        page1Subtitle: 'Доступ до мільйонів пісень з YouTube та Spotify. Відкривайте нову музику, слухайте улюблене.',
+        page1Subtitle: 'Стримуйте мільйони пісень через SoundCloud. Відкривайте нову музику, слухайте улюблене.',
         page2Title: 'Поділіться та спілкуйтесь',
         page2Subtitle: 'Діліться музикою, підписуйтесь на друзів, створюйте публікації.',
         page3Title: 'Персоналізуйте',
@@ -537,7 +537,7 @@ export default {
         trackOf: '{{current}} / {{total}} треків',
         sleepTimer: 'Таймер сну',
         cancelTimer: '{{minutes}} хв — Скасувати',
-        watchOnYouTube: 'Дивитися на YouTube',
+        openOnSoundCloud: 'Відкрити на SoundCloud',
         shareMusic: 'Поділитися музикою',
         sharePlaylist: 'Поділитися плейлистом',
         songRadio: 'Радіо пісні',

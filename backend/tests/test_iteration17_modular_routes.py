@@ -195,11 +195,11 @@ class TestKaraokeAPI:
 class TestMusicRoutes:
     """Test Music API endpoints from routes/music_routes.py"""
     
-    def test_music_search_youtube(self, auth_headers):
-        """GET /api/music/search/{query} - Search music on YouTube"""
+    def test_music_search_soundcloud(self, auth_headers):
+        """GET /api/music/search/{query} - Search music on SoundCloud"""
         response = requests.get(
             f"{BASE_URL}/api/music/search/hello",
-            params={"source": "youtube", "limit": 5},
+            params={"source": "soundcloud", "limit": 5},
             headers=auth_headers
         )
         assert response.status_code == 200
@@ -236,7 +236,7 @@ class TestMusicRoutes:
             "title": "Test Track",
             "artist": "Test Artist",
             "thumbnail": "https://example.com/thumb.jpg",
-            "source": "youtube"
+            "source": "soundcloud"
         }
         response = requests.post(
             f"{BASE_URL}/api/library/tracks/like",
@@ -315,7 +315,7 @@ class TestMusicRoutes:
             "id": f"track_{uuid.uuid4().hex[:8]}",
             "title": "Test Track for Playlist",
             "artist": "Test Artist",
-            "source": "youtube"
+            "source": "soundcloud"
         }
         add_track_response = requests.post(
             f"{BASE_URL}/api/playlists/{playlist_id}/tracks",

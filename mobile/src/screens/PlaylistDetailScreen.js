@@ -11,6 +11,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import api from '../services/api';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
+import { Alert } from '../components/ui/AppAlert';
 import {
   removePlaylistFromCache,
   getStoredTracks,

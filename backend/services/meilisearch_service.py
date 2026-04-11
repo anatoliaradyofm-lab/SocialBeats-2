@@ -453,7 +453,7 @@ class MeilisearchService:
                     tracks.append({
                         "id": str(tid), "title": data.get("title", ""),
                         "artist": data.get("artist", ""), "album": data.get("album", ""),
-                        "genre": data.get("genre", ""), "source": data.get("source", "YouTube"),
+                        "genre": data.get("genre", ""), "source": data.get("source", "soundcloud"),
                         "thumbnail": data.get("thumbnail", data.get("cover_url", "")),
                         "duration": data.get("duration", 0), "play_count": data.get("play_count", 0),
                         "created_at": str(t.get("cached_at", "")),

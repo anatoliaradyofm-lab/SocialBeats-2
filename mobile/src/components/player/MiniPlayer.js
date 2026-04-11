@@ -1,7 +1,7 @@
 /**
  * MiniPlayer — NOVA Design System v3.0
  * Floating island player · 2025 premium aesthetic
- * Inspired by: Apple Dynamic Island · Spotify mini player · Mobbin player patterns
+ * Glassmorphism island player · Mobbin player patterns
  * Glassmorphism · Gradient play button · Glow progress
  */
 import React, { useState, useRef, useEffect } from 'react';

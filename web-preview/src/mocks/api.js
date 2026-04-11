@@ -38,6 +38,113 @@ async function getScCid() {
   return null;
 }
 
+// Home data cache: per-country, 24h local cache
+const _homeCacheMap = new Map(); // region → { data, expiresAt }
+
+const _COUNTRY_TO_ISO = {
+  'turkey':'TR','türkiye':'TR','turkiye':'TR',
+  'united states':'US','usa':'US','america':'US',
+  'united kingdom':'GB','uk':'GB','britain':'GB',
+  'germany':'DE','almanya':'DE','france':'FR','fransa':'FR',
+  'brazil':'BR','brasil':'BR','brezilya':'BR',
+  'australia':'AU','canada':'CA','italy':'IT','spain':'ES',
+  'netherlands':'NL','sweden':'SE','norway':'NO','denmark':'DK',
+  'finland':'FI','austria':'AT','switzerland':'CH','belgium':'BE',
+  'poland':'PL','russia':'RU','japan':'JP','south korea':'KR',
+  'india':'IN','mexico':'MX','argentina':'AR','chile':'CL',
+  'colombia':'CO','south africa':'ZA','portugal':'PT',
+  'hungary':'HU','czech republic':'CZ','romania':'RO','greece':'GR',
+  'israel':'IL','nigeria':'NG','egypt':'EG','indonesia':'ID',
+  'philippines':'PH','thailand':'TH','malaysia':'MY','singapore':'SG',
+  'ukraine':'UA','azerbaijan':'AZ',
+};
+const _SC_SUPPORTED = new Set([
+  'TR','US','GB','DE','FR','BR','AU','CA','IT','ES','NL','SE','NZ','IE',
+  'NO','DK','FI','AT','CH','BE','PL','RU','JP','KR','IN','MX','AR','CL',
+  'CO','ZA','PT','HU','CZ','RO','GR','IL','NG','EG','ID','PH','TH','MY',
+  'SG','UA','AZ',
+]);
+
+function _resolveRegion(country) {
+  if (!country) return null;
+  const key = country.trim().toLowerCase();
+  const iso = _COUNTRY_TO_ISO[key] || country.trim().toUpperCase();
+  return _SC_SUPPORTED.has(iso) ? iso : null;
+}
+
+async function musicHybridHomeData(country = '') {
+  const region = _resolveRegion(country);
+  const cacheKey = region || 'global';
+  const cached = _homeCacheMap.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) return cached.data;
+
+  const labels = ['TRENDING','HOT NOW','NEW RELEASE','FEATURED','TOP PICK','VIRAL','CHART','RISING','POPULAR','MUST HEAR'];
+
+  try {
+    const cid = await getScCid();
+    if (!cid) throw new Error('no cid');
+
+    const regionParam = region ? `&region=${encodeURIComponent(`soundcloud:regions:${region}`)}` : '';
+    const [trendRes, forYouRes] = await Promise.all([
+      fetch(`${SC_PROXY}/charts?kind=trending&genre=soundcloud%3Agenres%3Aall-music&limit=20&client_id=${cid}&linked_partitioning=1${regionParam}`),
+      fetch(`${SC_PROXY}/charts?kind=top&genre=soundcloud%3Agenres%3Aall-music&limit=10&client_id=${cid}&linked_partitioning=1${regionParam}`),
+    ]);
+
+    const parseTrack = (item, rank) => {
+      const t = item.track || item;
+      if (!t?.id) return null;
+      const tcs = t.media?.transcodings || [];
+      const tc = tcs.find(x => x.format?.protocol === 'progressive' && !x.snipped)
+               || tcs.find(x => x.format?.protocol === 'hls'         && !x.snipped);
+      if (!tc) return null;  // oynatılamayan track'i atla
+      const id = String(t.id);
+      // Aynı pattern search ile aynı: Vite proxy üzerinden direkt transcoding URL
+      const tcProxyUrl = tc.url.replace('https://api-v2.soundcloud.com', SC_PROXY) + `?client_id=${cid}`;
+      const plays = t.playback_count || 0;
+      const fmtPlays = plays >= 1e6 ? `${(plays/1e6).toFixed(1)}M` : plays >= 1e3 ? `${(plays/1e3).toFixed(0)}K` : String(plays);
+      return {
+        id, rank,
+        title:        t.title || '',
+        artist:       t.user?.username || '',
+        artist_name:  t.user?.username || '',
+        cover_url:    (t.artwork_url || '').replace('-large', '-t500x500'),
+        thumbnail:    (t.artwork_url || '').replace('-large', '-t500x500'),
+        duration:     Math.floor((t.duration || 0) / 1000),
+        plays_approx: fmtPlays,
+        source:       'soundcloud',
+        stream_url:   tcProxyUrl,   // PlayerContext: audio_url || stream_url → bu kullanılır
+        audio_url:    tcProxyUrl,   // fallback
+      };
+    };
+
+    const trendData   = trendRes.ok  ? (await trendRes.json()).collection  || [] : [];
+    const forYouData  = forYouRes.ok ? (await forYouRes.json()).collection || [] : [];
+
+    const featured = trendData.slice(0, 10).map((item, i) => {
+      const t = parseTrack(item, i + 1);
+      return t ? { ...t, label: labels[i] } : null;
+    }).filter(Boolean);
+
+    const trending = trendData.slice(10, 20).map((item, i) => parseTrack(item, i + 11)).filter(Boolean);
+    const for_you  = forYouData.slice(0, 10).map((item, i) => parseTrack(item, i + 1)).filter(Boolean);
+
+    // Ülke için sonuç boşsa global'e fallback
+    let finalFeatured = featured, finalTrending = trending, finalForYou = for_you;
+    if (region && featured.length === 0) {
+      console.warn(`[homeData] ${region} için veri yok, global'e düşüyor`);
+      const globalData = await musicHybridHomeData('');
+      return globalData;
+    }
+
+    const result = { featured: finalFeatured, trending: finalTrending, for_you: finalForYou, region: cacheKey };
+    _homeCacheMap.set(cacheKey, { data: result, expiresAt: Date.now() + 24 * 3600 * 1000 });
+    return result;
+  } catch (e) {
+    console.warn('[homeData] SC failed, returning empty', e);
+    return { featured: [], trending: [], for_you: [] };
+  }
+}
+
 // Search result cache: query → { tracks, expiresAt }
 const _searchCache = new Map();
 const SEARCH_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -146,6 +253,59 @@ function _saveMap(key, map) {
   try { localStorage.setItem(key, JSON.stringify([...map])); } catch {}
 }
 
+// Engellenen kullanıcı ID'leri — her çağrıda localStorage'dan taze oku
+function _blockedIds() {
+  try { return new Set((JSON.parse(localStorage.getItem('_mock_blocked') || '[]')).map(b => b.id)); } catch { return new Set(); }
+}
+
+// ── Story helpers ─────────────────────────────────────────────────────────────
+function _getStories() {
+  try { return JSON.parse(localStorage.getItem('_mock_stories') || '[]'); } catch { return []; }
+}
+function _saveStories(arr) {
+  try { localStorage.setItem('_mock_stories', JSON.stringify(arr)); } catch {}
+}
+
+// Seed mock stories for other users (shown once if localStorage is empty)
+function _seedStoriesIfEmpty() {
+  try {
+    if (localStorage.getItem('_mock_stories_seeded')) return;
+    localStorage.setItem('_mock_stories_seeded', '1');
+    const now = Date.now();
+    const seed = [
+      {
+        id: 'seed_s1', user_id: 'dj1', username: 'djauroramusic',
+        user_avatar: 'https://i.pravatar.cc/300?u=dj1', user_display_name: 'DJ Aurora',
+        story_type: 'photo', text: 'On stage tonight 🎧', media_url: 'https://picsum.photos/seed/story1/400/700',
+        media_type: 'image', background_color: '#1A0A2E', filter_id: 'none',
+        viewers: [], viewers_count: 42, is_viewed: false, is_expired: false,
+        created_at: new Date(now - 3600000).toISOString(),
+        expires_at: new Date(now + 20 * 3600000).toISOString(),
+      },
+      {
+        id: 'seed_s2', user_id: 'ml3', username: 'melodica_tr',
+        user_avatar: 'https://i.pravatar.cc/300?u=ml3', user_display_name: 'Melodica TR',
+        story_type: 'text', text: 'Müzik ruhun gıdasıdır 🎵', media_url: null,
+        media_type: null, background_color: '#7C3AED', filter_id: 'none',
+        viewers: [], viewers_count: 18, is_viewed: false, is_expired: false,
+        created_at: new Date(now - 7200000).toISOString(),
+        expires_at: new Date(now + 17 * 3600000).toISOString(),
+      },
+      {
+        id: 'seed_s3', user_id: 'nb1', username: 'nova.beats',
+        user_avatar: 'https://i.pravatar.cc/300?u=nb1', user_display_name: 'Nova Beats',
+        story_type: 'photo', text: null, media_url: 'https://picsum.photos/seed/story3/400/700',
+        media_type: 'image', background_color: '#065F46', filter_id: 'none',
+        viewers: [], viewers_count: 7, is_viewed: false, is_expired: false,
+        created_at: new Date(now - 1800000).toISOString(),
+        expires_at: new Date(now + 22 * 3600000).toISOString(),
+      },
+    ];
+    _saveStories(seed);
+  } catch {}
+}
+_seedStoriesIfEmpty();
+
 let _following        = _loadSet('_mock_following', _DEFAULT_FOLLOWING_IDS);
 let _removedFollowers = _loadSet('_mock_removed_followers', []);
 let _userDeltas       = _loadMap('_mock_user_deltas'); // id → {followers_count, following_count}
@@ -239,27 +399,34 @@ const api = {
     }
     // Stats user: /stats/user?period=...
     if (url.startsWith('/stats/user')) {
+      const _sp = new URLSearchParams(url.includes('?') ? url.slice(url.indexOf('?') + 1) : '');
+      const _per = _sp.get('period') || 'month';
+      const _m = _per === 'week' ? 0.25 : _per === 'month' ? 1 : _per === '90d' ? 3 : _per === '180d' ? 6 : 12;
+      const _r = (base, rng) => Math.round(base * _m + (Math.random() - 0.5) * rng * _m);
       return delay(200).then(() => ({
         listening: {
-          total_minutes: 3240, total_tracks: 480, unique_artists: 62, daily_average: 108,
+          total_minutes: _r(3240, 200), total_tracks: _r(480, 40), unique_artists: _r(62, 10),
+          daily_average: Math.round(108 + (Math.random() - 0.5) * 20),
           top_artists: [
-            { name: 'The Weeknd', play_count: 58 },
-            { name: 'Daft Punk',  play_count: 41 },
-            { name: 'Frank Ocean',play_count: 34 },
-            { name: 'Billie Eilish', play_count: 28 },
-            { name: 'Tyler the Creator', play_count: 21 },
+            { name: 'The Weeknd',        play_count: _r(58, 10) },
+            { name: 'Daft Punk',         play_count: _r(41, 8)  },
+            { name: 'Frank Ocean',       play_count: _r(34, 6)  },
+            { name: 'Billie Eilish',     play_count: _r(28, 5)  },
+            { name: 'Tyler the Creator', play_count: _r(21, 4)  },
           ],
           top_tracks: [
-            { title: 'Blinding Lights', artist: 'The Weeknd',  play_count: 28 },
-            { title: 'Get Lucky',       artist: 'Daft Punk',   play_count: 22 },
-            { title: 'Nights',          artist: 'Frank Ocean', play_count: 18 },
+            { title: 'Blinding Lights', artist: 'The Weeknd',  play_count: _r(28, 6) },
+            { title: 'Get Lucky',       artist: 'Daft Punk',   play_count: _r(22, 5) },
+            { title: 'Nights',          artist: 'Frank Ocean', play_count: _r(18, 4) },
+            { title: 'Starboy',         artist: 'The Weeknd',  play_count: _r(15, 3) },
+            { title: 'Redbone',         artist: 'Childish Gambino', play_count: _r(12, 3) },
           ],
         },
         social: {
-          likes_received: 342, posts_created: _mockUser.posts_count || 2,
-          comments_received: 87,
+          likes_received: _r(342, 50), posts_created: _mockUser.posts_count || 2,
+          comments_received: _r(87, 15),
         },
-        activity: { days_active: 24, streak_days: 5, longest_streak: 12 },
+        activity: { days_active: Math.min(Math.round(7 * _m), 365), streak_days: 5, longest_streak: 12 },
       }));
     }
     // Followers analytics
@@ -325,7 +492,8 @@ const api = {
       const params = new URLSearchParams(url.includes('?') ? url.slice(url.indexOf('?') + 1) : '');
       const q = (params.get('q') || '').toLowerCase().trim();
       const limit = parseInt(params.get('limit') || '30', 10);
-      const allUsers = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS)];
+      const blocked = _blockedIds();
+      const allUsers = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS)].filter(u => !blocked.has(u.id));
       const results = q
         ? allUsers.filter(u =>
             u.username?.toLowerCase().includes(q) ||
@@ -348,7 +516,8 @@ const api = {
       const gender  = params.get('gender')  || '';
       const limit   = parseInt(params.get('limit')  || '15', 10);
       const offset  = parseInt(params.get('offset') || '0',  10);
-      let list = MOCK_DISCOVER_USERS.filter(u => u.id !== 'preview-1');
+      const blocked = _blockedIds();
+      let list = MOCK_DISCOVER_USERS.filter(u => u.id !== 'preview-1' && !blocked.has(u.id));
       if (country) list = list.filter(u => u.country?.toLowerCase().includes(country.toLowerCase()));
       if (gender)  list = list.filter(u => u.gender?.toLowerCase() === gender.toLowerCase());
       const page = list.slice(offset, offset + limit);
@@ -369,17 +538,25 @@ const api = {
       const uid = url.split('/users/')[1]?.split('/')[0];
       const allUsers = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS)];
       const found = allUsers.find(u => u.id === uid);
-      const genres = found?.music_genres || ['Pop', 'Electronic'];
+      const genres = found?.music_genres || ['Pop', 'Electronic', 'Hip-Hop', 'R&B', 'Indie'];
+      const counts = genres.map((_, i) => 100 - i * 16);
+      const totalC = counts.reduce((a, b) => a + b, 1);
+      const weeklyMins = [42, 95, 58, 120, 75, 160, 88];
       return delay(200).then(() => ({
         total_minutes: 1840,
         total_tracks: 247,
         unique_artists: 38,
-        top_genres: genres.map((g, i) => ({ genre: g, label: g, count: 100 - i * 18 })),
+        top_genres: genres.map((g, i) => ({
+          genre: g, label: g, count: counts[i],
+          percentage: Math.round(counts[i] * 100 / totalC),
+        })),
         top_artists: [
           { name: 'The Weeknd',  play_count: 48 },
           { name: 'Daft Punk',   play_count: 35 },
           { name: 'Frank Ocean', play_count: 28 },
         ],
+        weekly_minutes_per_day: weeklyMins,
+        total_hours_this_week: Math.round(weeklyMins.reduce((a, b) => a + b, 0) / 60),
       }));
     }
     // Taste match: /users/{id}/taste-match
@@ -434,17 +611,19 @@ const api = {
     }
     // /users/me/followers
     if (url.startsWith('/users/me/followers')) {
-      const acceptedUsers = Object.values(MOCK_NOTIF_USERS).filter(u => _acceptedFollowers.has(u.id));
+      const blocked = _blockedIds();
+      const acceptedUsers = Object.values(MOCK_NOTIF_USERS).filter(u => _acceptedFollowers.has(u.id) && !blocked.has(u.id));
       const followers = [
         ...acceptedUsers,
-        ...MOCK_DISCOVER_USERS.filter(u => !_removedFollowers.has(u.id)),
+        ...MOCK_DISCOVER_USERS.filter(u => !_removedFollowers.has(u.id) && !blocked.has(u.id)),
       ].map(u => ({ ...u, type: 'follower', is_following: _following.has(u.id) }));
       return delay(200).then(() => ({ users: followers }));
     }
     // /users/me/following
     if (url.startsWith('/users/me/following')) {
+      const blocked = _blockedIds();
       const ALL_USERS = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS)];
-      const following = ALL_USERS.filter(u => _following.has(u.id))
+      const following = ALL_USERS.filter(u => _following.has(u.id) && !blocked.has(u.id))
         .map(u => ({ ...u, type: 'following', is_following: true }));
       return delay(200).then(() => ({ users: following }));
     }
@@ -453,12 +632,13 @@ const api = {
       const uid = url.split('/users/')[1].split('/')[0];
       let followers;
       const isOwnProfile = uid === 'preview-1' || uid === _mockUser.id;
+      const blocked = _blockedIds();
       if (isOwnProfile) {
-        // Benim takipçilerim = removed olmayanlar + kabul edilenler
-        const acceptedUsers = Object.values(MOCK_NOTIF_USERS).filter(u => _acceptedFollowers.has(u.id));
+        // Benim takipçilerim = removed olmayanlar + kabul edilenler (engellenmiş hariç)
+        const acceptedUsers = Object.values(MOCK_NOTIF_USERS).filter(u => _acceptedFollowers.has(u.id) && !blocked.has(u.id));
         followers = [
           ...acceptedUsers,
-          ...MOCK_DISCOVER_USERS.filter(u => !_removedFollowers.has(u.id)),
+          ...MOCK_DISCOVER_USERS.filter(u => !_removedFollowers.has(u.id) && !blocked.has(u.id)),
         ];
       } else {
         const baseFollowers = MOCK_DISCOVER_USERS.filter(u => u.id !== uid).slice(0, 5);
@@ -489,11 +669,12 @@ const api = {
     if (/^\/users\/[^/]+\/following/.test(url)) {
       const uid = url.split('/users/')[1].split('/')[0];
       const isOwnProfile = uid === 'preview-1' || uid === _mockUser.id;
-      // Tüm kullanıcı havuzu (ben dahil)
-      const ALL_USERS = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS)];
+      const blocked = _blockedIds();
+      // Tüm kullanıcı havuzu (ben dahil, engellenmiş hariç)
+      const ALL_USERS = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS)].filter(u => !blocked.has(u.id));
       let followingList;
       if (isOwnProfile) {
-        // Benim takip ettiklerim → _following seti
+        // Benim takip ettiklerim → _following seti (engellenmiş hariç)
         followingList = ALL_USERS.filter(u => _following.has(u.id));
       } else {
         // Başkasının (uid) takip ettikleri
@@ -539,7 +720,7 @@ const api = {
     // User profile by username: /user/{username}
     if (url.startsWith('/user/')) {
       const uname = url.split('/user/')[1]?.split('?')[0];
-      const found = MOCK_DISCOVER_USERS.find(u => u.username === uname)
+      let found = MOCK_DISCOVER_USERS.find(u => u.username === uname)
         || MOCK_NOTIF_USERS[uname]
         || MOCK_DISCOVER_USERS.find(u => u.id === uname)
         || Object.values(MOCK_NOTIF_USERS).find(u => u.id === uname)
@@ -563,12 +744,14 @@ const api = {
       }
       const deltas = _userDeltas.get(found.id) || {};
       const isFollowing = _following.has(found.id);
+      const isBlocked = _blockedIds().has(found.id);
       return delay(200).then(() => ({
         ...found,
         followers_count: (found.follower_count ?? found.followers_count ?? 0) + (deltas.followers_count ?? 0),
         following_count: (found.following_count ?? 0),
         posts_count:     found.post_count ?? found.posts_count ?? 0,
-        is_following:    isFollowing,
+        is_following:    isBlocked ? false : isFollowing,
+        is_blocked_by_me: isBlocked,
         is_locked:       false,
         friend_request_status: 'none',
         instagram:       found.instagram || found.username,
@@ -577,6 +760,12 @@ const api = {
         badges:          found.badges || ['new_user', 'music_lover', 'explorer'],
       }));
     }
+    // /music-hybrid/home — ana sayfa günlük SC verileri (mock)
+    if (url === '/music-hybrid/home' || url.startsWith('/music-hybrid/home?')) {
+      const params = new URLSearchParams(url.includes('?') ? url.slice(url.indexOf('?') + 1) : '');
+      return musicHybridHomeData(params.get('country') || '');
+    }
+
     if (url.startsWith('/search') || url.startsWith('/music-hybrid')) {
       const params = new URLSearchParams(url.includes('?') ? url.slice(url.indexOf('?') + 1) : '');
       const q = (params.get('q') || '').toLowerCase();
@@ -585,7 +774,8 @@ const api = {
       if (!q) return Promise.resolve({ tracks: [], users: [], playlists: [], posts: [] });
       // User search
       if (type === 'users') {
-        const allPool = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS)];
+        const blocked = _blockedIds();
+        const allPool = [...MOCK_DISCOVER_USERS, ...Object.values(MOCK_NOTIF_USERS)].filter(u => !blocked.has(u.id));
         const allUsers = allPool.filter(u =>
           (u.username || '').toLowerCase().includes(q) ||
           (u.display_name || '').toLowerCase().includes(q) ||
@@ -648,6 +838,55 @@ const api = {
       const allIds = ['n1','n2','n3','n4','n5'];
       const count = allIds.filter(id => !_deletedNotifIds.has(id) && !_readNotifIds.has(id)).length;
       return delay().then(() => ({ count }));
+    }
+    // ── Stories GET ───────────────────────────────────────────────────────────
+    // GET /stories/my
+    if (url === '/stories/my') {
+      const mine = _getStories().filter(s => s.user_id === 'preview-1' && new Date(s.expires_at) > new Date());
+      return delay(200).then(() => mine);
+    }
+    // GET /stories/feed
+    if (url === '/stories/feed') {
+      const all = _getStories().filter(s => new Date(s.expires_at) > new Date());
+      const grouped = {};
+      for (const story of all) {
+        if (!grouped[story.user_id]) {
+          grouped[story.user_id] = {
+            user_id: story.user_id,
+            username: story.username,
+            user_avatar: story.user_avatar,
+            user_display_name: story.user_display_name,
+            stories: [],
+            has_unviewed: false,
+          };
+        }
+        grouped[story.user_id].stories.push(story);
+        if (!story.is_viewed) grouped[story.user_id].has_unviewed = true;
+      }
+      // Her kullanıcının hikayeleri: eskiden yeniye sırala (soldan sağa)
+      for (const g of Object.values(grouped)) {
+        g.stories.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      }
+      // Kendi hikayesi önce, diğerleri en son görüntülemeden yeniye
+      const vals = Object.values(grouped);
+      vals.sort((a, b) => (a.user_id === 'preview-1' ? -1 : b.user_id === 'preview-1' ? 1 : 0));
+      return delay(200).then(() => vals);
+    }
+    // GET /stories/user/{id}
+    if (url.match(/^\/stories\/user\/([^/?]+)/)) {
+      const userId = url.match(/^\/stories\/user\/([^/?]+)/)[1];
+      const stories = _getStories()
+        .filter(s => s.user_id === userId && new Date(s.expires_at) > new Date())
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      return delay(200).then(() => stories);
+    }
+    // GET /stories/{id}/viewers
+    if (url.match(/^\/stories\/[^/]+\/viewers/)) {
+      return delay(200).then(() => []);
+    }
+    // GET /stories/{id}/poll/results
+    if (url.match(/^\/stories\/[^/]+\/poll\/results/)) {
+      return delay(200).then(() => ({ options: [] }));
     }
     return delay().then(() => ({}));
   },
@@ -734,6 +973,79 @@ const api = {
       } catch {}
       return delay(400).then(() => group);
     }
+    // ── Stories POST ──────────────────────────────────────────────────────────
+    // POST /stories
+    if (url === '/stories') {
+      const story = {
+        id: 'story_' + Date.now(),
+        user_id: 'preview-1',
+        username: _mockUser.username,
+        user_avatar: _mockUser.avatar_url,
+        user_display_name: _mockUser.display_name,
+        is_verified: _mockUser.is_verified || false,
+        story_type: data?.story_type || 'photo',
+        text: data?.text || null,
+        media_url: data?.media_url || null,
+        media_type: data?.media_type || null,
+        background_color: data?.background_color || '#8B5CF6',
+        filter_id: data?.filter_id || null,
+        close_friends_only: data?.close_friends_only || false,
+        poll_question: data?.poll_question || null,
+        poll_options: data?.poll_options
+          ? data.poll_options.map((opt, i) => ({ id: 'opt_' + i, text: opt, votes: 0 }))
+          : null,
+        music_track_id: data?.music_track_id || null,
+        music_start_time: data?.music_start_time || 0,
+        music_track: data?.music_track || null,
+        photo_scale:    data?.photo_scale    || null,
+        photo_offset_x: data?.photo_offset_x || null,
+        photo_offset_y: data?.photo_offset_y || null,
+        text_pos_x:     data?.text_pos_x     ?? null,
+        text_pos_y:     data?.text_pos_y     ?? null,
+        text_scale:     data?.text_scale     ?? null,
+        text_align:     data?.text_align     ?? null,
+        text_style_id:  data?.text_style_id  ?? null,
+        viewers: [], viewers_count: 0,
+        is_viewed: true, is_expired: false,
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+      };
+      const existing = _getStories();
+      _saveStories([story, ...existing]);
+      return delay(300).then(() => story);
+    }
+    // POST /stories/{id}/view
+    if (url.match(/^\/stories\/[^/]+\/view$/)) {
+      return delay(100).then(() => ({ status: 'ok' }));
+    }
+    // POST /stories/{id}/react  → DM + bildirim simülasyonu
+    if (url.match(/^\/stories\/[^/]+\/react$/)) {
+      const storyId = url.split('/')[2];
+      const reaction = data?.reaction || '❤️';
+      // DM konuşması mock'a kaydet
+      try {
+        const convs = JSON.parse(localStorage.getItem('_mock_convs') || '[]');
+        let conv = convs.find(c => c.story_id === storyId);
+        if (!conv) {
+          conv = { id: 'conv_react_' + storyId, story_id: storyId, is_group: false, last_message: reaction, last_message_at: new Date().toISOString() };
+          convs.push(conv);
+          localStorage.setItem('_mock_convs', JSON.stringify(convs));
+        }
+      } catch {}
+      return delay(100).then(() => ({ status: 'ok', reaction, dm_sent: true }));
+    }
+    // POST /stories/{id}/reply
+    if (url.match(/^\/stories\/[^/]+\/reply$/)) {
+      return delay(200).then(() => ({ status: 'ok', id: 'reply_' + Date.now() }));
+    }
+    // POST /stories/{id}/poll/vote
+    if (url.match(/^\/stories\/[^/]+\/poll\/vote$/)) {
+      return delay(200).then(() => ({ status: 'ok' }));
+    }
+    // POST /stories/{id}/report
+    if (url.match(/^\/stories\/[^/]+\/report$/)) {
+      return delay(200).then(() => ({ status: 'reported' }));
+    }
     if (url.includes('/auth/register'))      return delay().then(() => MOCK_AUTH);
     if (url.includes('/auth/verify-token'))  return delay().then(() => MOCK_AUTH);
     // Phone password reset (WhatsApp OTP)
@@ -802,6 +1114,29 @@ const api = {
         const bu = MOCK_DISCOVER_USERS.find(u => u.id === uid) || { id: uid, username: uid, display_name: uid };
         blocks.push(bu);
         try { localStorage.setItem('_mock_blocked', JSON.stringify(blocks)); } catch {}
+      }
+      // Engelleme: takip ilişkisini her iki yönde kaldır
+      const wasFollowing = _following.has(uid);
+      if (wasFollowing) {
+        _following.delete(uid);
+        _saveSet('_mock_following', _following);
+        // Kendi takip ettiğim kişiyi engelledim → following_count düşer
+        _mockUser.following_count = Math.max(0, (_mockUser.following_count || 1) - 1);
+      }
+      // Engellenen kişi beni takip ediyorsa takipçilerden çıkar
+      const wasFollower = !_removedFollowers.has(uid);
+      if (wasFollower) {
+        _removedFollowers.add(uid);
+        _saveSet('_mock_removed_followers', _removedFollowers);
+        // Engellenen kişi beni takip ediyordu → kendi followers_count düşer
+        _mockUser.followers_count = Math.max(0, (_mockUser.followers_count || 1) - 1);
+      }
+      _saveMockUser(_mockUser);
+      // Engellenen kullanıcının followers_count deltaını güncelle (ben onun takipçisiydim)
+      if (wasFollowing) {
+        const bd = _userDeltas.get(uid) || {};
+        _userDeltas.set(uid, { ...bd, followers_count: (bd.followers_count || 0) - 1 });
+        _saveMap('_mock_user_deltas', _userDeltas);
       }
       return delay(300).then(() => ({ message: 'Kullanıcı engellendi' }));
     }
@@ -892,6 +1227,8 @@ const api = {
       const blocks = (() => { try { return JSON.parse(localStorage.getItem('_mock_blocked') || '[]'); } catch { return []; } })();
       const updated = blocks.filter(b => b.id !== uid);
       try { localStorage.setItem('_mock_blocked', JSON.stringify(updated)); } catch {}
+      // Engel kaldırınca takip ilişkisi otomatik restore edilmez.
+      // Kişi yeniden takip etmek isterse manuel takip etmeli veya takip isteği göndermeli.
       return delay(300).then(() => ({ message: 'Engel kaldırıldı' }));
     }
     // Delete playlist: DELETE /playlists/{id}
@@ -907,6 +1244,12 @@ const api = {
       try { localStorage.removeItem('_mock_user'); localStorage.removeItem('_mockAuth'); } catch {}
       return delay(800).then(() => ({ message: 'Hesabınız kalıcı olarak silindi' }));
     }
+    // Delete story: DELETE /stories/{id}
+    if (/^\/stories\/[^/]+$/.test(url)) {
+      const id = url.split('/stories/')[1];
+      _saveStories(_getStories().filter(s => s.id !== id));
+      return delay(300).then(() => ({ status: 'ok' }));
+    }
     // Delete notification: DELETE /notifications/{id}
     if (/^\/notifications\/[^/]+$/.test(url)) {
       const nid = url.split('/notifications/')[1];
@@ -918,6 +1261,34 @@ const api = {
   },
   patch:  (url, data) => delay().then(() => ({})),
   request:(endpoint, opts) => delay().then(() => ({})),
+
+  // File upload — blob URL'yi küçültülmüş JPEG data URL'e çevir (localStorage quota koruması)
+  uploadFile: async (fileUri) => {
+    await delay(300);
+    if (typeof fileUri === 'string' && fileUri.startsWith('blob:')) {
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const img = new globalThis.Image();
+          img.onload = () => {
+            const MAX = 800;
+            const scale = Math.min(1, MAX / Math.max(img.width || MAX, img.height || MAX));
+            const canvas = document.createElement('canvas');
+            canvas.width  = Math.round((img.width  || MAX) * scale);
+            canvas.height = Math.round((img.height || MAX) * scale);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.82));
+          };
+          img.onerror = reject;
+          img.src = fileUri;
+        });
+        return dataUrl;
+      } catch {
+        return fileUri;
+      }
+    }
+    return fileUri;
+  },
 };
 
 // Named utility exports used by some screens

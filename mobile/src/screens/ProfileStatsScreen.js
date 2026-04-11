@@ -173,6 +173,28 @@ export default function ProfileStatsScreen({ navigation }) {
             </View>
           </Card>
 
+          {/* ── Takipçi özeti ── */}
+          <Text style={s.sec}>Takipçiler</Text>
+          <Card {...cardProps}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+              {[
+                { val: fmt(folSummary.total_followers),  color: '#fff',  lbl: 'Toplam'    },
+                { val: `+${fmt(folSummary.new_followers  || 0)}`, color: GREEN, lbl: 'Kazanılan' },
+                { val: `-${fmt(folSummary.lost_followers || 0)}`, color: RED,   lbl: 'Kaybedilen'},
+                { val: (folSummary.net_growth >= 0 ? '+' : '') + fmt(folSummary.net_growth || 0),
+                  color: (folSummary.net_growth || 0) >= 0 ? GREEN : RED, lbl: 'Net Büyüme' },
+              ].map((item, i, arr) => (
+                <React.Fragment key={i}>
+                  <View style={s.folStat}>
+                    <Text style={[s.folVal, { color: item.color }]}>{item.val}</Text>
+                    <Text style={s.folLbl}>{item.lbl}</Text>
+                  </View>
+                  {i < arr.length - 1 && <View style={[s.vDiv, { height: 40 }]} />}
+                </React.Fragment>
+              ))}
+            </View>
+          </Card>
+
           {/* ── Dinleme ── */}
           <Text style={s.sec}>Dinleme</Text>
           <Card {...cardProps}>
@@ -245,28 +267,6 @@ export default function ProfileStatsScreen({ navigation }) {
               </Card>
             </>
           )}
-
-          {/* ── Takipçi özeti ── */}
-          <Text style={s.sec}>Takipçiler</Text>
-          <Card {...cardProps}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
-              {[
-                { val: fmt(folSummary.total_followers),  color: '#fff',  lbl: 'Toplam'    },
-                { val: `+${fmt(folSummary.new_followers  || 0)}`, color: GREEN, lbl: 'Kazanılan' },
-                { val: `-${fmt(folSummary.lost_followers || 0)}`, color: RED,   lbl: 'Kaybedilen'},
-                { val: (folSummary.net_growth >= 0 ? '+' : '') + fmt(folSummary.net_growth || 0),
-                  color: (folSummary.net_growth || 0) >= 0 ? GREEN : RED, lbl: 'Net Büyüme' },
-              ].map((item, i, arr) => (
-                <React.Fragment key={i}>
-                  <View style={s.folStat}>
-                    <Text style={[s.folVal, { color: item.color }]}>{item.val}</Text>
-                    <Text style={s.folLbl}>{item.lbl}</Text>
-                  </View>
-                  {i < arr.length - 1 && <View style={[s.vDiv, { height: 40 }]} />}
-                </React.Fragment>
-              ))}
-            </View>
-          </Card>
 
           {/* ── Etkileşim kuran takipçiler ── */}
           {topFollowers.length > 0 && (

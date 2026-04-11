@@ -14,7 +14,6 @@ import {
   ActivityIndicator,
   Modal,
   RefreshControl,
-  Alert,
   Share,
   ScrollView,
   KeyboardAvoidingView,
@@ -31,6 +30,7 @@ import socketService from '../services/socketService';
 import { useTheme } from '../contexts/ThemeContext';
 import { TrackPlayer, State, usePlaybackState } from '../lib/trackPlayer';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Alert } from '../components/ui/AppAlert';
 
 const ROOM_REFRESH_INTERVAL = 5000;
 

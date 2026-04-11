@@ -195,7 +195,7 @@ async def get_monthly_report_url() -> Optional[str]:
 
 
 async def get_yearly_summary(user_id: str, year: int = None) -> Dict:
-    """Yıllık özet (Spotify Wrapped) - Trench + ClickHouse + Gemini"""
+    """Yıllık özet - Trench + ClickHouse + Gemini"""
     from datetime import datetime
     y = year or datetime.now().year
     data = {

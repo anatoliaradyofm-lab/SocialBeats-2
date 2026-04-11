@@ -13,6 +13,7 @@ import { AuthProvider, useAuth } from '../../mobile/src/contexts/AuthContext';
 import { NotificationProvider } from '../../mobile/src/contexts/NotificationContext';
 import { PlayerProvider, usePlayer } from './mocks/player-context.jsx';
 import { isLiked, toggleLike, subscribe as likedSubscribe } from '../../mobile/src/lib/likedStore';
+import { AppAlertPortal } from '../../mobile/src/components/ui/AppAlert';
 import { getPlaylistsCache, enqueuePendingTrack } from '../../mobile/src/lib/playlistStore';
 
 // Screens
@@ -51,6 +52,7 @@ import LyricsScreen               from '../../mobile/src/screens/LyricsScreen';
 import ListeningHistoryScreen     from '../../mobile/src/screens/ListeningHistoryScreen';
 import ChangeEmailScreen          from '../../mobile/src/screens/ChangeEmailScreen';
 import DeleteAccountScreen        from '../../mobile/src/screens/DeleteAccountScreen';
+import FreezeAccountScreen        from '../../mobile/src/screens/FreezeAccountScreen';
 import SessionsScreen             from '../../mobile/src/screens/SessionsScreen';
 import DataExportScreen           from '../../mobile/src/screens/DataExportScreen';
 import NotificationSettingsScreen from '../../mobile/src/screens/NotificationSettingsScreen';
@@ -98,7 +100,7 @@ function makeMockNav(stack, setStack) {
   const current = () => stack[stack.length - 1] || { name: 'Dashboard', params: {} };
 
   const navigate = (name, params = {}) => {
-    const resolved = name === 'Main' ? 'Dashboard' : name;
+    const resolved = name === 'Main' ? 'Dashboard' : name === 'Auth' ? 'PhoneLogin' : name;
     setStack(s => {
       // Zaten üstte aynı ekran → sadece params güncelle
       if (s[s.length - 1]?.name === resolved)
@@ -124,8 +126,9 @@ function makeMockNav(stack, setStack) {
     push:           (name, params = {}) => setStack(s => [...s, { name, params }]),
     replace:        (name, params = {}) => setStack(s => [...s.slice(0, -1), { name, params }]),
     reset:          ({ routes } = {}) => {
-      const name = routes?.[0]?.name || 'Dashboard';
-      setStack([{ name: name === 'Main' ? 'Dashboard' : name, params: routes?.[0]?.params || {} }]);
+      const raw = routes?.[0]?.name || 'Dashboard';
+      const name = raw === 'Main' ? 'Dashboard' : (raw === 'Auth' || raw === 'Login') ? 'PhoneLogin' : raw;
+      setStack([{ name, params: routes?.[0]?.params || {} }]);
     },
     setOptions:     () => {},
     setParams:      (params) => setStack(s => {
@@ -332,7 +335,7 @@ const fp = StyleSheet.create({
   controls:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%' },
   sideBtn:      { padding: 12, flex: 1, alignItems: 'center' },
   ctrlBtn:      { padding: 12 },
-  playBtn:      { width: 68, height: 68, borderRadius: 34, backgroundColor: '#FB923C', alignItems: 'center', justifyContent: 'center', marginHorizontal: 8, boxShadow: '0 0 40px rgba(251,146,60,0.65)' },
+  playBtn:      { width: 68, height: 68, borderRadius: 34, backgroundColor: '#C084FC', alignItems: 'center', justifyContent: 'center', marginHorizontal: 8, boxShadow: '0 0 40px rgba(192,132,252,0.65)' },
 });
 
 /* ─── Phone sizing ─────────────────────────────────────────── */
@@ -351,7 +354,9 @@ function usePhoneScale() {
       const maxW = winW - 24;
       const byH  = maxH / (PHONE_H + FRAME_EXTRA);
       const byW  = maxW / PHONE_W;
-      setScale(Math.min(1, byH, byW));
+      const s = Math.min(1, byH, byW);
+      setScale(s);
+      window.__phoneScale = s; // RN bileşenlerinin erişmesi için
     }
     compute();
     window.addEventListener('resize', compute);
@@ -774,7 +779,7 @@ function MiniPlayer({ onOpen }) {
           </View>
         </Pressable>
         <TouchableOpacity onPress={() => isPlaying ? pause?.() : play?.()} style={mp.playBtn}>
-          <ion-icon name={isPlaying ? 'pause' : 'play'} style={{ fontSize: 24, color: '#FB923C', pointerEvents: 'none', marginLeft: isPlaying ? 0 : 2 }} />
+          <ion-icon name={isPlaying ? 'pause' : 'play'} style={{ fontSize: 24, color: '#C084FC', pointerEvents: 'none', marginLeft: isPlaying ? 0 : 2 }} />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setDismissed(true)} style={[mp.btn, { marginLeft: 2 }]}>
           <ion-icon name="close" style={{ fontSize: 20, color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
@@ -903,7 +908,7 @@ const AUTH_SCREENS = new Set(['PhoneLogin', 'Register']);
 
 /* ─── App Root ─────────────────────────────────────────────── */
 function AppInner() {
-  const { isAuthenticated, isLoading, logout } = useAuth();
+  const { isAuthenticated, isGuest, isLoading, logout } = useAuth();
   // null = waiting for auth check, array = resolved
   const [stack, setStack] = useState(null);
 
@@ -918,7 +923,7 @@ function AppInner() {
 
   useEffect(() => {
     if (isLoading) return;
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !isGuest) {
       setStack([{ name: 'PhoneLogin', params: {} }]);
     } else {
       setStack(prev => {
@@ -927,7 +932,7 @@ function AppInner() {
         return prev;
       });
     }
-  }, [isAuthenticated, isLoading]);
+  }, [isAuthenticated, isGuest, isLoading]);
 
   const resolving = isLoading || stack === null;
 
@@ -1000,6 +1005,7 @@ function AppInner() {
       case 'ProfileQR':              return <ProfileQRScreen {...props} />;
       case 'ChangeEmail':            return <ChangeEmailScreen {...props} />;
       case 'DeleteAccount':          return <DeleteAccountScreen {...props} />;
+      case 'FreezeAccount':          return <FreezeAccountScreen {...props} />;
       case 'Sessions':               return <SessionsScreen {...props} />;
       case 'BlockedUsers':           return <BlockedUsersScreen {...props} />;
       case 'MutedUsers':             return <MutedUsersScreen {...props} />;
@@ -1063,6 +1069,8 @@ function AppInner() {
                     {renderScreen(screen)}
                   </View>
                 )}
+                {/* Alert portal — telefon çerçevesi içinde kalır */}
+                <AppAlertPortal />
               </>
             )}
           </PhoneFrame>

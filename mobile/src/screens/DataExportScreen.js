@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ActivityIndicator, Alert, ScrollView, Linking,
+  ActivityIndicator, ScrollView, Linking, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Alert } from '../components/ui/AppAlert';
 
 const STATUS_CONFIG = {
   none:       { icon: 'cloud-download-outline', color: null,         label: 'Henüz talep yok' },
@@ -108,11 +109,15 @@ export default function DataExportScreen({ navigation }) {
 
   const openDownload = () => {
     const url = jobData?.download_url;
-    if (url) {
-      Linking.openURL(url).catch(() =>
-        Alert.alert('Hata', 'Link açılamadı.')
-      );
-    }
+    if (!url) return;
+    const text = encodeURIComponent(`SocialBeats verileriniz hazır. İndirmek için:\n${url}`);
+    const waUrl = Platform.OS === 'web'
+      ? `https://wa.me/?text=${text}`
+      : `whatsapp://send?text=${text}`;
+    Linking.openURL(waUrl).catch(() => {
+      // WhatsApp yoksa tarayıcıda aç
+      Linking.openURL(url).catch(() => Alert.alert('Hata', 'Link açılamadı.'));
+    });
   };
 
   const statusCfg = STATUS_CONFIG[jobStatus] || STATUS_CONFIG.none;
@@ -179,8 +184,8 @@ export default function DataExportScreen({ navigation }) {
             onPress={openDownload}
             activeOpacity={0.8}
           >
-            <Ionicons name="download-outline" size={20} color={colors.success} />
-            <Text style={[styles.downloadBtnText, { color: colors.success }]}>Dosyayı İndir</Text>
+            <Ionicons name="logo-whatsapp" size={20} color={colors.success} />
+            <Text style={[styles.downloadBtnText, { color: colors.success }]}>WhatsApp ile Gönder</Text>
           </TouchableOpacity>
         )}
 
@@ -188,7 +193,7 @@ export default function DataExportScreen({ navigation }) {
         <View style={[styles.infoBanner, { backgroundColor: colors.primaryGlow, borderColor: colors.primary + '30' }]}>
           <Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            GDPR ve KVKK kapsamında verilerinizi talep etme hakkına sahipsiniz. Veriler hazırlandığında güvenli bir indirme bağlantısı oluşturulur.
+            GDPR ve KVKK kapsamında verilerinizi talep etme hakkına sahipsiniz. Veriler hazırlandığında WhatsApp üzerinden size gönderilir.
           </Text>
         </View>
 
