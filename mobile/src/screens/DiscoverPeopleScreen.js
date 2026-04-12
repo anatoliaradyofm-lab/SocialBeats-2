@@ -25,18 +25,18 @@ const GENRE_ICONS = {
 };
 
 const GRADIENT_SETS = [
-  ['#667eea', '#764ba2'],
-  ['#f093fb', '#f5576c'],
-  ['#4facfe', '#00f2fe'],
-  ['#43e97b', '#38f9d7'],
-  ['#fa709a', '#fee140'],
-  ['#a18cd1', '#fbc2eb'],
-  ['#ffecd2', '#fcb69f'],
-  ['#ff9a9e', '#fecfef'],
-  ['#a1c4fd', '#c2e9fb'],
-  ['#d4fc79', '#96e6a1'],
-  ['#84fab0', '#8fd3f4'],
-  ['#cfd9df', '#e2ebf0'],
+  ['#1A0A2E', '#2D1454'],
+  ['#0D1B2A', '#1A3A5C'],
+  ['#12071E', '#2A0845'],
+  ['#0A1628', '#1E3A5F'],
+  ['#1C0B2E', '#3B1278'],
+  ['#0F1923', '#1A3D50'],
+  ['#1A0828', '#3D1060'],
+  ['#08060F', '#1A0A2E'],
+  ['#0D0A1E', '#200A4A'],
+  ['#120818', '#2E0D4A'],
+  ['#0A1520', '#1A3548'],
+  ['#100A20', '#280A50'],
 ];
 
 function getGradient(index) {
@@ -312,11 +312,13 @@ export default function DiscoverPeopleScreen({ navigation }) {
       return;
     }
     navigation.navigate('Chat', {
-      conversationId: null,
-      recipientId: user.id,
-      recipientUsername: user.username,
-      recipientName: user.display_name || user.username,
-      recipientAvatar: user.avatar_url,
+      conversationId: `new_${user.id}`,
+      otherUser: {
+        id: user.id,
+        username: user.username,
+        display_name: user.display_name || user.username,
+        avatar_url: user.avatar_url,
+      },
     });
   };
 
@@ -350,7 +352,6 @@ export default function DiscoverPeopleScreen({ navigation }) {
   const renderUser = ({ item, index }) => {
     const user = item;
     const isFollowed = followedIds.has(user.id);
-    const gradient = getGradient(index);
     const avatar = user.avatar_url || `https://i.pravatar.cc/200?u=${user.username || user.id}`;
     const cover = user.cover_url;
     const genres = user.music_genres || [];
@@ -381,14 +382,12 @@ export default function DiscoverPeopleScreen({ navigation }) {
       };
       return (
         <View style={styles.webCard} onWheel={handleWheel} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-      <LinearGradient
-        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
-        locations={[0, 0.18, 0.32, 1]}
-        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-          {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} blurRadius={20} /> : null}
-          <LinearGradient colors={[`${gradient[0]}AA`, `${gradient[1]}DD`, '#0A0A0BFF']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} />
+          {cover ? (
+            <>
+              <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} blurRadius={28} />
+              <LinearGradient colors={['rgba(8,6,15,0.55)', 'rgba(8,6,15,0.78)', 'rgba(8,6,15,0.97)']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} />
+            </>
+          ) : null}
 
           {/* Centered content */}
           <View style={styles.webCardInner}>
@@ -432,12 +431,15 @@ export default function DiscoverPeopleScreen({ navigation }) {
             </View>
             <View style={styles.actionButtons}>
               <TouchableOpacity style={[styles.followButton, isFollowed && styles.followedButton]} onPress={() => handleFollow(user.id)} activeOpacity={0.8}>
-                <Ionicons name={isFollowed ? 'checkmark' : 'person-add'} size={20} color="#fff" />
+                {!isFollowed && <LinearGradient colors={['#9333EA', '#C084FC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />}
+                <Ionicons name={isFollowed ? 'checkmark' : 'person-add'} size={18} color="#fff" />
                 <Text style={styles.followButtonText}>{isFollowed ? 'Takip Ediliyor' : 'Takip Et'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.messageButton} onPress={() => handleMessage(user)} activeOpacity={0.8}>
-                <Ionicons name="chatbubble-outline" size={20} color="#fff" />
-                <Text style={styles.messageButtonText}>Mesaj</Text>
+              <TouchableOpacity style={styles.messageButton} onPress={() => handleMessage(user)} activeOpacity={0.85}>
+                <LinearGradient colors={['#9333EA', '#C084FC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.messageBtnGrad}>
+                  <Ionicons name="chatbubble-ellipses" size={16} color="#fff" />
+                  <Text style={styles.messageButtonText}>Mesaj</Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
@@ -449,14 +451,16 @@ export default function DiscoverPeopleScreen({ navigation }) {
     return (
       <View style={[styles.userCard, { height: ITEM_HEIGHT }]}>
         {cover ? (
-          <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} blurRadius={20} />
+          <>
+            <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} blurRadius={24} />
+            <LinearGradient
+              colors={['rgba(8,6,15,0.55)', 'rgba(8,6,15,0.78)', 'rgba(8,6,15,0.97)']}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+            />
+          </>
         ) : null}
-        <LinearGradient
-          colors={[`${gradient[0]}99`, `${gradient[1]}CC`, '#0A0A0BFF']}
-          style={StyleSheet.absoluteFill}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-        />
 
         <View style={styles.cardContent}>
           {/* Avatar */}
@@ -494,7 +498,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
           {/* Now Playing */}
           {nowPlaying ? (
             <View style={styles.nowPlayingBadge}>
-              <Ionicons name="musical-note" size={14} color="#8B5CF6" />
+              <Ionicons name="musical-note" size={14} color="#C084FC" />
               <Text style={styles.nowPlayingText} numberOfLines={1}>
                 {nowPlaying.title} - {nowPlaying.artist}
               </Text>
@@ -541,7 +545,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
           {/* Mutual Friends */}
           {user.mutual_friends > 0 && (
             <View style={styles.mutualRow}>
-              <Ionicons name="people" size={16} color="#A78BFA" />
+              <Ionicons name="people" size={16} color="#C084FC" />
               <Text style={styles.mutualText}>
                 {user.mutual_friends} {t('discover.mutualFriends') || 'mutual friends'}
               </Text>
@@ -555,11 +559,8 @@ export default function DiscoverPeopleScreen({ navigation }) {
               onPress={() => handleFollow(user.id)}
               activeOpacity={0.8}
             >
-              <Ionicons
-                name={isFollowed ? 'checkmark' : 'person-add'}
-                size={20}
-                color="#fff"
-              />
+              {!isFollowed && <LinearGradient colors={['#9333EA', '#C084FC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />}
+              <Ionicons name={isFollowed ? 'checkmark' : 'person-add'} size={18} color="#fff" />
               <Text style={styles.followButtonText}>
                 {isFollowed ? (t('profile.following') || 'Following') : (t('suggestions.follow') || 'Follow')}
               </Text>
@@ -568,10 +569,10 @@ export default function DiscoverPeopleScreen({ navigation }) {
             <TouchableOpacity
               style={styles.messageButton}
               onPress={() => handleMessage(user)}
-              activeOpacity={0.8}
+              activeOpacity={0.75}
             >
-              <Ionicons name="chatbubble-outline" size={20} color="#fff" />
-              <Text style={styles.messageButtonText}>{t('profile.message') || 'Message'}</Text>
+              <Ionicons name="chatbubble-ellipses" size={17} color="#C084FC" />
+              <Text style={styles.messageButtonText}>Mesaj</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -589,6 +590,13 @@ export default function DiscoverPeopleScreen({ navigation }) {
   if (loading && users.length === 0) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
+        <LinearGradient
+          colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+          locations={[0, 0.18, 0.38, 1]}
+          start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
         <StatusBar barStyle="light-content" />
         <View style={styles.header}>
           <View style={styles.headerRow}>
@@ -600,7 +608,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
           </View>
         </View>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <ActivityIndicator size="large" color="#C084FC" />
         </View>
       </View>
     );
@@ -608,6 +616,13 @@ export default function DiscoverPeopleScreen({ navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
+        locations={[0, 0.18, 0.38, 1]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       <StatusBar barStyle="light-content" />
 
       {/* Header — tek satır: geri + arama + filtre */}
@@ -671,6 +686,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
           {searchLoading && searchResults.length === 0 ? (
             <View style={styles.searchCenter}>
               <ActivityIndicator size="large" color="#C084FC" />
+
             </View>
           ) : searchResults.length === 0 ? (
             <View style={styles.searchCenter}>
@@ -706,7 +722,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
                       style={[styles.searchFollowBtn, isFollowed && styles.searchFollowBtnActive]}
                       onPress={() => handleSearchFollow(item.id)}
                     >
-                      <Text style={[styles.searchFollowBtnText, isFollowed && { color: '#9CA3AF' }]}>
+                      <Text style={[styles.searchFollowBtnText, isFollowed && { color: 'rgba(248,248,248,0.4)' }]}>
                         {isFollowed ? 'Takipte' : 'Takip Et'}
                       </Text>
                     </TouchableOpacity>
@@ -723,7 +739,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
         <View style={{ flex: 1 }}>
           {users.length === 0 ? (
             <View style={styles.center}>
-              <Ionicons name="people-outline" size={64} color="#8B5CF6" />
+              <Ionicons name="people-outline" size={64} color="#C084FC" />
               <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', marginTop: 16 }}>
                 {apiError ? 'Bağlantı hatası' : hasActiveFilter ? 'Bu bölgede kullanıcı bulunamadı' : 'Henüz kullanıcı yok'}
               </Text>
@@ -757,13 +773,13 @@ export default function DiscoverPeopleScreen({ navigation }) {
         windowSize={5}
         removeClippedSubviews
         getItemLayout={(_, index) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index })}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#C084FC" />}
         onEndReached={onEndReached}
         onEndReachedThreshold={0.5}
         ListFooterComponent={loadingMore ? <View style={[styles.footerLoader, { height: ITEM_HEIGHT * 0.3 }]}><ActivityIndicator size="small" color="#8B5CF6" /></View> : null}
         ListEmptyComponent={
           <View style={[styles.emptyContainer, { height: ITEM_HEIGHT }]}>
-            <Ionicons name="people-outline" size={64} color="#8B5CF6" />
+            <Ionicons name="people-outline" size={64} color="#C084FC" />
             <Text style={[styles.emptyTitle, { color: '#fff' }]}>
               {apiError ? 'Bağlantı hatası' : hasActiveFilter ? 'Bu bölgede kullanıcı bulunamadı' : 'Henüz kullanıcı yok'}
             </Text>
@@ -819,15 +835,15 @@ export default function DiscoverPeopleScreen({ navigation }) {
             <Text style={styles.filterLabel}>Ülke</Text>
             <ScrollView style={styles.countryList} showsVerticalScrollIndicator>
               <TouchableOpacity style={[styles.countryItem, !tempCountry && styles.countryItemActive]} onPress={() => setTempCountry('')}>
-                <Ionicons name="globe-outline" size={20} color={!tempCountry ? '#8B5CF6' : '#9CA3AF'} />
+                <Ionicons name="globe-outline" size={20} color={!tempCountry ? '#C084FC' : 'rgba(248,248,248,0.4)'} />
                 <Text style={[styles.countryItemText, !tempCountry && styles.countryItemTextActive]}>Tüm Ülkeler</Text>
-                {!tempCountry && <Ionicons name="checkmark" size={20} color="#8B5CF6" />}
+                {!tempCountry && <Ionicons name="checkmark" size={20} color="#C084FC" />}
               </TouchableOpacity>
               {COUNTRIES.map((c) => (
                 <TouchableOpacity key={c.code} style={[styles.countryItem, tempCountry === c.name && styles.countryItemActive]} onPress={() => setTempCountry(c.name)}>
                   <View style={styles.countryIcon}><Text style={{ fontSize: 20 }}>{c.flag}</Text></View>
                   <Text style={[styles.countryItemText, tempCountry === c.name && styles.countryItemTextActive]}>{c.name}</Text>
-                  {tempCountry === c.name && <Ionicons name="checkmark" size={20} color="#8B5CF6" />}
+                  {tempCountry === c.name && <Ionicons name="checkmark" size={20} color="#C084FC" />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -880,15 +896,15 @@ export default function DiscoverPeopleScreen({ navigation }) {
               <Text style={styles.filterLabel}>{t('discover.country') || 'Ülke'}</Text>
               <ScrollView style={styles.countryList} showsVerticalScrollIndicator>
                 <TouchableOpacity style={[styles.countryItem, !tempCountry && styles.countryItemActive]} onPress={() => setTempCountry('')}>
-                  <Ionicons name="globe-outline" size={20} color={!tempCountry ? '#8B5CF6' : '#9CA3AF'} />
+                  <Ionicons name="globe-outline" size={20} color={!tempCountry ? '#C084FC' : 'rgba(248,248,248,0.4)'} />
                   <Text style={[styles.countryItemText, !tempCountry && styles.countryItemTextActive]}>Tüm Ülkeler</Text>
-                  {!tempCountry && <Ionicons name="checkmark" size={20} color="#8B5CF6" />}
+                  {!tempCountry && <Ionicons name="checkmark" size={20} color="#C084FC" />}
                 </TouchableOpacity>
                 {COUNTRIES.map((c) => (
                   <TouchableOpacity key={c.code} style={[styles.countryItem, tempCountry === c.name && styles.countryItemActive]} onPress={() => setTempCountry(c.name)}>
                     <Text style={{ fontSize: 20 }}>{c.flag}</Text>
                     <Text style={[styles.countryItemText, tempCountry === c.name && styles.countryItemTextActive]}>{c.name}</Text>
-                    {tempCountry === c.name && <Ionicons name="checkmark" size={20} color="#8B5CF6" />}
+                    {tempCountry === c.name && <Ionicons name="checkmark" size={20} color="#C084FC" />}
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -910,7 +926,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
 
 
 const createStyles = (colors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: '#08060F' },
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10,
@@ -920,11 +936,18 @@ const createStyles = (colors) => StyleSheet.create({
   },
   headerBtn: { padding: 6 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  filterBtn: { padding: 8, borderRadius: 20, backgroundColor: '#1F2937' },
-  filterBtnActive: { backgroundColor: '#8B5CF6' },
+  filterBtn: {
+    padding: 8, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
+  },
+  filterBtnActive: {
+    backgroundColor: 'rgba(192,132,252,0.2)',
+    borderColor: 'rgba(192,132,252,0.45)',
+  },
   filterDot: {
     position: 'absolute', top: 6, right: 6, width: 8, height: 8,
-    borderRadius: 4, backgroundColor: '#EF4444',
+    borderRadius: 4, backgroundColor: '#C084FC',
   },
   filterBadgeRow: {
     position: 'absolute', top: 104, left: 0, right: 0, zIndex: 10,
@@ -932,10 +955,11 @@ const createStyles = (colors) => StyleSheet.create({
   },
   filterBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#1F2937', borderRadius: 16,
+    backgroundColor: 'rgba(192,132,252,0.12)', borderWidth: 1,
+    borderColor: 'rgba(192,132,252,0.3)', borderRadius: 16,
     paddingHorizontal: 12, paddingVertical: 6, alignSelf: 'flex-start',
   },
-  filterBadgeText: { color: '#D1D5DB', fontSize: 13, fontWeight: '500' },
+  filterBadgeText: { color: 'rgba(248,248,248,0.8)', fontSize: 13, fontWeight: '500' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   webDots: {
@@ -954,7 +978,7 @@ const createStyles = (colors) => StyleSheet.create({
   webCard: {
     flex: 1,
     overflow: 'hidden',
-    backgroundColor: '#0A0A0B',
+    backgroundColor: 'transparent',
   },
   webCardInner: {
     flex: 1,
@@ -969,6 +993,7 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
+    backgroundColor: 'transparent',
   },
   cardContent: {
     alignItems: 'center',
@@ -977,10 +1002,10 @@ const createStyles = (colors) => StyleSheet.create({
   },
   avatarContainer: {
     width: 130, height: 130, borderRadius: 65,
-    borderWidth: 3, borderColor: 'rgba(139,92,246,0.6)',
+    borderWidth: 3, borderColor: 'rgba(192,132,252,0.7)',
     marginBottom: 16, position: 'relative',
     ...Platform.select({
-      ios: { shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12 },
+      ios: { shadowColor: '#C084FC', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 14 },
       android: { elevation: 8 },
     }),
   },
@@ -994,10 +1019,11 @@ const createStyles = (colors) => StyleSheet.create({
 
   locationRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    marginBottom: 10, backgroundColor: 'rgba(31,41,55,0.7)',
+    marginBottom: 10, backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
   },
-  locationText: { color: '#E5E7EB', fontSize: 14, fontWeight: '500' },
+  locationText: { color: 'rgba(248,248,248,0.85)', fontSize: 14, fontWeight: '500' },
 
   nowPlayingBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -1005,7 +1031,7 @@ const createStyles = (colors) => StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, marginBottom: 10,
     maxWidth: '90%',
   },
-  nowPlayingText: { color: '#D8B4FE', fontSize: 13, fontWeight: '500', flexShrink: 1 },
+  nowPlayingText: { color: '#C084FC', fontSize: 13, fontWeight: '500', flexShrink: 1 },
 
   bio: {
     color: '#D1D5DB', fontSize: 14, textAlign: 'center',
@@ -1025,40 +1051,46 @@ const createStyles = (colors) => StyleSheet.create({
 
   statsRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(31,41,55,0.6)', borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 16,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
     paddingVertical: 14, paddingHorizontal: 24, marginBottom: 14,
     width: '100%',
   },
   statItem: { alignItems: 'center', flex: 1 },
   statNumber: { fontSize: 20, fontWeight: '800', color: colors.text },
-  statLabel: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
-  statDivider: { width: 1, height: 30, backgroundColor: '#374151' },
+  statLabel: { fontSize: 12, color: 'rgba(248,248,248,0.45)', marginTop: 2 },
+  statDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.1)' },
 
   mutualRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     marginBottom: 16,
   },
-  mutualText: { color: '#A78BFA', fontSize: 13, fontWeight: '600' },
+  mutualText: { color: '#C084FC', fontSize: 13, fontWeight: '600' },
 
   actionButtons: {
-    flexDirection: 'row', gap: 12, marginTop: 4, width: '100%',
+    flexDirection: 'row', gap: 10, marginTop: 4, width: '100%', alignItems: 'center',
   },
   followButton: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, backgroundColor: '#8B5CF6', paddingVertical: 14, borderRadius: 28,
+    gap: 8, overflow: 'hidden', paddingVertical: 14, borderRadius: 28,
     ...Platform.select({
-      ios: { shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+      ios: { shadowColor: '#C084FC', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 10 },
       android: { elevation: 4 },
     }),
   },
-  followedButton: { backgroundColor: '#374151' },
-  followButtonText: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  messageButton: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)', paddingVertical: 14, borderRadius: 28,
+  followedButton: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
   },
-  messageButtonText: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  followButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  messageButton: {
+    flex: 1, borderRadius: 28, overflow: 'hidden',
+  },
+  messageBtnGrad: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 7, paddingVertical: 14,
+  },
+  messageButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 
   pageIndicator: {
     position: 'absolute', alignSelf: 'center',
@@ -1071,7 +1103,7 @@ const createStyles = (colors) => StyleSheet.create({
   emptySubtitle: { color: '#6B7280', fontSize: 14, marginTop: 8, textAlign: 'center' },
   clearFilterBtn: {
     marginTop: 20, paddingHorizontal: 24, paddingVertical: 12,
-    backgroundColor: '#8B5CF6', borderRadius: 24,
+    backgroundColor: '#C084FC', borderRadius: 24,
   },
   clearFilterBtnText: { color: colors.text, fontSize: 15, fontWeight: '600' },
 
@@ -1097,31 +1129,34 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 4,
   },
-  countryItemActive: { backgroundColor: 'rgba(139,92,246,0.15)' },
-  countryItemText: { color: '#D1D5DB', fontSize: 15, flex: 1 },
-  countryItemTextActive: { color: '#A78BFA', fontWeight: '600' },
+  countryItemActive: { backgroundColor: 'rgba(192,132,252,0.12)', borderRadius: 12 },
+  countryItemText: { color: 'rgba(248,248,248,0.8)', fontSize: 15, flex: 1 },
+  countryItemTextActive: { color: '#C084FC', fontWeight: '600' },
   citySection: { marginBottom: 16 },
   genderChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, marginRight: 8,
-    backgroundColor: '#1F2937', borderWidth: 1, borderColor: '#374151',
+    backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
   },
-  genderChipActive: { backgroundColor: '#8B5CF6', borderColor: '#8B5CF6' },
-  genderChipText: { color: '#9CA3AF', fontSize: 14, fontWeight: '600' },
-  genderChipTextActive: { color: '#fff' },
+  genderChipActive: {
+    backgroundColor: 'rgba(192,132,252,0.2)',
+    borderColor: 'rgba(192,132,252,0.5)',
+  },
+  genderChipText: { color: 'rgba(248,248,248,0.5)', fontSize: 14, fontWeight: '600' },
+  genderChipTextActive: { color: '#C084FC' },
   modalActions: {
     flexDirection: 'row', gap: 12, marginTop: 8,
   },
   clearBtn: {
     flex: 1, alignItems: 'center', paddingVertical: 14,
-    borderRadius: 24, borderWidth: 1, borderColor: '#374151',
+    borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
   },
-  clearBtnText: { color: '#9CA3AF', fontSize: 16, fontWeight: '600' },
+  clearBtnText: { color: 'rgba(248,248,248,0.5)', fontSize: 16, fontWeight: '600' },
   applyBtn: {
     flex: 2, alignItems: 'center', paddingVertical: 14,
-    borderRadius: 24, backgroundColor: '#8B5CF6',
+    borderRadius: 24, backgroundColor: '#C084FC',
   },
-  applyBtnText: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  applyBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 
   // Search bar — inside header row
   searchBarWrap: {
@@ -1141,7 +1176,7 @@ const createStyles = (colors) => StyleSheet.create({
     flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60,
   },
   searchEmpty: {
-    color: '#6B7280', fontSize: 15, textAlign: 'center', marginTop: 8,
+    color: 'rgba(248,248,248,0.35)', fontSize: 15, textAlign: 'center', marginTop: 8,
   },
   searchUserRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -1154,11 +1189,13 @@ const createStyles = (colors) => StyleSheet.create({
   },
   searchUserInfo: { flex: 1 },
   searchUserName: { fontSize: 15, fontWeight: '600', color: colors.text },
-  searchUserSub: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  searchUserSub: { fontSize: 13, color: 'rgba(248,248,248,0.4)', marginTop: 2 },
   searchFollowBtn: {
     paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20,
-    backgroundColor: '#C084FC',
+    backgroundColor: 'rgba(192,132,252,0.2)', borderWidth: 1, borderColor: 'rgba(192,132,252,0.45)',
   },
-  searchFollowBtnActive: { backgroundColor: 'rgba(255,255,255,0.08)' },
-  searchFollowBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  searchFollowBtnActive: {
+    backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.09)',
+  },
+  searchFollowBtnText: { fontSize: 13, fontWeight: '700', color: '#C084FC' },
 });

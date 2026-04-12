@@ -269,8 +269,9 @@ function _saveStories(arr) {
 // Seed mock stories for other users (shown once if localStorage is empty)
 function _seedStoriesIfEmpty() {
   try {
-    if (localStorage.getItem('_mock_stories_seeded')) return;
-    localStorage.setItem('_mock_stories_seeded', '1');
+    if (localStorage.getItem('_mock_stories_seeded') === '3') return;
+    localStorage.removeItem('_mock_stories');
+    localStorage.setItem('_mock_stories_seeded', '3');
     const now = Date.now();
     const seed = [
       {
@@ -296,6 +297,7 @@ function _seedStoriesIfEmpty() {
         user_avatar: 'https://i.pravatar.cc/300?u=nb1', user_display_name: 'Nova Beats',
         story_type: 'photo', text: null, media_url: 'https://picsum.photos/seed/story3/400/700',
         media_type: 'image', background_color: '#065F46', filter_id: 'none',
+        question_text: 'En sevdiğin müzik türü ne? 🎶',
         viewers: [], viewers_count: 7, is_viewed: false, is_expired: false,
         created_at: new Date(now - 1800000).toISOString(),
         expires_at: new Date(now + 22 * 3600000).toISOString(),
@@ -486,6 +488,12 @@ const api = {
           { city: 'New York', country: 'USA',     percentage: 12 },
         ],
       }));
+    }
+    // GET /social/following — DM paylaş için takip edilen kullanıcılar
+    if (url === '/social/following' || url.startsWith('/social/following?')) {
+      const followed = MOCK_DISCOVER_USERS.filter(u => _following.has(u.id));
+      const list = followed.length > 0 ? followed : MOCK_DISCOVER_USERS.slice(0, 8);
+      return delay(200).then(() => list);
     }
     // User search
     if (url.startsWith('/users/search')) {
@@ -842,7 +850,9 @@ const api = {
     // ── Stories GET ───────────────────────────────────────────────────────────
     // GET /stories/my
     if (url === '/stories/my') {
-      const mine = _getStories().filter(s => s.user_id === 'preview-1' && new Date(s.expires_at) > new Date());
+      const mine = _getStories()
+        .filter(s => s.user_id === 'preview-1' && new Date(s.expires_at) > new Date())
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       return delay(200).then(() => mine);
     }
     // GET /stories/feed
@@ -886,11 +896,31 @@ const api = {
     }
     // GET /stories/{id}/poll/results
     if (url.match(/^\/stories\/[^/]+\/poll\/results/)) {
-      return delay(200).then(() => ({ options: [] }));
+      const storyId = url.split('/')[2];
+      const story = _getStories().find(s => s.id === storyId);
+      const opts = (story?.poll_options || []).map(o =>
+        typeof o === 'string' ? { id: o, text: o, votes: 0 } : o
+      );
+      const total = opts.reduce((s, o) => s + (o.votes || 0), 0);
+      return delay(150).then(() => ({
+        options: opts.map(o => ({
+          id: o.id,
+          text: o.text,
+          votes: o.votes || 0,
+          percentage: total > 0 ? Math.round(((o.votes || 0) / total) * 100) : 0,
+        })),
+        total_votes: total,
+      }));
     }
     return delay().then(() => ({}));
   },
   post:   (url, data) => {
+    // Find or create 1-1 conversation: POST /messages/conversations
+    if (url === '/messages/conversations' && !data?.is_group) {
+      const otherId = (data?.participant_ids || [])[0] || 'unknown';
+      const convId = ['preview-1', otherId].sort().join('_conv_');
+      return delay(150).then(() => ({ id: convId, participants: ['preview-1', otherId], is_group: false }));
+    }
     // Send message: POST /messages (ChatScreen uses this endpoint)
     if (url === '/messages') {
       const convId = data?.conversation_id;
@@ -1005,6 +1035,19 @@ const api = {
         text_scale:     data?.text_scale     ?? null,
         text_align:     data?.text_align     ?? null,
         text_style_id:  data?.text_style_id  ?? null,
+        text_bg:        data?.text_bg        ?? null,
+        link_url:         data?.link_url         || null,
+        link_pos_x:       data?.link_pos_x       ?? null,
+        link_pos_y:       data?.link_pos_y       ?? null,
+        question_text:    data?.question_text    || null,
+        question_pos_x:   data?.question_pos_x   ?? null,
+        question_pos_y:   data?.question_pos_y   ?? null,
+        mention_username: data?.mention_username || null,
+        mention_scale:    data?.mention_scale    ?? 1,
+        mention_pos_x:    data?.mention_pos_x    ?? null,
+        mention_pos_y:    data?.mention_pos_y    ?? null,
+        poll_pos_x:       data?.poll_pos_x       ?? null,
+        poll_pos_y:       data?.poll_pos_y       ?? null,
         viewers: [], viewers_count: 0,
         is_viewed: true, is_expired: false,
         created_at: new Date().toISOString(),
@@ -1017,6 +1060,23 @@ const api = {
     // POST /stories/{id}/view
     if (url.match(/^\/stories\/[^/]+\/view$/)) {
       return delay(100).then(() => ({ status: 'ok' }));
+    }
+    // POST /stories/{id}/question veya /qa/answer — soru çıkartması cevabı
+    if (url.match(/^\/stories\/[^/]+\/(question|qa\/answer)$/)) {
+      const storyId = url.split('/')[2];
+      const stories = _getStories();
+      const story = stories.find(s => s.id === storyId);
+      if (story) {
+        if (!story.qa_answers) story.qa_answers = [];
+        story.qa_answers.push({
+          id: Date.now().toString(),
+          username: 'current_user',
+          answer: data?.answer,
+          created_at: new Date().toISOString(),
+        });
+        _saveStories(stories);
+      }
+      return delay(250).then(() => ({ status: 'ok', answer: data?.answer }));
     }
     // POST /stories/{id}/react  → DM + bildirim simülasyonu
     if (url.match(/^\/stories\/[^/]+\/react$/)) {
@@ -1040,6 +1100,23 @@ const api = {
     }
     // POST /stories/{id}/poll/vote
     if (url.match(/^\/stories\/[^/]+\/poll\/vote$/)) {
+      const storyId = url.split('/')[2];
+      const stories = _getStories();
+      const story = stories.find(s => s.id === storyId);
+      if (story?.poll_options) {
+        const optId  = data?.option_id;
+        const optIdx = data?.option_index;
+        const idx = optId != null
+          ? story.poll_options.findIndex(o => (typeof o === 'string' ? o : o.id) === optId)
+          : (optIdx ?? -1);
+        if (idx >= 0 && story.poll_options[idx]) {
+          const opt = story.poll_options[idx];
+          story.poll_options[idx] = typeof opt === 'string'
+            ? { id: opt, text: opt, votes: 1 }
+            : { ...opt, votes: (opt.votes || 0) + 1 };
+          _saveStories(stories);
+        }
+      }
       return delay(200).then(() => ({ status: 'ok' }));
     }
     // POST /stories/{id}/report

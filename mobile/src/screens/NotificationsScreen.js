@@ -327,13 +327,6 @@ export default function NotificationsScreen({ navigation }) {
 
   return (
     <View style={s.overlay}>
-      <LinearGradient
-        colors={['#1A0A2E', '#100620', '#08060F', '#08060F']}
-        locations={[0, 0.18, 0.32, 1]}
-        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      {/* Blurred dim area — only the visible portion above sheet is blurred */}
       <TouchableOpacity
         style={s.dimArea}
         onPress={() => navigation.goBack()}
@@ -342,6 +335,13 @@ export default function NotificationsScreen({ navigation }) {
 
       {/* Bottom sheet */}
       <View style={s.sheet}>
+        <LinearGradient
+          colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']}
+          locations={[0, 0.38, 0.68, 1]}
+          style={s.sheetGrad}
+          pointerEvents="none"
+        />
+        <View style={s.sheetHandle} />
         {/* Header */}
         <View style={[s.header, { borderBottomColor: colors.border }]}>
           <Text style={[s.title, { color: colors.text }]}>Bildirimler</Text>
@@ -391,7 +391,7 @@ const s = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(8,6,15,0.88)',
   },
   dimArea: {
     flex: 1,
@@ -399,19 +399,31 @@ const s = StyleSheet.create({
   },
   sheet: {
     maxHeight: SHEET_MAX_H,
-    backgroundColor: 'rgba(255,255,255,0.055)',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    overflow: 'hidden',
+    backgroundColor: '#08060F',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    borderTopWidth: 1,
+    borderColor: 'rgba(192,132,252,0.18)',
+  },
+  sheetGrad: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    height: 110,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+  },
+  sheetHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(192,132,252,0.30)',
+    alignSelf: 'center',
+    marginTop: 12, marginBottom: 8,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 12,
     paddingBottom: 14,
     borderBottomWidth: 1,
   },

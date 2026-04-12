@@ -491,11 +491,13 @@ export default function UserProfileScreen({ navigation, route }) {
 
               <TouchableOpacity style={s.msgBtn} onPress={() => {
                 navigation.navigate('Chat', {
-                  conversationId: null,
-                  recipientId: user.id,
-                  recipientUsername: user.username,
-                  recipientName: user.display_name || user.username,
-                  recipientAvatar: user.avatar_url,
+                  conversationId: `new_${user.id}`,
+                  otherUser: {
+                    id: user.id,
+                    username: user.username,
+                    display_name: user.display_name || user.username,
+                    avatar_url: user.avatar_url,
+                  },
                 });
               }}>
                 <Ionicons name="chatbubble-ellipses-outline" size={18} color="#C084FC" />

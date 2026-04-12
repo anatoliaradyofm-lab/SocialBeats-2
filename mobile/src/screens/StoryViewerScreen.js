@@ -23,7 +23,7 @@ import { useTranslation } from 'react-i18next';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, Dimensions,
   PanResponder, TextInput, ActivityIndicator, Animated, Platform,
-  I18nManager, Modal, FlatList, Share, Keyboard,
+  I18nManager, Modal, FlatList, Share, Keyboard, Linking,
 } from 'react-native';
 import { Video } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -98,42 +98,194 @@ function CountdownOverlay({ endTime, title }) {
 
 // ─── Anket Overlay ────────────────────────────────────────────────────────────
 
-function PollOverlay({ story, token, isOwn }) {
-  const [voted, setVoted]   = useState(null);
-  const [options, setOptions] = useState(story.poll_options || []);
+function PollOverlay({ story, token, isOwn, canvasSize }) {
+  const [voted,   setVoted]   = useState(null);
+  const normalizeOpt = (o, i) => {
+    if (typeof o === 'string') return { id: o || String(i), text: o, votes: 0 };
+    if (typeof o === 'number') return { id: String(i), text: String(o), votes: 0 };
+    return { id: o.id ?? String(i), text: o.text ?? o.label ?? o.name ?? '', votes: o.votes || 0 };
+  };
+  const [options, setOptions] = useState(
+    (story.poll_options || []).map(normalizeOpt)
+  );
 
-  const vote = async (optId, optIdx) => {
-    if (voted || !token || isOwn) return;
-    setVoted(optId ?? optIdx);
-    try {
-      await api.post(`/stories/${story.id}/poll/vote`, { option_id: optId, option_index: optIdx }, token);
-      const res = await api.get(`/stories/${story.id}/poll/results`, token);
-      if (res?.options) setOptions(res.options);
-    } catch {}
+  // Sahip her zaman sonuçları görür, diğerleri oy verdikten sonra
+  const showResults = !!voted || isOwn;
+
+  const vote = (optId, optIdx) => {
+    if (voted) return;
+    const key = optId ?? optIdx;
+    setVoted(key);
+    setOptions(prev => prev.map((o, i) =>
+      (o.id ?? i) === key ? { ...o, votes: (o.votes || 0) + 1 } : o
+    ));
+    if (isOwn || !token) return;
+    api.post(`/stories/${story.id}/poll/vote`, { option_id: optId, option_index: optIdx }, token).catch(() => {});
   };
 
+  const cw    = canvasSize?.width  || SW;
+  const ch    = canvasSize?.height || SH;
   const total = options.reduce((s, o) => s + (o.votes || 0), 0);
+
+  const posStyle = (story.poll_pos_x != null && story.poll_pos_y != null)
+    ? { left: story.poll_pos_x * cw, top: story.poll_pos_y * ch, maxWidth: cw - 24 }
+    : { bottom: 220, left: 16, right: 16 };
+
   return (
-    <View style={st.pollBox}>
+    <View style={[st.pollBox, posStyle]}>
+      {/* Başlık */}
+      <View style={st.pollHeader}>
+        <Ionicons name="bar-chart" size={13} color="#7C3AED" />
+        <Text style={st.pollLabel}>ANKET</Text>
+      </View>
+
+      {/* Soru */}
       <Text style={st.pollQ}>{story.poll_question}</Text>
+
+      {/* Seçenekler */}
       {options.map((opt, i) => {
-        const pct = total > 0 ? ((opt.votes || 0) / total) * 100 : 0;
-        const isVoted = voted === (opt.id ?? i);
+        const key     = opt.id ?? i;
+        const votes   = opt.votes || 0;
+        const pct     = total > 0 ? Math.round((votes / total) * 100) : 0;
+        const isVoted = voted === key;
+
         return (
-          <TouchableOpacity
-            key={opt.id ?? i}
-            style={[st.pollOpt, isVoted && st.pollOptVoted]}
-            onPress={() => vote(opt.id, i)}
-            disabled={!!voted || isOwn}
-            activeOpacity={0.8}
-          >
-            {voted && <View style={[st.pollOptBar, { width: `${pct}%` }]} />}
-            <Text style={st.pollOptText}>{opt.text}</Text>
-            {voted ? <Text style={st.pollOptPct}>{pct.toFixed(0)}%</Text> : null}
-          </TouchableOpacity>
+          <View key={key} style={[
+            st.pollOpt,
+            showResults && (isVoted ? st.pollOptSelected : st.pollOptDim),
+          ]}>
+            {/* Dolgu barı — width hesaplaması flex ile */}
+            {showResults && total > 0 && (
+              <View style={st.pollOptBarTrack}>
+                <View style={[st.pollOptBar, { flex: pct, backgroundColor: isVoted ? 'rgba(139,92,246,0.45)' : 'rgba(139,92,246,0.15)' }]} />
+                <View style={{ flex: 100 - pct }} />
+              </View>
+            )}
+
+            {/* İçerik satırı */}
+            <TouchableOpacity
+              style={st.pollOptRow}
+              onPress={() => vote(opt.id, i)}
+              disabled={!!voted}
+              activeOpacity={0.75}
+            >
+              {isVoted && (
+                <Ionicons name="checkmark-circle" size={15} color="#A78BFA" style={{ marginRight: 6 }} />
+              )}
+              <Text
+                style={[st.pollOptText, showResults && total > 0 && !isVoted && { color: 'rgba(255,255,255,0.5)' }]}
+                numberOfLines={1}
+              >
+                {opt.text}
+              </Text>
+              {showResults && (
+                <Text style={[st.pollOptPct, isVoted && { color: '#fff', fontWeight: '800' }]}>
+                  {pct}%
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
         );
       })}
+
+      {/* Toplam oy sayısı */}
+      {showResults && (
+        <Text style={st.pollOwnerHint}>{total} oy</Text>
+      )}
     </View>
+  );
+}
+
+// ─── Soru Overlay ────────────────────────────────────────────────────────────
+
+function QuestionOverlay({ story, token, isOwn, onFocus, onBlur, canvasSize }) {
+  const [answer,     setAnswer]     = useState('');
+  const [submitted,  setSubmitted]  = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitErr,  setSubmitErr]  = useState('');
+
+  const submit = async () => {
+    if (!answer.trim() || submitting) return;
+    setSubmitting(true);
+    setSubmitErr('');
+    try {
+      await api.post(`/stories/${story.id}/question`, { answer: answer.trim() }, token);
+      setSubmitted(true);
+      setAnswer('');
+    } catch (e) {
+      const msg = e?.data?.detail || e?.message || 'Gönderilemedi, tekrar dene';
+      setSubmitErr(msg);
+      console.error('[QuestionOverlay] submit error:', e?.status, msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const cw = canvasSize?.width  || SW;
+  const ch = canvasSize?.height || SH;
+  const posStyle = (story.question_pos_x != null && story.question_pos_y != null)
+    ? { left: story.question_pos_x * cw, top: story.question_pos_y * ch, right: undefined, bottom: undefined, maxWidth: cw - 32 }
+    : { bottom: 180, left: 20, right: 20 };
+
+  return (
+    <LinearGradient
+      colors={['#9333EA', '#C026D3', '#EC4899']}
+      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+      style={[st.questionBox, posStyle]}
+    >
+      {/* Üst etiket */}
+      <View style={st.questionHeader}>
+        <Text style={st.questionHeaderEmoji}>❓</Text>
+        <Text style={st.questionHeaderLabel}>SORU</Text>
+      </View>
+
+      {/* Soru metni */}
+      <Text style={st.questionQ} selectable={false}>{story.question_text}</Text>
+
+      {/* Cevap alanı */}
+      {isOwn ? (
+        <View style={st.questionOwnerHint}>
+          <Ionicons name="chatbubble-outline" size={13} color="rgba(255,255,255,0.75)" />
+          <Text style={st.questionOwnerTx}>Cevaplar mesajlarda görünür</Text>
+        </View>
+      ) : submitted ? (
+        <View style={st.questionDone}>
+          <Ionicons name="checkmark-circle" size={18} color="#fff" />
+          <Text style={st.questionDoneTx}>Cevabın gönderildi!</Text>
+        </View>
+      ) : (
+        <>
+          <View style={st.questionInputRow}>
+            <TextInput
+              style={st.questionInput}
+              placeholder="Cevabını yaz..."
+              placeholderTextColor="rgba(120,60,160,0.55)"
+              value={answer}
+              onChangeText={(t) => { setAnswer(t); if (submitErr) setSubmitErr(''); }}
+              returnKeyType="send"
+              onSubmitEditing={submit}
+              onFocus={onFocus}
+              onBlur={onBlur}
+              editable={!submitting}
+              maxLength={200}
+            />
+            <TouchableOpacity
+              style={[st.questionSendBtn, !answer.trim() && { opacity: 0.45 }]}
+              onPress={submit}
+              disabled={!answer.trim() || submitting}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              {submitting
+                ? <ActivityIndicator size="small" color="#9333EA" />
+                : <Ionicons name="arrow-forward" size={18} color="#9333EA" />}
+            </TouchableOpacity>
+          </View>
+          {!!submitErr && (
+            <Text style={st.questionErrTx}>{submitErr}</Text>
+          )}
+        </>
+      )}
+    </LinearGradient>
   );
 }
 
@@ -165,10 +317,18 @@ export default function StoryViewerScreen({ route, navigation }) {
   const [deleting,      setDeleting]      = useState(false);
   const [viewerCount,   setViewerCount]   = useState(0);
   const [mediaLoadError, setMediaLoadError] = useState(false);
+  const [liked,         setLiked]         = useState(false);
+  const [showDMShare,   setShowDMShare]   = useState(false);
+  const [dmQuery,       setDMQuery]       = useState('');
+  const [dmUsers,       setDMUsers]       = useState([]);
+  const [dmLoading,     setDMLoading]     = useState(false);
+  const [sentDMUsers,   setSentDMUsers]   = useState(new Set());
+  const dmInputRef = useRef(null);
 
   // ── Animasyonlar & ref'ler ──
   const slideAnim    = useRef(new Animated.Value(0)).current;
   const reactionAnim = useRef(new Animated.Value(0)).current;
+  const likeAnim     = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;  // smooth progress
   const progressAni  = useRef(null);   // Animated.timing ref
   const seenCount    = useRef(0);
@@ -209,8 +369,15 @@ export default function StoryViewerScreen({ route, navigation }) {
   useEffect(() => { isOwnRef.current = isOwn; });
   useEffect(() => { openViewersRef.current = openViewers; }, [openViewers]);
 
-  // ── Medya yükleme hatası sıfırla (hikaye değişince) ──
-  useEffect(() => { setMediaLoadError(false); }, [story?.id]);
+  // ── Medya yükleme hatası sıfırla + beğeni durumunu yükle (hikaye değişince) ──
+  useEffect(() => {
+    setMediaLoadError(false);
+    setLiked(false);
+    if (!story?.id || !token || isOwn) return;
+    api.get(`/stories/${story.id}/reactions`, token)
+      .then(res => { if (res?.user_liked) setLiked(true); })
+      .catch(() => {});
+  }, [story?.id]);
 
   // ── Sonraki hikayenin görselini önceden yükle (hızlı geçiş) ──
   useEffect(() => {
@@ -448,6 +615,26 @@ export default function StoryViewerScreen({ route, navigation }) {
     try { await api.post(`/stories/${story.id}/react`, { reaction: type }, token); } catch {}
   }, [story?.id, token]);
 
+  // ── Beğen / Beğeniyi geri al ──
+  const likeStory = useCallback(async () => {
+    if (!story?.id || !token) return;
+    const newLiked = !liked;
+    setLiked(newLiked);
+    Animated.sequence([
+      Animated.spring(likeAnim, { toValue: 1.4, useNativeDriver: true, friction: 3, tension: 140 }),
+      Animated.spring(likeAnim, { toValue: 1,   useNativeDriver: true, friction: 4 }),
+    ]).start();
+    try {
+      if (newLiked) {
+        await api.post(`/stories/${story.id}/react`, { reaction: '❤️' }, token);
+      } else {
+        await api.delete(`/stories/${story.id}/reaction`, token);
+      }
+    } catch {
+      setLiked(liked); // hata olursa geri al
+    }
+  }, [story?.id, token, liked]);
+
   // ── Yanıt gönder ──
   const sendReply = async () => {
     if (!replyText.trim() || !story?.id || !token) return;
@@ -458,6 +645,62 @@ export default function StoryViewerScreen({ route, navigation }) {
       setReplyFocused(false);
     } catch {}
     setSendingReply(false);
+  };
+
+  // ── DM paylaş ──
+  const openDMShare = () => {
+    setShowOptions(false);
+    setPaused(true);
+    setDMQuery('');
+    setSentDMUsers(new Set());
+    setShowDMShare(true);
+    setDMLoading(true);
+    api.get('/social/following', token)
+      .then(res => {
+        const list = Array.isArray(res) ? res : (res?.results || res?.users || []);
+        setDMUsers(list.slice(0, 30));
+      })
+      .catch(() => {})
+      .finally(() => setDMLoading(false));
+  };
+
+  const searchDMUsers = useCallback(async (q) => {
+    if (!q.trim()) {
+      setDMLoading(true);
+      try {
+        const res = await api.get('/social/following', token);
+        const list = Array.isArray(res) ? res : (res?.results || res?.users || []);
+        setDMUsers(list.slice(0, 30));
+      } catch {}
+      setDMLoading(false);
+      return;
+    }
+    setDMLoading(true);
+    try {
+      const res = await api.get(`/users/search?q=${encodeURIComponent(q.trim())}`, token);
+      const list = Array.isArray(res) ? res : (res?.results || res?.users || []);
+      setDMUsers(list.slice(0, 20));
+    } catch {}
+    setDMLoading(false);
+  }, [token]);
+
+  const sendViaDM = async (targetUser) => {
+    if (sentDMUsers.has(targetUser.id || targetUser.username)) return;
+    const storyLink = `${userGroup?.user_display_name || userGroup?.username} kişisinin hikayesini gör 👀`;
+    try {
+      // 1) Konuşmayı bul veya oluştur
+      const conv = await api.post('/messages/conversations', {
+        participant_ids: [targetUser.id],
+        is_group: false,
+      }, token);
+      // 2) Mesajı gönder
+      await api.post('/messages', {
+        conversation_id: conv.id,
+        content: storyLink,
+        content_type: 'TEXT',
+      }, token);
+      setSentDMUsers(prev => new Set([...prev, targetUser.id || targetUser.username]));
+    } catch {}
   };
 
   // ── Paylaş (harici) ──
@@ -525,6 +768,7 @@ export default function StoryViewerScreen({ route, navigation }) {
     <Animated.View
       style={[st.container, { transform: [{ translateY: slideAnim }] }]}
       onLayout={(e) => { const l = e.nativeEvent.layout; setViewerCanvas({ width: l.width, height: l.height }); }}
+      {...panResponder.panHandlers}
     >
       {/* ── Arka plan ── */}
       {mediaUrl && !mediaLoadError && !(Platform.OS === 'web' && typeof mediaUrl === 'string' && mediaUrl.startsWith('blob:')) ? (
@@ -558,11 +802,8 @@ export default function StoryViewerScreen({ route, navigation }) {
             const hasPosData = story.text_pos_x != null && story.text_pos_y != null;
             const cw = viewerCanvas.width  || 390;
             const ch = viewerCanvas.height || 844;
-            const tsId = story.text_style_id || 'normal';
-            const bgMap = { normal: 'transparent', white: '#fff', black: '#000' };
-            const colorMap = { normal: '#fff', white: '#111', black: '#fff' };
-            const tbg = bgMap[tsId] ?? 'transparent';
-            const color = colorMap[tsId] ?? '#fff';
+            const tbg   = story.text_bg || 'transparent';
+            const color = tbg === '#fff' ? '#111' : '#fff';
             const scale = story.text_scale || 1;
             const align = story.text_align || 'center';
             const l0 = story.text.length;
@@ -600,11 +841,7 @@ export default function StoryViewerScreen({ route, navigation }) {
         pointerEvents="none"
       />
 
-      {/* ── Dokunma alanı (hold-to-pause + swipe-down) ── */}
-      <View
-        style={st.touchZone}
-        {...panResponder.panHandlers}
-      />
+      {/* ── Swipe alanı — panHandlers root view'de, bu katman kaldırıldı ── */}
 
       {/* ── Orta tap zone — hold-to-pause (%30) ── */}
       <TouchableOpacity
@@ -707,6 +944,7 @@ export default function StoryViewerScreen({ route, navigation }) {
 
         {/* Sağ kontroller */}
         <View style={st.headerRight}>
+          {/* Seçenekler */}
           <TouchableOpacity style={st.headerBtn} onPress={() => { setPaused(true); setShowOptions(true); }}>
             <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
           </TouchableOpacity>
@@ -725,16 +963,49 @@ export default function StoryViewerScreen({ route, navigation }) {
           <Text style={st.stickerText} selectable={false}>{story.location_name}</Text>
         </View>
       )}
-      {story.mention_username && (
-        <View style={st.stickerCenter}>
-          <Text style={st.stickerText} selectable={false}>@{story.mention_username}</Text>
-        </View>
-      )}
+      {story.mention_username && (() => {
+        const mScale = story.mention_scale || 1;
+        const mFs = Math.round(20 * mScale);
+        return (
+          <TouchableOpacity
+            style={[
+              st.stickerMention,
+              story.mention_pos_x != null && story.mention_pos_y != null
+                ? { left: story.mention_pos_x * viewerCanvas.width, top: story.mention_pos_y * viewerCanvas.height }
+                : { alignSelf: 'center', top: viewerCanvas.height * 0.18 },
+            ]}
+            onPress={() => navigation.navigate('UserProfile', { username: story.mention_username })}
+            activeOpacity={0.85}
+          >
+            <View style={st.mentionStickerPill}>
+              <Text style={[st.mentionStickerText, { fontSize: mFs }]}>
+                <Text style={[st.mentionStickerAtSign, { fontSize: mFs }]}>@</Text>{story.mention_username}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        );
+      })()}
       {story.link_url && (
-        <View style={st.stickerLink}>
-          <Ionicons name="link" size={13} color="#fff" />
-          <Text style={st.stickerText} numberOfLines={1} selectable={false}>{story.link_url}</Text>
-        </View>
+        <TouchableOpacity
+          style={[
+            st.stickerLinkNew,
+            story.link_pos_x != null && story.link_pos_y != null
+              ? { left: story.link_pos_x * viewerCanvas.width, top: story.link_pos_y * viewerCanvas.height }
+              : { alignSelf: 'center', bottom: 160 },
+          ]}
+          onPress={() => {
+            const url = story.link_url.startsWith('http') ? story.link_url : `https://${story.link_url}`;
+            Linking.openURL(url).catch(() => {});
+          }}
+          activeOpacity={0.88}
+        >
+          <View style={st.linkStickerIconBox}>
+            <Ionicons name="link" size={15} color="#7C3AED" />
+          </View>
+          <Text style={st.linkStickerTxt} numberOfLines={1} selectable={false}>
+            {story.link_url.replace(/^https?:\/\/(www\.)?/, '')}
+          </Text>
+        </TouchableOpacity>
       )}
       {story.music_track_id && (
         <View style={st.musicBar}>
@@ -749,7 +1020,17 @@ export default function StoryViewerScreen({ route, navigation }) {
         <CountdownOverlay endTime={story.countdown_end} title={story.countdown_title} />
       )}
       {story.poll_question && story.poll_options?.length > 0 && (
-        <PollOverlay story={story} token={token} isOwn={isOwn} />
+        <PollOverlay story={story} token={token} isOwn={isOwn} canvasSize={viewerCanvas} />
+      )}
+      {story.question_text && (
+        <QuestionOverlay
+          story={story}
+          token={token}
+          isOwn={isOwn}
+          onFocus={() => setPaused(true)}
+          onBlur={() => setPaused(false)}
+          canvasSize={viewerCanvas}
+        />
       )}
 
       {/* ── Metin overlay (media + text birlikte) ── */}
@@ -757,11 +1038,8 @@ export default function StoryViewerScreen({ route, navigation }) {
         const hasPosData = story.text_pos_x != null && story.text_pos_y != null;
         const cw = viewerCanvas.width  || 390;
         const ch = viewerCanvas.height || 844;
-        const ts = (story.text_style_id || 'normal');
-        const bgMap = { normal: 'transparent', white: '#fff', black: '#000' };
-        const colorMap = { normal: '#fff', white: '#111', black: '#fff' };
-        const bg = bgMap[ts] ?? 'transparent';
-        const color = colorMap[ts] ?? '#fff';
+        const bg    = story.text_bg || 'transparent';
+        const color = bg === '#fff' ? '#111' : '#fff';
         const scale = story.text_scale || 1;
         const align = story.text_align || 'center';
         const l1 = story.text.length;
@@ -832,39 +1110,52 @@ export default function StoryViewerScreen({ route, navigation }) {
             )}
 
             {/* Yanıt satırı */}
-            <TouchableOpacity
-              style={st.replyRow}
-              activeOpacity={1}
-              onPress={() => {
-                replyInputRef.current?.focus();
-                setReplyFocused(true);
-              }}
-            >
-              <TextInput
-                ref={replyInputRef}
-                style={st.replyInput}
-                placeholder={`${userGroup?.user_display_name || userGroup?.username} kişisine yanıt ver...`}
-                placeholderTextColor="rgba(255,255,255,0.5)"
-                value={replyText}
-                onChangeText={setReplyText}
-                onFocus={() => { setReplyFocused(true); setPaused(true); }}
-                onBlur={() => { setReplyFocused(false); setPaused(false); }}
-                onSubmitEditing={sendReply}
-                returnKeyType="send"
-                selectionColor="rgba(255,255,255,0.7)"
-              />
-              {replyText.trim() ? (
-                <TouchableOpacity
-                  style={st.sendBtn}
-                  onPress={sendReply}
-                  disabled={sendingReply}
-                >
-                  {sendingReply
-                    ? <ActivityIndicator size="small" color="#fff" />
-                    : <Ionicons name="send" size={20} color="#fff" />}
-                </TouchableOpacity>
-              ) : null}
-            </TouchableOpacity>
+            <View style={st.replyArea}>
+              <TouchableOpacity
+                style={st.replyRow}
+                activeOpacity={1}
+                onPress={() => {
+                  replyInputRef.current?.focus();
+                  setReplyFocused(true);
+                }}
+              >
+                <TextInput
+                  ref={replyInputRef}
+                  style={st.replyInput}
+                  placeholder={`${userGroup?.user_display_name || userGroup?.username} kişisine yanıt ver...`}
+                  placeholderTextColor="rgba(255,255,255,0.5)"
+                  value={replyText}
+                  onChangeText={setReplyText}
+                  onFocus={() => { setReplyFocused(true); setPaused(true); }}
+                  onBlur={() => { setReplyFocused(false); setPaused(false); }}
+                  onSubmitEditing={sendReply}
+                  returnKeyType="send"
+                  selectionColor="rgba(255,255,255,0.7)"
+                />
+                {replyText.trim() ? (
+                  <TouchableOpacity
+                    style={st.sendBtn}
+                    onPress={sendReply}
+                    disabled={sendingReply}
+                  >
+                    {sendingReply
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Ionicons name="send" size={20} color="#fff" />}
+                  </TouchableOpacity>
+                ) : null}
+              </TouchableOpacity>
+
+              {/* Beğen butonu */}
+              <TouchableOpacity style={st.likeBtn} onPress={likeStory} activeOpacity={0.75}>
+                <Animated.View style={{ transform: [{ scale: likeAnim }] }}>
+                  <Ionicons
+                    name={liked ? 'heart' : 'heart-outline'}
+                    size={28}
+                    color={liked ? '#F87171' : 'rgba(255,255,255,0.85)'}
+                  />
+                </Animated.View>
+              </TouchableOpacity>
+            </View>
           </>
         )}
       </View>
@@ -889,9 +1180,13 @@ export default function StoryViewerScreen({ route, navigation }) {
                 </TouchableOpacity>
               ) : (
                 <>
+                  <TouchableOpacity style={st.optRow} onPress={openDMShare}>
+                    <Ionicons name="paper-plane-outline" size={22} color="#fff" />
+                    <Text style={st.optText}>DM'de Paylaş</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={st.optRow} onPress={shareStory}>
                     <Ionicons name="share-outline" size={22} color="#fff" />
-                    <Text style={st.optText}>Paylaş</Text>
+                    <Text style={st.optText}>Dışarıda Paylaş</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={st.optRow} onPress={reportStory}>
                     <Ionicons name="flag-outline" size={22} color="#EF4444" />
@@ -982,6 +1277,99 @@ export default function StoryViewerScreen({ route, navigation }) {
           </TouchableOpacity>
         </TouchableOpacity>
       )}
+      {/* ── DM Paylaş Paneli ── */}
+      {showDMShare && (
+        <TouchableOpacity
+          style={[StyleSheet.absoluteFill, { zIndex: 50, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' }]}
+          activeOpacity={1}
+          onPress={() => { setShowDMShare(false); setPaused(false); Keyboard.dismiss(); }}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ alignSelf: 'stretch' }}>
+            <View style={[st.viewersPanel, { paddingBottom: insets.bottom + 12 }]}>
+              <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={st.topGrad} pointerEvents="none" />
+              <View style={st.optHandleBar} />
+
+              {/* Başlık */}
+              <View style={[st.viewersHeader, { marginBottom: 12 }]}>
+                <View style={st.viewersHeaderLeft}>
+                  <Ionicons name="paper-plane" size={17} color="#C084FC" />
+                  <Text style={st.viewersPanelTitle}>DM'de Paylaş</Text>
+                </View>
+                <TouchableOpacity onPress={() => { setShowDMShare(false); setPaused(false); }}>
+                  <Ionicons name="close" size={22} color="rgba(255,255,255,0.5)" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Arama */}
+              <View style={st.dmSearchRow}>
+                <Ionicons name="search" size={16} color="rgba(255,255,255,0.4)" />
+                <TextInput
+                  ref={dmInputRef}
+                  style={st.dmSearchInput}
+                  placeholder="Kullanıcı ara..."
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  value={dmQuery}
+                  onChangeText={q => { setDMQuery(q); searchDMUsers(q); }}
+                  autoCapitalize="none"
+                  returnKeyType="search"
+                />
+                {dmQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => { setDMQuery(''); searchDMUsers(''); }}>
+                    <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.4)" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Kullanıcı listesi */}
+              {dmLoading ? (
+                <View style={{ paddingVertical: 30, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#C084FC" />
+                </View>
+              ) : dmUsers.length === 0 ? (
+                <View style={{ paddingVertical: 30, alignItems: 'center', gap: 8 }}>
+                  <Ionicons name="person-outline" size={32} color="rgba(255,255,255,0.2)" />
+                  <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
+                    {dmQuery ? 'Kullanıcı bulunamadı' : 'Takip ettiğin kullanıcı yok'}
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={dmUsers}
+                  keyExtractor={(item, i) => String(item.id || item.username || i)}
+                  style={{ maxHeight: SH * 0.38 }}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  renderItem={({ item }) => {
+                    const isSent = sentDMUsers.has(item.id || item.username);
+                    return (
+                      <View style={st.dmUserRow}>
+                        <Image
+                          source={{ uri: item.avatar_url || `https://i.pravatar.cc/60?u=${item.username}` }}
+                          style={st.dmUserAvatar}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={st.dmUserName} numberOfLines={1}>{item.display_name || item.name || item.username}</Text>
+                          <Text style={st.dmUserSub} numberOfLines={1}>@{item.username}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={[st.dmSendBtn, isSent && st.dmSentBtn]}
+                          onPress={() => sendViaDM(item)}
+                          disabled={isSent}
+                        >
+                          {isSent
+                            ? <Ionicons name="checkmark" size={16} color="#C084FC" />
+                            : <Text style={st.dmSendTx}>Gönder</Text>}
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }}
+                />
+              )}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      )}
+
     </Animated.View>
   );
 }
@@ -1182,6 +1570,65 @@ const st = StyleSheet.create({
     borderRadius:   20,
     zIndex:         5,
   },
+  // ── Yeni link sticker (Instagram tarzı beyaz hap) ──
+  stickerLinkNew: {
+    position:        'absolute',
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             7,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 12,
+    paddingVertical:  7,
+    borderRadius:    22,
+    zIndex:          5,
+    maxWidth:        SW * 0.65,
+    shadowColor:     '#000',
+    shadowOpacity:   0.18,
+    shadowRadius:    8,
+    shadowOffset:    { width: 0, height: 2 },
+    elevation:       4,
+  },
+  linkStickerIconBox: {
+    width:           24,
+    height:          24,
+    borderRadius:    12,
+    backgroundColor: 'rgba(124,58,237,0.12)',
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  linkStickerTxt: {
+    color:       '#111',
+    fontSize:    13,
+    fontWeight:  '700',
+    flexShrink:  1,
+  },
+  // ── Mention sticker (dark glassmorphism pill) ──
+  stickerMention: {
+    position: 'absolute',
+    zIndex:   5,
+  },
+  mentionStickerPill: {
+    backgroundColor:   'rgba(12,5,28,0.88)',
+    borderRadius:      30,
+    paddingHorizontal: 18,
+    paddingVertical:   10,
+    borderWidth:       1,
+    borderColor:       'rgba(139,92,246,0.45)',
+    shadowColor:       '#7C3AED',
+    shadowOpacity:     0.28,
+    shadowRadius:      12,
+    shadowOffset:      { width: 0, height: 3 },
+    elevation:         6,
+  },
+  mentionStickerText: {
+    color:      '#fff',
+    fontWeight: '700',
+    flexShrink: 1,
+  },
+  mentionStickerAtSign: {
+    color:      '#C084FC',
+    fontWeight: '900',
+  },
   stickerText: {
     color:      '#fff',
     fontSize:   13,
@@ -1301,11 +1748,27 @@ const st = StyleSheet.create({
     bottom:    90,
     zIndex:    30,
   },
-  replyRow: {
+  replyArea: {
     flexDirection:  'row',
     alignItems:     'center',
     paddingHorizontal: 14,
+    gap:            10,
+  },
+  replyRow: {
+    flex:           1,
+    flexDirection:  'row',
+    alignItems:     'center',
     gap:            8,
+  },
+  likeBtn: {
+    width:          48,
+    height:         48,
+    borderRadius:   24,
+    alignItems:     'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth:    1,
+    borderColor:    'rgba(255,255,255,0.15)',
   },
   replyInput: {
     flex:               1,
@@ -1512,58 +1975,255 @@ const st = StyleSheet.create({
 
   // Anket
   pollBox: {
-    position:       'absolute',
-    bottom:         220,
-    left:           20,
-    right:          20,
-    backgroundColor:'rgba(255,255,255,0.08)',
-    borderWidth:    1,
-    borderColor:    'rgba(255,255,255,0.15)',
-    borderRadius:   24,
-    padding:        20,
-    zIndex:         5,
+    position:          'absolute',
+    backgroundColor:   'rgba(12,5,28,0.88)',
+    borderRadius:      22,
+    paddingHorizontal: 16,
+    paddingTop:        14,
+    paddingBottom:     16,
+    zIndex:            5,
+    minWidth:          280,
+    borderWidth:       1,
+    borderColor:       'rgba(139,92,246,0.35)',
+    shadowColor:       '#7C3AED',
+    shadowOpacity:     0.25,
+    shadowRadius:      16,
+    shadowOffset:      { width: 0, height: 4 },
+    elevation:         8,
+  },
+  pollHeader: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    gap:            6,
+    marginBottom:   10,
+  },
+  pollLabel: {
+    color:         '#C084FC',
+    fontSize:      11,
+    fontWeight:    '800',
+    letterSpacing: 1.4,
   },
   pollQ: {
-    color:      '#fff',
-    fontSize:   17,
-    fontWeight: '800',
-    marginBottom: 14,
-    letterSpacing: -0.3,
+    color:         '#F0EEFF',
+    fontSize:      16,
+    fontWeight:    '800',
+    marginBottom:  12,
+    letterSpacing: -0.2,
+    lineHeight:    22,
   },
   pollOpt: {
-    marginBottom:   8,
-    height:         48,
-    borderRadius:   14,
-    overflow:       'hidden',
-    backgroundColor:'rgba(255,255,255,0.12)',
-    justifyContent: 'center',
+    borderRadius:    12,
+    overflow:        'hidden',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth:     1,
+    borderColor:     'rgba(255,255,255,0.14)',
+    marginBottom:    7,
   },
-  pollOptVoted: {
-    borderWidth: 1,
-    borderColor: '#A78BFA',
+  pollOptSelected: {
+    backgroundColor: 'rgba(139,92,246,0.22)',
+    borderColor:     '#8B5CF6',
+  },
+  pollOptDim: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderColor:     'rgba(255,255,255,0.07)',
+  },
+  pollOptBarTrack: {
+    position:      'absolute',
+    left: 0, right: 0, top: 0, bottom: 0,
+    flexDirection: 'row',
   },
   pollOptBar: {
-    position: 'absolute',
-    left:     0,
-    top:      0,
-    bottom:   0,
-    backgroundColor: 'rgba(124,58,237,0.45)',
+    // flex dinamik verilir
+  },
+  pollOptRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingHorizontal: 14,
+    paddingVertical:   11,
   },
   pollOptText: {
-    position:   'absolute',
-    left:       16,
-    right:      50,
+    flex:       1,
     color:      '#fff',
-    fontSize:   15,
+    fontSize:   14,
     fontWeight: '600',
-    lineHeight: 48,
   },
   pollOptPct: {
-    position:   'absolute',
-    right:      12,
-    color:      'rgba(255,255,255,0.8)',
+    color:      '#fff',
     fontSize:   13,
     fontWeight: '700',
-    lineHeight: 48,
+    marginLeft: 8,
+    minWidth:   36,
+    textAlign:  'right',
+  },
+  pollOwnerHint: {
+    color:      '#fff',
+    fontSize:   11,
+    fontWeight: '600',
+    textAlign:  'center',
+    marginTop:  4,
+  },
+
+  // ── Soru çıkartması (Instagram stili) ──
+  questionBox: {
+    position:     'absolute',
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop:   12,
+    paddingBottom: 14,
+    zIndex:       6,
+  },
+  questionHeader: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    gap:            5,
+    marginBottom:   10,
+  },
+  questionHeaderEmoji: {
+    fontSize: 14,
+  },
+  questionHeaderLabel: {
+    color:         'rgba(255,255,255,0.82)',
+    fontSize:      11,
+    fontWeight:    '800',
+    letterSpacing: 1.4,
+  },
+  questionQ: {
+    color:        '#fff',
+    fontSize:     17,
+    fontWeight:   '800',
+    textAlign:    'center',
+    marginBottom: 14,
+    letterSpacing: -0.2,
+  },
+  questionInputRow: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius:    30,
+    paddingLeft:     16,
+    paddingRight:    4,
+    paddingVertical: 4,
+    minHeight:       48,
+    gap:             6,
+  },
+  questionInput: {
+    flex:       1,
+    color:      '#1a0030',
+    fontSize:   14,
+    fontWeight: '500',
+    paddingVertical: 8,
+    minHeight:  36,
+  },
+  questionSendBtn: {
+    width:           36,
+    height:          36,
+    borderRadius:    18,
+    backgroundColor: '#fff',
+    alignItems:      'center',
+    justifyContent:  'center',
+    shadowColor:     '#9333EA',
+    shadowOpacity:   0.3,
+    shadowRadius:    4,
+    shadowOffset:    { width: 0, height: 2 },
+    elevation:       3,
+  },
+  questionErrTx: {
+    color:      'rgba(255,220,220,0.95)',
+    fontSize:   12,
+    fontWeight: '600',
+    textAlign:  'center',
+    marginTop:  6,
+  },
+  questionDone: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:            6,
+    paddingVertical: 4,
+  },
+  questionDoneTx: {
+    color:      '#fff',
+    fontSize:   14,
+    fontWeight: '700',
+  },
+  questionOwnerHint: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:            5,
+    paddingVertical: 4,
+  },
+  questionOwnerTx: {
+    color:    'rgba(255,255,255,0.75)',
+    fontSize: 13,
+  },
+
+  // ── DM paylaş ──
+  dmShareBtn: {
+    width:           40,
+    height:          40,
+    borderRadius:    20,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems:      'center',
+    justifyContent:  'center',
+    marginRight:     4,
+  },
+  dmSearchRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               8,
+    backgroundColor:   'rgba(255,255,255,0.07)',
+    borderRadius:      16,
+    paddingHorizontal: 12,
+    paddingVertical:   9,
+    marginBottom:      12,
+    borderWidth:       1,
+    borderColor:       'rgba(255,255,255,0.08)',
+  },
+  dmSearchInput: {
+    flex:     1,
+    color:    '#fff',
+    fontSize: 14,
+    padding:  0,
+  },
+  dmUserRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    gap:            12,
+    paddingVertical: 10,
+  },
+  dmUserAvatar: {
+    width:        44,
+    height:       44,
+    borderRadius: 22,
+    backgroundColor: '#2D1F4E',
+  },
+  dmUserName: {
+    color:      '#F8F8F8',
+    fontSize:   14,
+    fontWeight: '600',
+  },
+  dmUserSub: {
+    color:    'rgba(255,255,255,0.45)',
+    fontSize: 12,
+    marginTop: 1,
+  },
+  dmSendBtn: {
+    paddingHorizontal: 16,
+    paddingVertical:   7,
+    borderRadius:      20,
+    backgroundColor:   '#8B5CF6',
+    alignItems:        'center',
+    justifyContent:    'center',
+  },
+  dmSentBtn: {
+    backgroundColor: 'rgba(192,132,252,0.12)',
+    borderWidth:     1,
+    borderColor:     'rgba(192,132,252,0.3)',
+  },
+  dmSendTx: {
+    color:      '#fff',
+    fontSize:   13,
+    fontWeight: '700',
   },
 });

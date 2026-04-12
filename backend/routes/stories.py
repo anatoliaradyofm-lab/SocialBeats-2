@@ -44,6 +44,33 @@ class StoryCreate(BaseModel):
     hide_from: Optional[List[str]] = None
     reply_restriction: str = "everyone"
     qa_question: Optional[str] = None
+    # Mobil uygulama alan adları (qa_question ile aynı anlam)
+    question_text: Optional[str] = None
+    question_pos_x: Optional[float] = None
+    question_pos_y: Optional[float] = None
+    # Link sticker
+    link_url: Optional[str] = None
+    link_pos_x: Optional[float] = None
+    link_pos_y: Optional[float] = None
+    # Mention sticker
+    mention_username: Optional[str] = None
+    mention_scale: Optional[float] = None
+    mention_pos_x: Optional[float] = None
+    mention_pos_y: Optional[float] = None
+    # Poll sticker positions
+    poll_pos_x: Optional[float] = None
+    poll_pos_y: Optional[float] = None
+    # Text overlay
+    text_pos_x: Optional[float] = None
+    text_pos_y: Optional[float] = None
+    text_scale: Optional[float] = None
+    text_align: Optional[str] = None
+    text_style_id: Optional[str] = None
+    text_bg: Optional[str] = None
+    # Photo transform
+    photo_scale: Optional[float] = None
+    photo_offset_x: Optional[float] = None
+    photo_offset_y: Optional[float] = None
     countdown_title: Optional[str] = None
     countdown_end: Optional[str] = None
 
@@ -188,8 +215,8 @@ async def create_story(story_data: StoryCreate, current_user: dict = Depends(get
         "created_at": now.isoformat(),
         "expires_at": expires_at.isoformat(),
         "poll_question": story_data.poll_question,
-        "poll_options": [{"id": str(uuid.uuid4()), "text": opt, "votes": 0, "voters": []} 
-                        for opt in (story_data.poll_options or [])] if story_data.story_type == "poll" else None,
+        "poll_options": [{"id": str(uuid.uuid4()), "text": opt, "votes": 0, "voters": []}
+                        for opt in (story_data.poll_options or [])] if story_data.poll_question else None,
         "swipe_up_url": story_data.swipe_up_url,
         "swipe_up_title": story_data.swipe_up_title,
         "music_track_id": story_data.music_track_id,
@@ -202,8 +229,35 @@ async def create_story(story_data: StoryCreate, current_user: dict = Depends(get
         "close_friends_only": story_data.close_friends_only,
         "hide_from": story_data.hide_from or [],
         "reply_restriction": story_data.reply_restriction or "everyone",
-        "qa_question": story_data.qa_question,
+        # Soru sticker (qa_question veya question_text)
+        "qa_question": story_data.qa_question or story_data.question_text,
+        "question_text": story_data.question_text or story_data.qa_question,
+        "question_pos_x": story_data.question_pos_x,
+        "question_pos_y": story_data.question_pos_y,
         "qa_answers": [],
+        # Link sticker
+        "link_url": story_data.link_url,
+        "link_pos_x": story_data.link_pos_x,
+        "link_pos_y": story_data.link_pos_y,
+        # Mention sticker
+        "mention_username": story_data.mention_username,
+        "mention_scale": story_data.mention_scale or 1.0,
+        "mention_pos_x": story_data.mention_pos_x,
+        "mention_pos_y": story_data.mention_pos_y,
+        # Poll sticker positions
+        "poll_pos_x": story_data.poll_pos_x,
+        "poll_pos_y": story_data.poll_pos_y,
+        # Text overlay
+        "text_pos_x": story_data.text_pos_x,
+        "text_pos_y": story_data.text_pos_y,
+        "text_scale": story_data.text_scale,
+        "text_align": story_data.text_align,
+        "text_style_id": story_data.text_style_id,
+        "text_bg": story_data.text_bg,
+        # Photo transform
+        "photo_scale": story_data.photo_scale,
+        "photo_offset_x": story_data.photo_offset_x,
+        "photo_offset_y": story_data.photo_offset_y,
         "countdown_title": story_data.countdown_title,
         "countdown_end": story_data.countdown_end,
     }
@@ -662,10 +716,16 @@ async def get_story_reactions(story_id: str, current_user: dict = Depends(get_cu
         emoji = r.get("reaction", "❤️")
         reaction_counts[emoji] = reaction_counts.get(emoji, 0) + 1
     
+    user_reaction = next(
+        (r.get("reaction") for r in reactions if r.get("user_id") == current_user["id"]),
+        None
+    )
     return {
         "reactions": reactions,
         "counts": reaction_counts,
-        "total": len(reactions)
+        "total": len(reactions),
+        "user_reaction": user_reaction,
+        "user_liked": user_reaction == "❤️",
     }
 
 @router.delete("/{story_id}/reaction")
@@ -745,8 +805,8 @@ async def get_poll_results(story_id: str, current_user: dict = Depends(get_curre
     if not story:
         raise HTTPException(status_code=404, detail="Hikaye bulunamadı")
     
-    if story.get("story_type") != "poll":
-        raise HTTPException(status_code=400, detail="Bu hikaye bir anket değil")
+    if not story.get("poll_options"):
+        raise HTTPException(status_code=400, detail="Bu hikayede anket yok")
     
     poll_options = story.get("poll_options", [])
     total_votes = sum(o.get("votes", 0) for o in poll_options)
@@ -835,13 +895,12 @@ async def get_story_analytics(story_id: str, current_user: dict = Depends(get_cu
 # Q&A ANSWERS
 # =====================================================
 
-@router.post("/{story_id}/qa/answer")
-async def answer_qa(story_id: str, data: dict, current_user: dict = Depends(get_current_user)):
-    """Answer a Q&A sticker on a story"""
+async def _do_answer_qa(story_id: str, data: dict, current_user: dict):
+    """Shared handler: Answer a Q&A sticker on a story"""
     story = await db.stories.find_one({"id": story_id}, {"_id": 0})
     if not story:
         raise HTTPException(status_code=404, detail="Hikaye bulunamadı")
-    if not story.get("qa_question"):
+    if not (story.get("qa_question") or story.get("question_text")):
         raise HTTPException(status_code=400, detail="Bu hikayede soru yok")
 
     answer = data.get("answer", "").strip()
@@ -869,6 +928,14 @@ async def answer_qa(story_id: str, data: dict, current_user: dict = Depends(get_
             data={"story_id": story_id},
         )
     return {"message": "Cevap gönderildi", "answer": entry}
+
+@router.post("/{story_id}/question")
+async def answer_qa(story_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    return await _do_answer_qa(story_id, data, current_user)
+
+@router.post("/{story_id}/qa/answer")
+async def answer_qa_legacy(story_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    return await _do_answer_qa(story_id, data, current_user)
 
 @router.get("/{story_id}/qa/answers")
 async def get_qa_answers(story_id: str, current_user: dict = Depends(get_current_user)):

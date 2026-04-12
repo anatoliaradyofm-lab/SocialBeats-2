@@ -172,7 +172,8 @@ export default function DashboardScreen({ navigation }) {
       }
       if (myRes.status === 'fulfilled') {
         const mine = Array.isArray(myRes.value) ? myRes.value : [];
-        setMyStory(mine.length > 0 ? mine : null);
+        const sorted = mine.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        setMyStory(sorted.length > 0 ? sorted : null);
       }
     } catch { /* silently fail */ }
   }, [token]);
@@ -558,16 +559,24 @@ export default function DashboardScreen({ navigation }) {
         </ScrollView>
 
         {/* ── Discover People ───────────────────────────────────────── */}
-        <TouchableOpacity activeOpacity={0.88} onPress={() => navigation.navigate('DiscoverPeople')}>
-          <LinearGradient colors={['rgba(168,85,247,0.2)','rgba(34,211,238,0.15)']} start={{ x:0,y:0 }} end={{ x:1,y:0 }} style={s.discoverBanner}>
-            <View style={s.discoverLeft}>
-              <Text style={[s.discoverTitle, { color: colors.text }]}>Discover People</Text>
-              <Text style={[s.discoverSub, { color: colors.textSecondary }]}>Find friends who share your taste</Text>
-            </View>
-            <View style={[s.discoverIcon, { backgroundColor: colors.primaryGlow }]}>
-              <Ionicons name="people" size={24} color={colors.primary} />
-            </View>
-          </LinearGradient>
+        <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.navigate('DiscoverPeople')} style={s.discoverCard}>
+          <LinearGradient
+            colors={['rgba(147,51,234,0.18)', 'rgba(192,132,252,0.06)']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={s.discoverIconBubble}>
+            <Ionicons name="people" size={22} color="#C084FC" />
+          </View>
+          <View style={s.discoverTexts}>
+            <Text style={s.discoverTitle}>Kişileri Keşfet</Text>
+            <Text style={s.discoverSub}>Müzik zevkini paylaşan kişileri bul</Text>
+          </View>
+          <View style={s.discoverPill}>
+            <LinearGradient colors={['#9333EA', '#C084FC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.discoverPillGrad}>
+              <Text style={s.discoverPillTxt}>Keşfet</Text>
+            </LinearGradient>
+          </View>
         </TouchableOpacity>
 
         {/* ── Native Reklam ────────────────────────────────────────── */}
@@ -911,27 +920,34 @@ function createStyles(colors, insets) {
     trendRight: { alignItems: 'flex-end', gap: 4 },
     trendPlays: { fontSize: 11, fontWeight: '400' },
 
-    // Discover Banner
-    discoverBanner: {
+    // Discover Card
+    discoverCard: {
       marginHorizontal: 20,
       marginBottom: 20,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: colors.glassBorder,
+      borderColor: 'rgba(192,132,252,0.28)',
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: 18,
+      gap: 14,
+      padding: 16,
+      overflow: 'hidden',
     },
-    discoverLeft: { gap: 4, flex: 1 },
-    discoverTitle: { fontSize: 16, fontWeight: '600', letterSpacing: -0.3 },
-    discoverSub: { fontSize: 13, fontWeight: '300', lineHeight: 18 },
-    discoverIcon: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
+    discoverIconBubble: {
+      width: 46,
+      height: 46,
+      borderRadius: 23,
+      backgroundColor: 'rgba(192,132,252,0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(192,132,252,0.25)',
       alignItems: 'center',
       justifyContent: 'center',
     },
+    discoverTexts: { flex: 1, gap: 3 },
+    discoverTitle: { fontSize: 15, fontWeight: '700', color: '#F8F8F8', letterSpacing: -0.2 },
+    discoverSub: { fontSize: 12, fontWeight: '400', color: 'rgba(248,248,248,0.5)', lineHeight: 17 },
+    discoverPill: { borderRadius: 14, overflow: 'hidden' },
+    discoverPillGrad: { paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
+    discoverPillTxt: { fontSize: 13, fontWeight: '700', color: '#fff' },
   });
 }

@@ -284,7 +284,7 @@ export default function ProfileScreen({ navigation }) {
           <Text style={s.handle}>@{user?.username || 'username'}</Text>
           {user?.bio ? <Text style={s.bio}>{user.bio}</Text> : null}
 
-          {/* Location / website / social */}
+          {/* Location / age / website / social */}
           {(user?.city || user?.country || user?.location) ? (
             <View style={s.metaRow}>
               <Ionicons name="location-outline" size={13} color="rgba(248,248,248,0.35)" />
@@ -293,6 +293,21 @@ export default function ProfileScreen({ navigation }) {
               </Text>
             </View>
           ) : null}
+          {user?.birth_date ? (() => {
+            const parts = user.birth_date.split('-');
+            if (parts.length !== 3) return null;
+            const [y, m, d] = parts.map(Number);
+            const today = new Date();
+            let age = today.getFullYear() - y;
+            if (today.getMonth()+1 < m || (today.getMonth()+1 === m && today.getDate() < d)) age--;
+            if (age <= 0 || age >= 120) return null;
+            return (
+              <View style={s.metaRow}>
+                <Ionicons name="gift-outline" size={13} color="rgba(248,248,248,0.35)" />
+                <Text style={s.metaTx}>{age} yaşında</Text>
+              </View>
+            );
+          })() : null}
           {user?.website ? (
             <View style={s.metaRow}>
               <Ionicons name="globe-outline" size={13} color="rgba(248,248,248,0.35)" />
@@ -544,15 +559,15 @@ const s = StyleSheet.create({
                    alignItems: 'center', justifyContent: 'center' },
 
   displayName: { fontSize: 23, fontWeight: '800', color: '#F8F8F8', letterSpacing: -0.5, marginBottom: 3 },
-  handle:      { fontSize: 14, color: 'rgba(248,248,248,0.38)', marginBottom: 10 },
-  bio:         { fontSize: 14, color: 'rgba(248,248,248,0.60)', lineHeight: 21, marginBottom: 8 },
+  handle:      { fontSize: 14, color: '#F8F8F8', marginBottom: 10 },
+  bio:         { fontSize: 14, color: '#F8F8F8', lineHeight: 21, marginBottom: 8 },
 
   metaRow:     { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 },
-  metaTx:      { fontSize: 13, color: 'rgba(248,248,248,0.40)' },
+  metaTx:      { fontSize: 13, color: '#F8F8F8' },
   metaLinks:   { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4, marginBottom: 8 },
   metaChip:    { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.06)',
                  borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
-  metaChipTx:  { fontSize: 12, color: 'rgba(248,248,248,0.55)', fontWeight: '500' },
+  metaChipTx:  { fontSize: 12, color: '#F8F8F8', fontWeight: '500' },
 
   statsCard:  { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)',
                 borderRadius: 18, padding: 16, marginTop: 10, marginBottom: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },

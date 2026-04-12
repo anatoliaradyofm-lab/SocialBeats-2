@@ -92,30 +92,52 @@ export default function ProfileEditScreen({ navigation }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
 
-  /* ── Image pickers ── */
-  const pickAvatar = async (fromCamera = false) => {
-    if (!fromCamera) {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') { Alert.alert('İzin gerekli', 'Galeri erişimi için izin verin.'); return; }
-    } else {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') { Alert.alert('İzin gerekli', 'Kamera erişimi için izin verin.'); return; }
-    }
+  /* ── Gallery picker ── */
+  const pickAvatar = async () => {
     try {
-      const opts = { mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 };
-      const result = fromCamera
-        ? await ImagePicker.launchCameraAsync(opts)
-        : await ImagePicker.launchImageLibraryAsync(opts);
+      try {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status === 'denied') {
+          Alert.alert('İzin gerekli', "Ayarlar'dan galeri erişimine izin verin.");
+          return;
+        }
+      } catch {}
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
       if (!result.canceled && result.assets?.[0]?.uri) {
         setUploadingAvatar(true);
         try {
-          const url = await api.uploadFile(result.assets[0].uri, token, 'avatar', 'image/jpeg', { upload_type: 'avatar' });
+          const url = await api.uploadFile(result.assets[0].uri, token, 'avatar', 'image/jpeg');
           setAvatarUrl(url);
         } catch (e) {
           Alert.alert('Hata', e?.data?.detail || e?.message || 'Yükleme başarısız');
         } finally { setUploadingAvatar(false); }
       }
-    } catch (err) { Alert.alert(t('common.error'), err.message || t('profileEdit.photoFailed')); }
+    } catch (err) { Alert.alert('Hata', err.message || 'Fotoğraf seçilemedi'); }
+  };
+
+  /* ── Doğum tarihi yardımcıları ── */
+  const isoToDMY = (iso) => {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return iso;
+  };
+  const dmyToIso = (dmy) => {
+    const digits = dmy.replace(/\D/g, '');
+    if (digits.length < 8) return '';
+    return `${digits.slice(4, 8)}-${digits.slice(2, 4)}-${digits.slice(0, 2)}`;
+  };
+  const handleBirthInput = (text) => {
+    const digits = text.replace(/\D/g, '').slice(0, 8);
+    let v = digits;
+    if (digits.length > 4) v = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    else if (digits.length > 2) v = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    setBirthDate(v);
   };
 
   /* ── Load ── */
@@ -129,7 +151,7 @@ export default function ProfileEditScreen({ navigation }) {
       setAvatarUrl(data.avatar_url || '');
 
       setBio(data.bio || '');
-      setBirthDate(data.birth_date || '');
+      setBirthDate(isoToDMY(data.birth_date));
       setLocation(data.location || '');
       setWebsite(data.website || '');
       setInstagram(data.instagram || '');
@@ -144,7 +166,7 @@ export default function ProfileEditScreen({ navigation }) {
       setAvatarUrl(authUser?.avatar_url || '');
 
       setBio(authUser?.bio || '');
-      setBirthDate(authUser?.birth_date || '');
+      setBirthDate(isoToDMY(authUser?.birth_date));
       setLocation(authUser?.location || '');
       setWebsite(authUser?.website || '');
       setInstagram(authUser?.instagram || '');
@@ -173,7 +195,7 @@ export default function ProfileEditScreen({ navigation }) {
           username:     newUsername || authUser?.username || null,
           avatar_url:   avatarUrl.trim() || null,
           bio:          (bio || '').slice(0, 200).trim() || null,
-          birth_date:   birthDate.trim() || null,
+          birth_date:   dmyToIso(birthDate) || null,
           location:     location.trim() || null,
           website:      website.trim() || null,
           instagram:    instagram.replace('@', '').trim() || null,
@@ -204,7 +226,6 @@ export default function ProfileEditScreen({ navigation }) {
 
   const CountrySheet = () => (
     <View style={[cp.sheet, { paddingBottom: insets.bottom + 16 }]}>
-      <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={cp.topGrad} pointerEvents="none" />
       <View style={cp.handle} />
       <View style={cp.headerRow}>
         <Text style={[cp.title, { color: C.text }]}>Ülke Seç</Text>
@@ -307,16 +328,16 @@ export default function ProfileEditScreen({ navigation }) {
               </View>
             )}
           </View>
-          <View style={s.avatarBtns}>
-            <TouchableOpacity style={s.avatarBtn} onPress={() => pickAvatar(false)} disabled={uploadingAvatar}>
-              <Ionicons name="images-outline" size={15} color={C.primary} />
-              <Text style={s.avatarBtnTxt}>Galeri</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.avatarBtn} onPress={() => pickAvatar(true)} disabled={uploadingAvatar}>
-              <Ionicons name="camera-outline" size={15} color={C.primary} />
-              <Text style={s.avatarBtnTxt}>Kamera</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={s.galleryBtn} onPress={pickAvatar} disabled={uploadingAvatar} activeOpacity={0.85}>
+            <LinearGradient
+              colors={['#9333EA', '#C084FC']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={s.galleryBtnInner}
+            >
+              <Ionicons name="images-outline" size={18} color="#fff" />
+              <Text style={s.galleryBtnTxt}>Fotoğraf Değiştir</Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
 
         {/* ── Temel Bilgiler ── */}
@@ -353,15 +374,33 @@ export default function ProfileEditScreen({ navigation }) {
             <Text style={s.charCount}>{bio.length}/200</Text>
           )}
         </View>
-        <FieldInput
-          icon="calendar-outline"
-          placeholder="Doğum tarihi (YYYY-MM-DD)"
-          value={birthDate}
-          onChangeText={setBirthDate}
-          keyboardType="numbers-and-punctuation"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+        <View style={s.fieldWrap}>
+          <View style={s.fieldIcon}>
+            <Ionicons name="calendar-outline" size={18} color={C.textMuted} />
+          </View>
+          <TextInput
+            style={s.fieldInput}
+            placeholder="Doğum tarihi (GG/AA/YYYY)"
+            placeholderTextColor={C.textMuted}
+            value={birthDate}
+            onChangeText={handleBirthInput}
+            keyboardType="number-pad"
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={10}
+          />
+          {birthDate.replace(/\D/g,'').length === 8 && (
+            <Text style={s.fieldSuffix}>
+              {(() => {
+                const digits = birthDate.replace(/\D/g,'');
+                const y = parseInt(digits.slice(4,8)), m = parseInt(digits.slice(2,4)), d = parseInt(digits.slice(0,2));
+                const today = new Date(); let age = today.getFullYear() - y;
+                if (today.getMonth()+1 < m || (today.getMonth()+1 === m && today.getDate() < d)) age--;
+                return age > 0 && age < 120 ? `${age} yaş` : '';
+              })()}
+            </Text>
+          )}
+        </View>
         <FieldInput
           icon="globe-outline"
           placeholder="Website"
@@ -411,24 +450,6 @@ export default function ProfileEditScreen({ navigation }) {
           <Ionicons name="chevron-down" size={16} color={C.textMuted} style={{ marginRight: 12 }} />
         </TouchableOpacity>
 
-        {/* Country modal — web: View+absoluteFill, native: Modal */}
-        {Platform.OS === 'web' ? (
-          showCountryPicker ? (
-            <View style={[StyleSheet.absoluteFill, cp.overlay]} pointerEvents="box-none">
-              <Pressable style={StyleSheet.absoluteFill} onPress={() => { setShowCountryPicker(false); setCountryQuery(''); }} />
-              <CountrySheet />
-            </View>
-          ) : null
-        ) : (
-          <Modal visible={showCountryPicker} animationType="slide" transparent onRequestClose={() => { setShowCountryPicker(false); setCountryQuery(''); }}>
-            <Pressable style={cp.overlay} onPress={() => { setShowCountryPicker(false); setCountryQuery(''); }}>
-              <Pressable onPress={e => e.stopPropagation()}>
-                <CountrySheet />
-              </Pressable>
-            </Pressable>
-          </Modal>
-        )}
-
         <FieldInput
           icon="location-outline"
           placeholder="Şehir (örn. İstanbul)"
@@ -454,6 +475,24 @@ export default function ProfileEditScreen({ navigation }) {
           />
         </View>
       </ScrollView>
+
+      {/* Country picker — root level, tam ekranı kaplar */}
+      {Platform.OS === 'web' ? (
+        showCountryPicker ? (
+          <View style={[StyleSheet.absoluteFill, cp.overlay]}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => { setShowCountryPicker(false); setCountryQuery(''); }} />
+            <CountrySheet />
+          </View>
+        ) : null
+      ) : (
+        <Modal visible={showCountryPicker} animationType="slide" transparent onRequestClose={() => { setShowCountryPicker(false); setCountryQuery(''); }}>
+          <Pressable style={cp.overlay} onPress={() => { setShowCountryPicker(false); setCountryQuery(''); }}>
+            <Pressable onPress={e => e.stopPropagation()}>
+              <CountrySheet />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -507,20 +546,20 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarBtns: { flex: 1, flexDirection: 'row', gap: 10 },
-  avatarBtn: {
+  galleryBtn: {
     flex: 1,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  galleryBtnInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: 12,
-    backgroundColor: C.surface,
-    borderWidth: 0.5,
-    borderColor: C.border,
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
   },
-  avatarBtnTxt: { fontSize: 13, fontWeight: '600', color: C.primary },
+  galleryBtnTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
 
   /* section label */
   sectionLabel: {
@@ -590,9 +629,8 @@ const s = StyleSheet.create({
 });
 
 const cp = StyleSheet.create({
-  overlay:   { flex: 1, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' },
-  sheet:     { backgroundColor: '#08060F', borderTopLeftRadius: 32, borderTopRightRadius: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.18)' },
-  topGrad:   { position: 'absolute', top: 0, left: 0, right: 0, height: 110, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
+  overlay:   { flex: 1, backgroundColor: '#08060F', justifyContent: 'flex-end' },
+  sheet:     { backgroundColor: '#0D0A18', borderTopLeftRadius: 32, borderTopRightRadius: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.28)', minHeight: 420 },
   handle:    { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(192,132,252,0.30)', alignSelf: 'center', marginTop: 12, marginBottom: 4 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12 },
   title:     { fontSize: 17, fontWeight: '700' },
