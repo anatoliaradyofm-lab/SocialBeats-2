@@ -565,12 +565,15 @@ export default function StoryViewerScreen({ route, navigation }) {
             const color = colorMap[tsId] ?? '#fff';
             const scale = story.text_scale || 1;
             const align = story.text_align || 'center';
-            const fs = Math.min(72, Math.max(14, Math.floor(480 / Math.max(10, story.text.length)) * scale));
+            const l0 = story.text.length;
+            const base0 = l0 <= 30 ? 36 : l0 <= 60 ? 28 : l0 <= 120 ? 22 : l0 <= 250 ? 18 : 14;
+            const fs = Math.max(14, Math.min(72, Math.round(base0 * scale)));
+            const lh = Math.max(18, Math.round(fs * 1.2));
             if (hasPosData) {
               return (
                 <View style={{ position: 'absolute', left: story.text_pos_x * cw, top: story.text_pos_y * ch }}>
                   <View style={[st.textOverlayBubble, { backgroundColor: tbg === 'transparent' ? 'transparent' : tbg }]}>
-                    <Text style={[st.textOverlayContent, { fontSize: fs, textAlign: align, color }]} selectable={false}>{story.text}</Text>
+                    <Text style={[st.textOverlayContent, { fontSize: fs, lineHeight: lh, textAlign: align, color }]} selectable={false}>{story.text}</Text>
                   </View>
                 </View>
               );
@@ -761,16 +764,17 @@ export default function StoryViewerScreen({ route, navigation }) {
         const color = colorMap[ts] ?? '#fff';
         const scale = story.text_scale || 1;
         const align = story.text_align || 'center';
-        const baseFontSize = Math.min(72, Math.max(14,
-          Math.floor(480 / Math.max(10, story.text.length)) * scale
-        ));
+        const l1 = story.text.length;
+        const base1 = l1 <= 30 ? 36 : l1 <= 60 ? 28 : l1 <= 120 ? 22 : l1 <= 250 ? 18 : 14;
+        const baseFontSize = Math.max(14, Math.min(72, Math.round(base1 * scale)));
+        const baseLH = Math.max(18, Math.round(baseFontSize * 1.2));
         const posStyle = hasPosData
           ? { position: 'absolute', left: story.text_pos_x * cw, top: story.text_pos_y * ch, alignItems: 'flex-start' }
           : st.textOverlay;
         return (
           <View style={posStyle} pointerEvents="none">
             <View style={[st.textOverlayBubble, { backgroundColor: bg === 'transparent' ? 'transparent' : bg }]}>
-              <Text style={[st.textOverlayContent, { fontSize: baseFontSize, textAlign: align, color }]} selectable={false}>
+              <Text style={[st.textOverlayContent, { fontSize: baseFontSize, lineHeight: baseLH, textAlign: align, color }]} selectable={false}>
                 {story.text}
               </Text>
             </View>
@@ -868,12 +872,13 @@ export default function StoryViewerScreen({ route, navigation }) {
       {/* ── Seçenekler Paneli — bottom sheet ── */}
       {showOptions && (
         <TouchableOpacity
-          style={[StyleSheet.absoluteFill, { zIndex: 50, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }]}
+          style={[StyleSheet.absoluteFill, { zIndex: 50, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' }]}
           activeOpacity={1}
           onPress={() => { setShowOptions(false); if (!replyFocused) setPaused(false); }}
         >
           <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ alignSelf: 'stretch' }}>
             <View style={[st.viewersPanel, { paddingBottom: insets.bottom + 16 }]}>
+              <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={st.topGrad} pointerEvents="none" />
               <View style={st.optHandleBar} />
               {isOwn ? (
                 <TouchableOpacity style={st.optRow} onPress={deleteStory} disabled={deleting}>
@@ -902,12 +907,13 @@ export default function StoryViewerScreen({ route, navigation }) {
       {/* ── Görüntüleyenler Paneli — Instagram tarzı bottom sheet ── */}
       {showViewers && isOwn && (
         <TouchableOpacity
-          style={[StyleSheet.absoluteFill, { zIndex: 50, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'flex-end' }]}
+          style={[StyleSheet.absoluteFill, { zIndex: 50, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' }]}
           activeOpacity={1}
           onPress={() => { setShowViewers(false); setPaused(false); }}
         >
           <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ alignSelf: 'stretch' }}>
             <View style={[st.viewersPanel, { paddingBottom: insets.bottom + 8 }]}>
+              <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={st.topGrad} pointerEvents="none" />
               {/* Handle */}
               <View style={st.optHandleBar} />
 
@@ -1222,7 +1228,6 @@ const st = StyleSheet.create({
     color:      '#fff',
     fontWeight: '700',
     textAlign:  'center',
-    lineHeight: 28,
     // 'normal' stil için okunabilirlik: metin gölgesi
     textShadowColor: 'rgba(0,0,0,0.75)',
     textShadowOffset: { width: 0, height: 1 },
@@ -1333,13 +1338,13 @@ const st = StyleSheet.create({
   // Modallar — centered dialog
   modalOverlay: {
     flex:             1,
-    backgroundColor:  'rgba(0,0,0,0.65)',
+    backgroundColor:  'rgba(8,6,15,0.88)',
     justifyContent:   'center',
     alignItems:       'center',
     zIndex:           50,
   },
   optPanel: {
-    backgroundColor:  '#1C1432',
+    backgroundColor:  '#08060F',
     borderRadius:     20,
     paddingTop:       8,
     paddingBottom:    8,
@@ -1373,11 +1378,13 @@ const st = StyleSheet.create({
     fontWeight: '600',
   },
 
+  topGrad: { position: 'absolute', top: 0, left: 0, right: 0, height: 110, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
+
   // Görüntüleyenler paneli — Instagram tarzı bottom sheet
   viewersPanel: {
-    backgroundColor:      '#0F0A1E',
-    borderTopLeftRadius:  28,
-    borderTopRightRadius: 28,
+    backgroundColor:      '#08060F',
+    borderTopLeftRadius:  32,
+    borderTopRightRadius: 32,
     paddingTop:           10,
     paddingHorizontal:    20,
     maxHeight:            SH * 0.68,

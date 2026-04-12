@@ -188,6 +188,7 @@ export default function SavedScreen({ navigation }) {
       <Modal visible={showNewFolder} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowNewFolder(false)}>
           <View style={[styles.modalContent, { paddingBottom: insets.bottom + 24 }]} onStartShouldSetResponder={() => true}>
+            <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={styles.modalTopGrad} pointerEvents="none" />
             <Text style={styles.modalTitle}>{t('saved.newFolder')}</Text>
             <TextInput
               style={styles.input}
@@ -237,8 +238,9 @@ const createStyles = (colors) => StyleSheet.create({
   empty: { alignItems: 'center', paddingVertical: 60 },
   emptyText: { fontSize: 16, color: '#7F7F7F', marginTop: 16 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#1F2937', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#08060F', borderTopLeftRadius: 32, borderTopRightRadius: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.18)', padding: 24 },
+  modalTopGrad: { position: 'absolute', top: 0, left: 0, right: 0, height: 110, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
   modalTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 16 },
   input: { backgroundColor: '#374151', borderRadius: 12, padding: 16, fontSize: 16, color: colors.text, marginBottom: 20 },
   modalBtns: { flexDirection: 'row', gap: 12 },

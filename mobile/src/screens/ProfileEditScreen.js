@@ -204,6 +204,7 @@ export default function ProfileEditScreen({ navigation }) {
 
   const CountrySheet = () => (
     <View style={[cp.sheet, { paddingBottom: insets.bottom + 16 }]}>
+      <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={cp.topGrad} pointerEvents="none" />
       <View style={cp.handle} />
       <View style={cp.headerRow}>
         <Text style={[cp.title, { color: C.text }]}>Ülke Seç</Text>
@@ -589,9 +590,10 @@ const s = StyleSheet.create({
 });
 
 const cp = StyleSheet.create({
-  overlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
-  sheet:     { backgroundColor: '#130D22', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderColor: 'rgba(192,132,252,0.15)' },
-  handle:    { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginTop: 12, marginBottom: 4 },
+  overlay:   { flex: 1, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' },
+  sheet:     { backgroundColor: '#08060F', borderTopLeftRadius: 32, borderTopRightRadius: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.18)' },
+  topGrad:   { position: 'absolute', top: 0, left: 0, right: 0, height: 110, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
+  handle:    { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(192,132,252,0.30)', alignSelf: 'center', marginTop: 12, marginBottom: 4 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12 },
   title:     { fontSize: 17, fontWeight: '700' },
   closeBtn:  { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },

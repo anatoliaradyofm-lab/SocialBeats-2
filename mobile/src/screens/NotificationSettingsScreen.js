@@ -331,6 +331,7 @@ export default function NotificationSettingsScreen({ navigation }) {
           onPress={() => setSoundModalVisible(false)}
         >
           <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
+            <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={styles.modalTopGrad} pointerEvents="none" />
             <Text style={styles.modalTitle}>{t('notificationSettings.notificationSound')}</Text>
             <FlatList
               data={sounds.slice(0, 4)}
@@ -357,6 +358,7 @@ export default function NotificationSettingsScreen({ navigation }) {
       <Modal visible={dndStartModal} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDndStartModal(false)}>
           <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
+            <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={styles.modalTopGrad} pointerEvents="none" />
             <Text style={styles.modalTitle}>{t('notificationSettings.dndStartTime')}</Text>
             {DND_STARTS.map((t) => (
               <TouchableOpacity
@@ -378,6 +380,7 @@ export default function NotificationSettingsScreen({ navigation }) {
       <Modal visible={dndEndModal} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDndEndModal(false)}>
           <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
+            <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={styles.modalTopGrad} pointerEvents="none" />
             <Text style={styles.modalTitle}>{t('notificationSettings.dndEndTime')}</Text>
             {DND_ENDS.map((t) => (
               <TouchableOpacity
@@ -430,16 +433,19 @@ const createStyles = (colors) => StyleSheet.create({
   chevron: { fontSize: 18, color: '#9CA3AF' },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(8,6,15,0.88)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#1F2937',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: '#08060F',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    borderTopWidth: 1,
+    borderColor: 'rgba(192,132,252,0.18)',
     padding: 24,
     maxHeight: '60%',
   },
+  modalTopGrad: { position: 'absolute', top: 0, left: 0, right: 0, height: 110, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
   modalTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 16 },
   optRow: {
     flexDirection: 'row',

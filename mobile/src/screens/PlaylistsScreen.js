@@ -164,11 +164,11 @@ function BottomModal({ visible, onClose, title, children, bottomOffset = 68 }) {
   }, [visible]);
 
   const sheetStyle = {
-    backgroundColor: '#130A24',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: '#08060F',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     borderTopWidth: 1,
-    borderColor: colors.border || 'rgba(192,132,252,0.12)',
+    borderColor: 'rgba(192,132,252,0.18)',
     padding: 24,
     paddingBottom: 40,
     overflow: 'hidden',
@@ -181,6 +181,7 @@ function BottomModal({ visible, onClose, title, children, bottomOffset = 68 }) {
       <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: bottomOffset, zIndex: 9999 }} pointerEvents="box-none">
         <Pressable style={bm.overlay} onPress={onClose}>
           <Pressable style={sheetStyle} onPress={e => e.stopPropagation()}>
+            <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={bm.topGrad} pointerEvents="none" />
             <View style={bm.handle} />
             {title && <Text style={[bm.title, { color: colors.text }]}>{title}</Text>}
             {children}
@@ -201,6 +202,7 @@ function BottomModal({ visible, onClose, title, children, bottomOffset = 68 }) {
       <Pressable style={bm.overlay} onPress={onClose}>
         <Animated.View style={[sheetStyle, { transform: [{ translateY }] }]}>
           <Pressable onPress={e => e.stopPropagation()}>
+            <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={bm.topGrad} pointerEvents="none" />
             <View style={bm.handle} />
             {title && <Text style={[bm.title, { color: colors.text }]}>{title}</Text>}
             {children}
@@ -212,8 +214,9 @@ function BottomModal({ visible, onClose, title, children, bottomOffset = 68 }) {
 }
 
 const bm = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
-  handle:  { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(192,132,252,0.25)', alignSelf: 'center', marginBottom: 20 },
+  overlay: { flex: 1, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' },
+  topGrad: { position: 'absolute', top: 0, left: 0, right: 0, height: 110, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
+  handle:  { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(192,132,252,0.30)', alignSelf: 'center', marginBottom: 20 },
   title:   { fontSize: 18, fontWeight: '800', marginBottom: 20 },
 });
 

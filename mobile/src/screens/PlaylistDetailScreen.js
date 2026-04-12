@@ -38,15 +38,16 @@ function ConfirmSheet({ visible, title, message, confirmText, danger, onConfirm,
   }, [visible]);
   if (!visible) return null;
   const sheet = {
-    backgroundColor: '#130A24', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 24, paddingBottom: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.12)',
+    backgroundColor: '#08060F', borderTopLeftRadius: 32, borderTopRightRadius: 32,
+    padding: 24, paddingBottom: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.18)',
   };
   if (Platform.OS === 'web') {
     return (
       <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }} pointerEvents="box-none">
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }} onPress={onCancel}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' }} onPress={onCancel}>
           <Pressable style={sheet} onPress={e => e.stopPropagation()}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(192,132,252,0.25)', alignSelf: 'center', marginBottom: 20 }} />
+            <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={{ position:'absolute', top:0, left:0, right:0, height:80, borderTopLeftRadius:32, borderTopRightRadius:32 }} pointerEvents="none" />
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(192,132,252,0.30)', alignSelf: 'center', marginBottom: 20 }} />
             <Text style={{ fontSize: 17, fontWeight: '800', color: '#F8F8F8', marginBottom: 8 }}>{title}</Text>
             {message ? <Text style={{ fontSize: 14, color: 'rgba(248,248,248,0.5)', marginBottom: 24 }}>{message}</Text> : <View style={{ marginBottom: 24 }} />}
             <TouchableOpacity onPress={onConfirm} style={{ height: 52, borderRadius: 16, backgroundColor: danger ? 'rgba(239,68,68,0.15)' : colors.primary, justifyContent: 'center', alignItems: 'center', marginBottom: 10, borderWidth: danger ? 1 : 0, borderColor: danger ? 'rgba(239,68,68,0.4)' : undefined }}>
@@ -62,7 +63,7 @@ function ConfirmSheet({ visible, title, message, confirmText, danger, onConfirm,
   }
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onCancel} statusBarTranslucent>
-      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }} onPress={onCancel}>
+      <Pressable style={{ flex: 1, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' }} onPress={onCancel}>
         <Animated.View style={[sheet, { transform: [{ translateY: slideY }] }]}>
           <Pressable onPress={e => e.stopPropagation()}>
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(192,132,252,0.25)', alignSelf: 'center', marginBottom: 20 }} />
@@ -408,6 +409,7 @@ export default function PlaylistDetailScreen({ navigation, route }) {
           <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 68, zIndex: 9999 }} pointerEvents="box-none">
             <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
               <View style={styles.menuSheet}>
+                <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={{ position:'absolute', top:0, left:0, right:0, height:80, borderTopLeftRadius:32, borderTopRightRadius:32 }} pointerEvents="none" />
                 <TouchableOpacity style={styles.menuItem} onPress={handlePlayAll}>
                   <Ionicons name="play-circle-outline" size={22} color="#C084FC" />
                   <Text style={styles.menuText}>Tümünü Oynat</Text>
@@ -554,13 +556,13 @@ const createStyles = (colors) => StyleSheet.create({
   trackTitle: { fontSize: 16, color: colors.text },
   trackArtist: { fontSize: 14, color: colors.textMuted, marginTop: 2 },
   removeBtn: { padding: 8 },
-  modalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
-  menuSheet: { backgroundColor: '#130A24', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.12)', overflow: 'hidden', marginHorizontal: 6 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' },
+  menuSheet: { backgroundColor: '#08060F', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 20, paddingBottom: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.18)', overflow: 'hidden', marginHorizontal: 6 },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 12 },
   menuItemDanger: {},
   menuText: { fontSize: 18, color: colors.text },
   menuTextDanger: { color: colors.error },
-  editModal: { backgroundColor: '#130A24', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.12)', overflow: 'hidden', marginHorizontal: 6 },
+  editModal: { backgroundColor: '#08060F', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.18)', overflow: 'hidden', marginHorizontal: 6 },
   editTitle: { fontSize: 20, fontWeight: '600', color: colors.text, marginBottom: 16 },
   editInput: { height: 48, backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 16, color: colors.text, fontSize: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },

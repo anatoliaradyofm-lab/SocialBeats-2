@@ -786,6 +786,7 @@ export default function UserProfileScreen({ navigation, route }) {
         <Modal visible={showMenu} transparent animationType="slide" onRequestClose={() => setShowMenu(false)}>
           <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
             <View style={[s.sheet, { paddingBottom: insets.bottom + 12 }]} onStartShouldSetResponder={() => true}>
+              <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={s.sheetGrad} pointerEvents="none" />
               <View style={s.sheetHandle} />
               {[
                 ...(isBlockedByMe ? [
@@ -1031,10 +1032,11 @@ const s = StyleSheet.create({
   artistPlaysTx:{ fontSize:12, color:'rgba(248,248,248,0.3)' },
 
   /* Modals */
-  overlay:      { flex:1, backgroundColor:'rgba(8,6,15,0.78)', justifyContent:'flex-end', zIndex:100 },
-  sheet:        { backgroundColor:'#120E20', borderTopLeftRadius:26, borderTopRightRadius:26,
-                  padding:24, borderWidth:1, borderColor:'rgba(255,255,255,0.07)' },
-  sheetHandle:  { width:40, height:4, borderRadius:2, backgroundColor:'rgba(255,255,255,0.18)', alignSelf:'center', marginBottom:16 },
+  overlay:      { flex:1, backgroundColor:'rgba(8,6,15,0.88)', justifyContent:'flex-end', zIndex:100 },
+  sheet:        { backgroundColor:'#08060F', borderTopLeftRadius:32, borderTopRightRadius:32,
+                  padding:24, borderTopWidth:1, borderColor:'rgba(192,132,252,0.18)' },
+  sheetGrad:    { position:'absolute', top:0, left:0, right:0, height:80, borderTopLeftRadius:32, borderTopRightRadius:32 },
+  sheetHandle:  { width:40, height:4, borderRadius:2, backgroundColor:'rgba(192,132,252,0.30)', alignSelf:'center', marginBottom:16 },
   menuRow:      { flexDirection:'row', alignItems:'center', gap:14, paddingVertical:14,
                   borderBottomWidth:1, borderBottomColor:'rgba(255,255,255,0.05)' },
   menuIcon:     { width:36, height:36, borderRadius:18, alignItems:'center', justifyContent:'center' },

@@ -150,8 +150,9 @@ export default function AccountSettingsScreen({ navigation }) {
         msgModalVisible ? (
           <View style={[StyleSheet.absoluteFill, s.backdrop]} pointerEvents="box-none">
             <Pressable style={StyleSheet.absoluteFill} onPress={() => setMsgModalVisible(false)} />
-            <View style={[s.sheet, { backgroundColor: colors.card, borderColor: colors.glassBorder }]} onStartShouldSetResponder={() => true}>
-              <View style={[s.sheetHandle, { backgroundColor: colors.textGhost }]} />
+            <View style={[s.sheet, { backgroundColor: '#08060F', borderColor: 'rgba(192,132,252,0.18)' }]} onStartShouldSetResponder={() => true}>
+              <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={s.sheetGrad} pointerEvents="none" />
+              <View style={s.sheetHandle} />
               <Text style={[s.sheetTitle, { color: colors.text }]}>{t('settings.messagePermissions')}</Text>
               <Text style={[s.sheetSub, { color: colors.textMuted }]}>{t('settings.whoCanMessage')}</Text>
               {MSG_OPTIONS.map((opt, i) => {
@@ -210,9 +211,10 @@ const s = StyleSheet.create({
   scroll: { padding: 16, gap: 16 },
   card: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 15, paddingHorizontal: 16 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
-  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, paddingTop: 12 },
-  sheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 18 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#08060F', borderTopLeftRadius: 32, borderTopRightRadius: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.18)', paddingTop: 12 },
+  sheetGrad:   { position: 'absolute', top: 0, left: 0, right: 0, height: 110, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(192,132,252,0.30)', alignSelf: 'center', marginBottom: 18 },
   sheetTitle: { fontSize: 17, fontWeight: '800', paddingHorizontal: 20, marginBottom: 4 },
   sheetSub: { fontSize: 13, paddingHorizontal: 20, marginBottom: 14 },
   optRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16 },

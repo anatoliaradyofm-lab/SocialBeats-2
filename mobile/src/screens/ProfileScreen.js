@@ -455,6 +455,7 @@ export default function ProfileScreen({ navigation }) {
           <View style={[StyleSheet.absoluteFill, s.overlay]} pointerEvents="box-none">
             <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuVisible(false)} />
             <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} onStartShouldSetResponder={() => true}>
+              <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={s.sheetGrad} pointerEvents="none" />
               <View style={s.sheetHandle} />
               {[
                 { icon: 'settings-outline',  color: '#C084FC', label: 'Ayarlar',      nav: 'Settings'      },
@@ -484,6 +485,7 @@ export default function ProfileScreen({ navigation }) {
         <Modal visible={menuVisible} transparent animationType="slide" onRequestClose={() => setMenuVisible(false)}>
           <Pressable style={s.overlay} onPress={() => setMenuVisible(false)}>
             <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} onStartShouldSetResponder={() => true}>
+              <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={s.sheetGrad} pointerEvents="none" />
               <View style={s.sheetHandle} />
               {[
                 { icon: 'settings-outline',  color: '#C084FC', label: 'Ayarlar',      nav: 'Settings'      },
@@ -619,10 +621,11 @@ const s = StyleSheet.create({
   artistPlaysTx: { fontSize: 12, color: 'rgba(248,248,248,0.30)' },
 
   /* Modal */
-  overlay:     { flex: 1, backgroundColor: 'rgba(8,6,15,0.78)', justifyContent: 'flex-end' },
-  sheet:       { backgroundColor: '#120E20', borderTopLeftRadius: 26, borderTopRightRadius: 26,
-                 padding: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
-  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)',
+  overlay:     { flex: 1, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' },
+  sheet:       { backgroundColor: '#08060F', borderTopLeftRadius: 32, borderTopRightRadius: 32,
+                 padding: 24, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.18)' },
+  sheetGrad:   { position: 'absolute', top: 0, left: 0, right: 0, height: 110, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(192,132,252,0.30)',
                  alignSelf: 'center', marginBottom: 20 },
   menuRow:     { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14,
                  borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },

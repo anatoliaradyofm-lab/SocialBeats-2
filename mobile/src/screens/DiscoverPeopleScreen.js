@@ -782,8 +782,9 @@ export default function DiscoverPeopleScreen({ navigation }) {
 
       {/* Country/City Filter Modal — Web */}
       {Platform.OS === 'web' && filterVisible && (
-        <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 9999, justifyContent: 'flex-end' }}>
+        <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(8,6,15,0.88)', zIndex: 9999, justifyContent: 'flex-end' }}>
           <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
+            <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={styles.modalTopGrad} pointerEvents="none" />
             <View style={styles.modalHandle} />
 
             <View style={styles.modalHeader}>
@@ -849,6 +850,7 @@ export default function DiscoverPeopleScreen({ navigation }) {
         <Modal visible={filterVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
+              <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={styles.modalTopGrad} pointerEvents="none" />
               <View style={styles.modalHandle} />
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Filtrele</Text>
@@ -1073,14 +1075,16 @@ const createStyles = (colors) => StyleSheet.create({
   },
   clearFilterBtnText: { color: colors.text, fontSize: 15, fontWeight: '600' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' },
+  modalTopGrad: { position: 'absolute', top: 0, left: 0, right: 0, height: 110, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
   modalContent: {
-    backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    backgroundColor: '#08060F', borderTopLeftRadius: 32, borderTopRightRadius: 32,
+    borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.18)',
     paddingHorizontal: 20, paddingTop: 12, maxHeight: SCREEN_HEIGHT * 0.9,
   },
   modalHandle: {
     width: 40, height: 4, borderRadius: 2,
-    backgroundColor: '#374151', alignSelf: 'center', marginBottom: 16,
+    backgroundColor: 'rgba(192,132,252,0.30)', alignSelf: 'center', marginBottom: 16,
   },
   modalHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20,

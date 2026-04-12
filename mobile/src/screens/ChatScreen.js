@@ -775,6 +775,7 @@ export default function ChatScreen({ route, navigation }) {
         <Modal transparent visible animationType="fade">
           <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowChatOptions(false)}>
             <View style={styles.chatOptionsPanel} onStartShouldSetResponder={() => true}>
+              <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={styles.sheetTopGrad} pointerEvents="none" />
               {isGroup && (conversation?.admins || []).includes(user?.id) && (
                 <TouchableOpacity
                   style={styles.chatOptionRow}
@@ -1031,6 +1032,7 @@ export default function ChatScreen({ route, navigation }) {
         <Modal transparent visible animationType="slide">
           <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowStickers(false)}>
             <View style={[styles.stickerPanel, { paddingBottom: insets.bottom }]}>
+              <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={styles.sheetTopGrad} pointerEvents="none" />
               <Text style={styles.stickerTitle}>{t('chat.stickers')}</Text>
               {STICKER_PACKS.map((pack, i) => (
                 <ScrollView key={i} horizontal showsHorizontalScrollIndicator={false} style={styles.stickerRow}>
@@ -1235,11 +1237,12 @@ export default function ChatScreen({ route, navigation }) {
 /* ─── GroupInfoSheet ─────────────────────────────────────────────────────── */
 function GroupInfoSheet({ displayName, groupParticipants, user, colors, styles, conversationId, onClose, onMemberPress, onLeave }) {
   const overlayStyle = Platform.OS === 'web'
-    ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' }
-    : { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' };
+    ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, justifyContent: 'flex-end', backgroundColor: 'rgba(8,6,15,0.88)' }
+    : { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(8,6,15,0.88)' };
 
   const sheet = (
-    <View style={[styles.groupInfoSheet, { backgroundColor: colors.surface || '#1A0A2E' }]}>
+    <View style={[styles.groupInfoSheet, { backgroundColor: '#08060F' }]}>
+      <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={styles.sheetTopGrad} pointerEvents="none" />
       <View style={styles.groupInfoHandle} />
       <View style={styles.groupInfoHeader}>
         <View style={{ flex: 1 }}>
@@ -1341,7 +1344,7 @@ const createStyles = (colors) => StyleSheet.create({
   searchBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: colors.surface, gap: 8 },
   searchInput: { flex: 1, color: colors.text, fontSize: 15 },
   searchCount: { color: colors.accent, fontSize: 13, fontWeight: '600' },
-  chatOptionsPanel: { backgroundColor: colors.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, paddingBottom: 32 },
+  chatOptionsPanel: { backgroundColor: '#08060F', borderTopLeftRadius: 32, borderTopRightRadius: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.18)', padding: 16, paddingBottom: 32 },
   chatOptionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 12 },
   chatOptionText: { fontSize: 16, color: colors.text },
   chatOptionDanger: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8 },
@@ -1360,9 +1363,10 @@ const createStyles = (colors) => StyleSheet.create({
   groupReadAvatar: { width:14, height:14, borderRadius:7, borderWidth:1.5, borderColor:'rgba(8,6,15,0.9)' },
   leaveGroupBtn: { flexDirection:'row', alignItems:'center', gap:12, paddingHorizontal:20, paddingVertical:18, marginTop:4, borderTopWidth:1, borderTopColor:'rgba(255,255,255,0.08)' },
   leaveGroupText: { fontSize:15, color:'#F87171', fontWeight:'700' },
-  groupInfoOverlay: { flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0,0,0.65)', zIndex:9999, elevation:10 },
-  groupInfoSheet: { borderTopLeftRadius:24, borderTopRightRadius:24, paddingBottom:32, overflow:'hidden' },
-  groupInfoHandle: { width:40, height:4, borderRadius:2, backgroundColor:'rgba(255,255,255,0.25)', alignSelf:'center', marginTop:14, marginBottom:4 },
+  groupInfoOverlay: { flex:1, justifyContent:'flex-end', backgroundColor:'rgba(8,6,15,0.88)', zIndex:9999, elevation:10 },
+  groupInfoSheet: { backgroundColor:'#08060F', borderTopLeftRadius:32, borderTopRightRadius:32, borderTopWidth:1, borderColor:'rgba(192,132,252,0.18)', paddingBottom:32, overflow:'hidden' },
+  sheetTopGrad: { position:'absolute', top:0, left:0, right:0, height:80, borderTopLeftRadius:32, borderTopRightRadius:32 },
+  groupInfoHandle: { width:40, height:4, borderRadius:2, backgroundColor:'rgba(192,132,252,0.30)', alignSelf:'center', marginTop:14, marginBottom:4 },
   groupInfoHeader: { flexDirection:'row', alignItems:'flex-start', paddingHorizontal:20, paddingVertical:14, gap:12 },
   groupInfoTitle: { fontSize:18, fontWeight:'800', letterSpacing:-0.3, marginBottom:2 },
   groupInfoSubtitle: { fontSize:13 },
@@ -1419,8 +1423,8 @@ const createStyles = (colors) => StyleSheet.create({
   input: { flex: 1, backgroundColor: colors.surface, borderRadius: 22, paddingHorizontal: 18, paddingVertical: 12, fontSize: 16, color: colors.text, maxHeight: 120, borderWidth: 1, borderColor: colors.border },
   sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { opacity: 0.5 },
-  modalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
-  stickerPanel: { backgroundColor: colors.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end' },
+  stickerPanel: { backgroundColor: '#08060F', borderTopLeftRadius: 32, borderTopRightRadius: 32, borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.18)', padding: 16 },
   stickerTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 12 },
   stickerRow: { marginBottom: 8 },
   stickerBtn: { padding: 12, marginRight: 8 },

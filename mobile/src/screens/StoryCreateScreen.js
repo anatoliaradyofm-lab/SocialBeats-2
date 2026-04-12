@@ -520,23 +520,6 @@ export default function StoryCreateScreen({ navigation }) {
               />
             )}
             {/* Zoom +/- butonları */}
-            {!editingText && (
-              <View style={s.photoZoomBtns}>
-                <TouchableOpacity style={s.photoZoomBtn} onPress={() => {
-                  const ns = Math.min(4, photoScaleRef.current + 0.25);
-                  photoScaleRef.current = ns; setPhotoScale(ns);
-                }}>
-                  <Ionicons name="add" size={18} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity style={s.photoZoomBtn} onPress={() => {
-                  const ns = Math.max(1, photoScaleRef.current - 0.25);
-                  photoScaleRef.current = ns; setPhotoScale(ns);
-                  if (ns <= 1) { photoOffsetRef.current = { x: 0, y: 0 }; setPhotoOffset({ x: 0, y: 0 }); }
-                }}>
-                  <Ionicons name="remove" size={18} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            )}
           </>
         )
         : <LinearGradient colors={gradient} style={StyleSheet.absoluteFill} />
@@ -596,7 +579,17 @@ export default function StoryCreateScreen({ navigation }) {
                 style={[s.textOut, {
                   color: ts.color,
                   textAlign,
-                  fontSize: Math.max(14, Math.min(72, Math.round(480 / Math.max(10, text.length) * textScale))),
+                  fontSize: (() => {
+                    const l = text.length;
+                    const base = l <= 30 ? 36 : l <= 60 ? 28 : l <= 120 ? 22 : l <= 250 ? 18 : 14;
+                    return Math.max(14, Math.min(72, Math.round(base * textScale)));
+                  })(),
+                  lineHeight: (() => {
+                    const l = text.length;
+                    const base = l <= 30 ? 36 : l <= 60 ? 28 : l <= 120 ? 22 : l <= 250 ? 18 : 14;
+                    const fs = Math.max(14, Math.min(72, Math.round(base * textScale)));
+                    return Math.max(18, Math.round(fs * 1.2));
+                  })(),
                 }]}
               >
                 {text}
@@ -626,7 +619,7 @@ export default function StoryCreateScreen({ navigation }) {
 
       {/* ── ÜST BAR ── */}
       {!editingText && (
-        <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
+        <View style={[s.topBar, { paddingTop: insets.top + 22 }]}>
           <TouchableOpacity style={s.iconBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="close" size={24} color="#fff" />
           </TouchableOpacity>
@@ -664,8 +657,8 @@ export default function StoryCreateScreen({ navigation }) {
       {/* ── ALT BAR ── */}
       {!editingText && (
         <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.75)']}
-          style={[s.bottomBar, { paddingBottom: insets.bottom + 8 }]}
+          colors={['transparent', 'transparent']}
+          style={[s.bottomBar, { paddingBottom: insets.bottom + 6 }]}
         >
           {/* Gradient renk seçici — medya yoksa */}
           {!mediaUri && (
@@ -720,14 +713,21 @@ export default function StoryCreateScreen({ navigation }) {
               style={[s.shareBtn, uploading && { opacity: 0.5 }]}
               onPress={submit}
               disabled={uploading}
+              activeOpacity={0.85}
             >
-              {uploading
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <>
-                    <Text style={s.shareBtnTxt}>Hikayene Ekle</Text>
-                    <Ionicons name="chevron-forward" size={16} color="#fff" />
-                  </>
-              }
+              <LinearGradient
+                colors={['#9333EA', '#C084FC', '#FB923C']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={s.shareBtnGrad}
+              >
+                {uploading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <>
+                      <Text style={s.shareBtnTxt}>Hikayene Ekle</Text>
+                      <Ionicons name="arrow-forward" size={16} color="#fff" />
+                    </>
+                }
+              </LinearGradient>
             </TouchableOpacity>
           </View>
 
@@ -772,20 +772,28 @@ export default function StoryCreateScreen({ navigation }) {
               <TouchableOpacity
                 style={s.doneBtn}
                 onPress={() => setEditingText(false)}
+                activeOpacity={0.85}
               >
-                <Text style={s.doneTxt}>Bitti</Text>
+                <LinearGradient
+                  colors={['#9333EA', '#C084FC']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={s.doneBtnGrad}
+                >
+                  <Text style={s.doneTxt}>Bitti</Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
 
-            {/* Input alanı — tüm metin görünür, gerekirse scroll */}
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={s.editorCanvas}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
+            {/* Input alanı — sabit layout, kayma olmaz */}
+            <View style={s.editorCanvas}>
               {(() => {
-                const editorFontSize = Math.max(14, Math.min(72, Math.round(480 / Math.max(10, text.length || 10) * textScale)));
+                const len = text.length || 1;
+                const editorFontSize = len <= 30  ? 36
+                                     : len <= 60  ? 28
+                                     : len <= 120 ? 22
+                                     : len <= 250 ? 18
+                                     :              14;
+                const scaled = Math.max(14, Math.min(72, Math.round(editorFontSize * textScale)));
                 return (
                   <View style={[
                     s.editorBubble,
@@ -795,23 +803,25 @@ export default function StoryCreateScreen({ navigation }) {
                       style={[s.editorInput, {
                         color: ts.color,
                         textAlign,
-                        fontSize: editorFontSize,
-                        lineHeight: Math.max(20, Math.round(editorFontSize * 1.3)),
+                        fontSize: scaled,
+                        lineHeight: Math.max(18, Math.round(scaled * 1.2)),
                       }]}
                       placeholder="Bir şey yaz..."
                       placeholderTextColor="rgba(255,255,255,0.35)"
                       value={text}
                       onChangeText={setText}
                       multiline
-                      scrollEnabled={false}
+                      scrollEnabled={true}
                       autoFocus
-                      maxLength={200}
+                      maxLength={500}
                       textAlignVertical="top"
                     />
                   </View>
                 );
               })()}
-            </ScrollView>
+            </View>
+            {/* Karakter sayacı */}
+            <Text style={s.charCounter}>{text.length}/500</Text>
 
             {/* Yazı stili seçici — klavye üstünde */}
             <View style={s.styleBar}>
@@ -868,9 +878,19 @@ export default function StoryCreateScreen({ navigation }) {
               setMusicSheet(false);
             }}
           />
-          <View style={[s.sheet, { position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: insets.bottom + 16 }]} onStartShouldSetResponder={() => true}>
+          <View style={[s.sheet, { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: insets.bottom + 16 }]} onStartShouldSetResponder={() => true}>
+            {/* Üst geçiş gradyanı */}
+            <LinearGradient
+              colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']}
+              locations={[0, 0.38, 0.68, 1]}
+              style={s.sheetTopGrad}
+              pointerEvents="none"
+            />
             <View style={s.handle} />
-            <Text style={s.sheetTitle}>Müzik Ekle</Text>
+            <View style={s.sheetTitleRow}>
+              <Ionicons name="musical-notes" size={18} color="#C084FC" />
+              <Text style={s.sheetTitle}>Müzik Ekle</Text>
+            </View>
 
             <TextInput
               style={s.sheetInput}
@@ -1017,13 +1037,12 @@ export default function StoryCreateScreen({ navigation }) {
             )}
             <TouchableOpacity
               style={s.actionBtn}
+              activeOpacity={0.85}
               onPress={async () => {
                 if (music) {
                   if (previewingId === music.id) {
-                    // Çalıyor — seçilen konuma atla ve devam et
                     await previewSoundRef.current?.playFromAsync?.(musicStartTime);
                   } else {
-                    // Çalmıyor — başlat
                     await togglePreview(music);
                   }
                 }
@@ -1032,7 +1051,13 @@ export default function StoryCreateScreen({ navigation }) {
                 setMusicList([]);
               }}
             >
-              <Text style={s.actionBtnTxt}>Bitti</Text>
+              <LinearGradient
+                colors={['#9333EA', '#C084FC', '#FB923C']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={s.actionBtnGrad}
+              >
+                <Text style={s.actionBtnTxt}>Bitti</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         </View>
@@ -1054,11 +1079,12 @@ const s = StyleSheet.create({
   toolCol: { alignItems: 'center', gap: 10 },
   iconBtn: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.42)',
+    backgroundColor: 'rgba(8,6,15,0.55)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center',
   },
   iconBtnOn: {
-    backgroundColor: 'rgba(192,132,252,0.22)',
+    backgroundColor: 'rgba(192,132,252,0.18)',
     borderWidth: 1, borderColor: '#C084FC',
   },
   aaText: { color: '#fff', fontSize: 16, fontWeight: '900' },
@@ -1107,9 +1133,9 @@ const s = StyleSheet.create({
   chip: {
     position: 'absolute', bottom: 210, left: 16,
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
-    borderWidth: 1, borderColor: 'rgba(192,132,252,0.30)',
+    backgroundColor: 'rgba(8,6,15,0.72)',
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 22,
+    borderWidth: 1, borderColor: 'rgba(192,132,252,0.40)',
     maxWidth: SW - 32, zIndex: 3, elevation: 5,
   },
   chipPoll: { bottom: 240 },
@@ -1118,7 +1144,7 @@ const s = StyleSheet.create({
   // ── Bottom bar
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    paddingTop: 8, zIndex: 10, elevation: 20,
+    paddingTop: 120, zIndex: 10, elevation: 20,
   },
   gradRow:        { flexGrow: 0, marginBottom: 14 },
   gradRowContent: { paddingHorizontal: 16, gap: 10, alignItems: 'center' },
@@ -1139,17 +1165,20 @@ const s = StyleSheet.create({
   },
   galleryBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 16, paddingVertical: 13, borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.20)',
+    paddingHorizontal: 18, paddingVertical: 14, borderRadius: 26,
+    backgroundColor: 'rgba(8,6,15,0.60)',
+    borderWidth: 1.5, borderColor: 'rgba(192,132,252,0.35)',
   },
-  galleryBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  galleryBtnTxt: { color: '#E9D5FF', fontSize: 14, fontWeight: '600' },
   shareBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', gap: 5,
-    backgroundColor: '#9333EA', borderRadius: 24, paddingVertical: 13,
+    flex: 1, borderRadius: 26, overflow: 'hidden',
   },
-  shareBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  shareBtnGrad: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: 6,
+    paddingVertical: 14,
+  },
+  shareBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '700', letterSpacing: 0.2 },
 
   // ── Text editor overlay
   editorBg: { backgroundColor: 'rgba(8,6,15,0.88)', zIndex: 20 },
@@ -1159,27 +1188,40 @@ const s = StyleSheet.create({
   },
   alignBtn: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(8,6,15,0.55)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center',
   },
   doneBtn: {
-    paddingHorizontal: 20, paddingVertical: 8,
-    backgroundColor: '#fff', borderRadius: 20,
+    borderRadius: 20, overflow: 'hidden',
   },
-  doneTxt: { color: '#000', fontSize: 14, fontWeight: '700' },
+  doneBtnGrad: {
+    paddingHorizontal: 20, paddingVertical: 9,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  doneTxt: { color: '#fff', fontSize: 14, fontWeight: '700' },
   editorCanvas: {
-    // minHeight:'100%' → kısa metinde ortalanır, uzun metinde üstten büyür; kayma olmaz
-    minHeight: '100%', alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 24, paddingVertical: 20,
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   editorBubble: {
-    width: '100%', borderRadius: 14,
-    paddingVertical: 16, paddingHorizontal: 16,
+    flex: 1, borderRadius: 14,
+    paddingVertical: 14, paddingHorizontal: 14,
   },
   editorInput: {
+    flex: 1,
     fontWeight: '700',
-    minHeight: 48, paddingVertical: 0,
+    paddingVertical: 0,
     ...( Platform.OS === 'web' && { outlineStyle: 'none' }),
+  },
+  charCounter: {
+    textAlign: 'right',
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 11,
+    paddingHorizontal: 20,
+    paddingBottom: 4,
   },
   // ── Sürükleme çöp kutusu
   trashZone: {
@@ -1199,58 +1241,68 @@ const s = StyleSheet.create({
     color: '#fff', fontSize: 12, fontWeight: '600',
   },
   styleBar: {
-    backgroundColor: 'rgba(0,0,0,0.50)',
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(8,6,15,0.80)',
+    borderTopWidth: 1, borderTopColor: 'rgba(192,132,252,0.15)',
   },
   styleBarContent: { paddingHorizontal: 14, paddingVertical: 12, gap: 8, alignItems: 'center' },
   stylePill: {
     paddingHorizontal: 18, paddingVertical: 9,
-    borderRadius: 22, borderWidth: 2, borderColor: 'transparent',
+    borderRadius: 22, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
-  stylePillOn:  { borderColor: '#fff' },
+  stylePillOn:  { borderColor: '#C084FC', backgroundColor: 'rgba(192,132,252,0.15)' },
   stylePillTxt: { fontSize: 14, fontWeight: '700' },
 
   // ── Sheets (QENARA palette)
   sheetBg: {
-    flex: 1, backgroundColor: 'rgba(8,6,15,0.82)', justifyContent: 'flex-end',
-    // web: absoluteFill kullanır, bu flex 1 işe yarar
+    flex: 1, backgroundColor: 'rgba(8,6,15,0.88)', justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#1C1432',
-    borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 20,
-    borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.12)',
+    backgroundColor: '#08060F',
+    borderTopLeftRadius: 32, borderTopRightRadius: 32,
+    paddingHorizontal: 20, paddingTop: 0, paddingBottom: 0,
+    borderTopWidth: 1, borderColor: 'rgba(192,132,252,0.18)',
+    overflow: 'hidden',
+  },
+  sheetTopGrad: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: 110,
+    borderTopLeftRadius: 32, borderTopRightRadius: 32,
   },
   handle: {
-    width: 44, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.18)', alignSelf: 'center', marginBottom: 16,
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(192,132,252,0.30)', alignSelf: 'center',
+    marginTop: 12, marginBottom: 14,
   },
-  sheetTitle: { color: '#F8F8F8', fontSize: 16, fontWeight: '700', marginBottom: 12 },
+  sheetTitleRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14,
+  },
+  sheetTitle: { color: '#F8F8F8', fontSize: 16, fontWeight: '700' },
   sheetInput: {
-    backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 14,
-    paddingHorizontal: 14, paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 13,
     fontSize: 15, color: '#F8F8F8', marginBottom: 10,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1, borderColor: 'rgba(192,132,252,0.20)',
   },
   resultRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)',
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
   },
   resultRowSelected: {
-    backgroundColor: 'rgba(192,132,252,0.08)', borderRadius: 12, paddingHorizontal: 6,
+    backgroundColor: 'rgba(192,132,252,0.10)', borderRadius: 14, paddingHorizontal: 8,
   },
   resultIcon: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: 'rgba(192,132,252,0.12)',
+    width: 42, height: 42, borderRadius: 13,
+    backgroundColor: 'rgba(192,132,252,0.10)',
+    borderWidth: 1, borderColor: 'rgba(192,132,252,0.18)',
     alignItems: 'center', justifyContent: 'center',
   },
   resultIconPlaying: {
-    backgroundColor: 'rgba(192,132,252,0.28)',
-    borderWidth: 1, borderColor: 'rgba(192,132,252,0.5)',
+    backgroundColor: 'rgba(192,132,252,0.25)',
+    borderColor: '#C084FC',
   },
   resultTitle: { color: '#F8F8F8', fontSize: 14, fontWeight: '600' },
-  resultSub:   { color: 'rgba(248,248,248,0.45)', fontSize: 12, marginTop: 1 },
-  emptyTxt:    { color: 'rgba(248,248,248,0.35)', textAlign: 'center', paddingVertical: 24, fontSize: 14 },
+  resultSub:   { color: 'rgba(248,248,248,0.40)', fontSize: 12, marginTop: 2 },
+  emptyTxt:    { color: 'rgba(248,248,248,0.30)', textAlign: 'center', paddingVertical: 28, fontSize: 14 },
 
   // ── Scrubber — Instagram tarzı klip seçici
   scrubContainer: {
@@ -1312,10 +1364,11 @@ const s = StyleSheet.create({
 
   removeBtn: {
     borderRadius: 14, paddingVertical: 12, alignItems: 'center',
-    marginTop: 8, borderWidth: 1, borderColor: 'rgba(248,113,113,0.40)',
-    backgroundColor: 'rgba(248,113,113,0.06)',
+    marginTop: 10, borderWidth: 1, borderColor: 'rgba(248,113,113,0.30)',
+    backgroundColor: 'rgba(248,113,113,0.05)',
   },
-  removeTxt:     { color: '#F87171', fontSize: 14, fontWeight: '600' },
-  actionBtn:     { backgroundColor: '#9333EA', borderRadius: 16, paddingVertical: 14, alignItems: 'center', marginTop: 10 },
-  actionBtnTxt:  { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
+  removeTxt:    { color: '#F87171', fontSize: 14, fontWeight: '600' },
+  actionBtn:    { borderRadius: 18, overflow: 'hidden', marginTop: 10, marginBottom: 4 },
+  actionBtnGrad:{ paddingVertical: 15, alignItems: 'center' },
+  actionBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
 });

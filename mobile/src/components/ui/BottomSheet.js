@@ -12,6 +12,7 @@ import {
   Dimensions,
   TouchableWithoutFeedback,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -70,6 +71,7 @@ export default function BottomSheet({
           },
         ]}
       >
+        <LinearGradient colors={['rgba(26,10,46,0.35)', 'rgba(16,8,28,0.10)', 'rgba(10,5,18,0.02)', 'transparent']} locations={[0, 0.38, 0.68, 1]} style={styles.topGrad} pointerEvents="none" />
         <View style={styles.handle} />
         {title && (
           <View style={styles.header}>
@@ -88,21 +90,24 @@ export default function BottomSheet({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(8,6,15,0.88)',
   },
   sheet: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#1a1a1a',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: '#08060F',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    borderTopWidth: 1,
+    borderColor: 'rgba(192,132,252,0.18)',
   },
+  topGrad: { position: 'absolute', top: 0, left: 0, right: 0, height: 110, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
   handle: {
     width: 40,
     height: 4,
-    backgroundColor: '#555',
+    backgroundColor: 'rgba(192,132,252,0.30)',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
