@@ -75,10 +75,12 @@ export default function MainTabNavigator() {
 
   return (
     <Tab.Navigator
+      tabBarHideOnKeyboard={false}
       screenOptions={({ route }) => {
         const tab = TABS.find(t => t.name === route.name);
         return {
           headerShown: false,
+          lazy: false,
           tabBarIcon: ({ focused }) =>
             <AnimatedTabIcon
               name={route.name}
@@ -118,7 +120,7 @@ export default function MainTabNavigator() {
       <Tab.Screen name="Home"    component={DashboardScreen}     />
       <Tab.Screen name="Library" component={PlaylistsScreen}     />
       <Tab.Screen name="Rooms"   component={ListeningRoomScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarStyle: { display: 'none' } }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }

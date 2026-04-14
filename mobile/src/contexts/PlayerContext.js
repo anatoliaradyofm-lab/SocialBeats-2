@@ -17,7 +17,7 @@ function normalizeTrack(track) {
     artist:    track.artist || track.artist_name || '',
     thumbnail: track.thumbnail || track.cover_url,
     cover_url: track.cover_url || track.thumbnail,
-    audio_url: track.audio_url || track.stream_url || null,
+    audio_url: track.audio_url || track.stream_url || track.preview_url || null,
     source:    track.source || null,
     duration:  track.duration || 0,
     genres:    track.genres || [],
@@ -211,7 +211,7 @@ export function PlayerProvider({ children }) {
   // Track the 30s play timer ref so we can cancel on skip
   const playRecordTimerRef = useRef(null);
 
-  const playTrack = async (track, trackList = null) => {
+  const playTrack = async (track, trackList = null, { showFull = false } = {}) => {
     if (!track) return;
     const normalized = normalizeTrack(track);
 
@@ -228,7 +228,7 @@ export function PlayerProvider({ children }) {
     // Cancel any pending record timer from previous track
     if (playRecordTimerRef.current) clearTimeout(playRecordTimerRef.current);
 
-    await playTrackInternal(track, true);
+    await playTrackInternal(track, showFull);
     addToListeningHistory(normalized).catch(() => {});
 
     // Record to backend after 30s (counts as a real play, not a skip)
@@ -262,7 +262,14 @@ export function PlayerProvider({ children }) {
 
   const closePlayer = async () => {
     if (hasAudioUrl.current) await audioService.stop();
+    hasAudioUrl.current = false;
+    setCurrentTrack(null);
+    setIsPlaying(false);
     setIsFullVisible(false);
+    setQueue([]);
+    setCurrentIndex(0);
+    setPositionMillis(0);
+    setDurationMillis(0);
   };
 
   const setVolume = async (v) => {

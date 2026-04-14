@@ -30,6 +30,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
+import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../services/api';
 import { getApiUrl } from '../services/api';
@@ -296,6 +297,7 @@ export default function StoryViewerScreen({ route, navigation }) {
   const { colors } = useTheme();
   const insets     = useSafeAreaInsets();
   const { token, user } = useAuth();
+  const { playTrack } = usePlayer();
   const { feed, startUserIndex = 0, startStoryIndex = 0 } = route.params || {};
 
   // ── Temel state ──
@@ -588,9 +590,9 @@ export default function StoryViewerScreen({ route, navigation }) {
           return;
         }
 
-        if (g.dy > 80) {
+        if (g.dy > 40 || (g.dy > 10 && g.vy > 0.8)) {
           // Aşağı kaydır → kapat
-          Animated.timing(slideAnim, { toValue: SH, duration: 250, useNativeDriver: true })
+          Animated.timing(slideAnim, { toValue: SH, duration: 120, useNativeDriver: true })
             .start(() => navigation.goBack());
           return;
         }
@@ -1008,13 +1010,24 @@ export default function StoryViewerScreen({ route, navigation }) {
         </TouchableOpacity>
       )}
       {story.music_track_id && (
-        <View style={st.musicBar}>
-          <Ionicons name="musical-notes" size={15} color="#fff" />
+        <TouchableOpacity
+          style={st.musicBar}
+          activeOpacity={0.85}
+          onPress={() => {
+            if (story.music_track) playTrack(story.music_track, null, { showFull: true });
+          }}
+        >
+          <LinearGradient
+            colors={['#9333EA', '#C084FC', '#FB923C']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <Ionicons name="musical-notes" size={13} color="#fff" />
           <Text style={st.musicBarText} numberOfLines={1} selectable={false}>
             {story.music_track?.title || story.music_title || story.music_track_id}
-            {story.music_track?.artist ? ` · ${story.music_track.artist}` : ''}
           </Text>
-        </View>
+        </TouchableOpacity>
       )}
       {story.countdown_end && (
         <CountdownOverlay endTime={story.countdown_end} title={story.countdown_title} />
@@ -1635,23 +1648,24 @@ const st = StyleSheet.create({
     fontWeight: '600',
   },
   musicBar: {
-    position:       'absolute',
-    bottom:         100,
-    left:           14,
-    right:          14,
-    flexDirection:  'row',
-    alignItems:     'center',
-    gap:            8,
-    backgroundColor:'rgba(0,0,0,0.55)',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius:   22,
-    zIndex:         5,
+    position:          'absolute',
+    top:               106,
+    left:              12,
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               5,
+    paddingHorizontal: 10,
+    paddingVertical:   7,
+    borderRadius:      20,
+    zIndex:            5,
+    maxWidth:          120,
+    overflow:          'hidden',
   },
   musicBarText: {
-    flex:     1,
-    color:    '#fff',
-    fontSize: 13,
+    color:      '#fff',
+    fontSize:   11,
+    fontWeight: '700',
+    flexShrink: 1,
   },
 
   // Yakın arkadaşlar rozeti

@@ -112,7 +112,7 @@ const eb = StyleSheet.create({
 });
 
 // ── Main FullPlayer ────────────────────────────────────────────────────────────
-export default function FullPlayer({ visible, onClose, navigation }) {
+export default function FullPlayer({ visible: visibleProp, onClose: onCloseProp, navigation }) {
   const { colors } = useTheme();
   const insets     = useSafeAreaInsets();
   const player     = usePlayer() || {};
@@ -129,7 +129,13 @@ export default function FullPlayer({ visible, onClose, navigation }) {
     toggleShuffle,
     repeatMode,
     toggleRepeat,
+    isFullVisible,
+    hideFullPlayer,
   } = player;
+
+  // Support both prop-driven (legacy) and context-driven usage
+  const visible = visibleProp !== undefined ? visibleProp : (isFullVisible ?? false);
+  const onClose = onCloseProp || hideFullPlayer || (() => {});
 
   // Derived values
   const progress = durationMillis > 0 ? positionMillis / durationMillis : 0;

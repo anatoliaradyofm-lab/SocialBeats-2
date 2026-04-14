@@ -63,13 +63,16 @@ export default function MiniPlayer({ tabBarHeight = 64, onPress }) {
 
   useEffect(() => {
     if (isPlaying) {
-      Animated.loop(
+      const loop = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.08, duration: 800, useNativeDriver: true }),
           Animated.timing(pulseAnim, { toValue: 1,    duration: 800, useNativeDriver: true }),
         ])
-      ).start();
+      );
+      loop.start();
+      return () => { loop.stop(); pulseAnim.setValue(1); };
     } else {
+      pulseAnim.stopAnimation();
       pulseAnim.setValue(1);
     }
   }, [isPlaying]);

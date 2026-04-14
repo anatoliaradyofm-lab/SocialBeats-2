@@ -7,7 +7,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Image,
   TextInput, ActivityIndicator, FlatList,
   Dimensions, ScrollView, KeyboardAvoidingView,
-  Platform, Pressable, StatusBar, Linking,
+  Platform, Pressable, StatusBar, Linking, Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -346,10 +346,12 @@ export default function StoryCreateScreen({ navigation }) {
   const [questionPos, setQuestionPos] = useState(null);
   const [mentionPos,  setMentionPos]  = useState(null);
   const [pollPos,     setPollPos]     = useState(null);
+  const [musicPos,    setMusicPos]    = useState(null);
   const linkPosRef     = useRef(null);
   const questionPosRef = useRef(null);
   const mentionPosRef  = useRef(null);
   const pollPosRef     = useRef(null);
+  const musicPosRef    = useRef(null);
 
   // Mention ölçeği
   const [mentionScale, setMentionScale] = useState(1);
@@ -395,6 +397,63 @@ export default function StoryCreateScreen({ navigation }) {
   useEffect(() => {
     if (!text.trim()) { textPosRef.current = null; setTextPos(null); }
   }, [text]);
+
+  // musicDuration değişince ref güncelle (stale closure koruması)
+  useEffect(() => { musicDurationRef.current = musicDuration; }, [musicDuration]);
+
+  // Web: doğrudan DOM mousemove — RN responder pipeline'ını bypass eder, lag sıfır
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    let dragging = false;
+    let startClientX = 0;
+    let startLeft = 0;
+    const onMouseDown = (e) => {
+      const el = scrubTrackRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect?.();
+      if (!rect) return;
+      if (e.clientX < rect.left || e.clientX > rect.right ||
+          e.clientY < rect.top  || e.clientY > rect.bottom) return;
+      dragging = true;
+      startClientX = e.clientX;
+      startLeft = scrubWinLeftRef.current;
+      e.preventDefault();
+    };
+    const onMouseMove = (e) => {
+      if (!dragging) return;
+      const sc = window.__phoneScale || 1;
+      const dx = (e.clientX - startClientX) / sc;
+      const w  = scrubBarWRef.current;
+      const d  = musicDurationRef.current || 120;
+      const sw = d > 0 ? Math.min(w, (30 / d) * w) : w * 0.3;
+      const sl = Math.max(0, Math.min(w - sw, startLeft + dx));
+      scrubWinLeftRef.current = sl;
+      const st = d > 0 ? (sl / w) * d : 0;
+      musicStartRef.current   = st;
+      scrubWinLeft.setValue(sl);
+      scrubWinWidth.setValue(sw);
+      scrubStartTxtRef.current?.setNativeProps({ children: formatSeconds(st) });
+      scrubEndTxtRef.current?.setNativeProps({ children: formatSeconds(Math.min(d, st + 30)) });
+    };
+    const onMouseUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      const st = musicStartRef.current;
+      setMusicStartTime(st);
+      previewSoundRef.current?.seekAsync?.(st);
+      previewSoundRef.current?.setPositionAsync?.(st * 1000);
+      previewSoundRef.current?.playAsync?.();
+    };
+    window.addEventListener('mousedown', onMouseDown, { capture: true });
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup',   onMouseUp);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown, { capture: true });
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup',   onMouseUp);
+    };
+  }, []);
+
 
   // Web drag — canvas container'a tek bir window mousedown listener.
   // Metin elementinin DOM lifecycle'ından bağımsız, her zaman çalışır.
@@ -553,11 +612,22 @@ export default function StoryCreateScreen({ navigation }) {
   const photoGestureStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
 
   // Scrubber state & refs
-  const [scrubBarW, setScrubBarW] = useState(SW - 80);
-  const scrubBarWRef  = useRef(SW - 80);
-  const scrubBaseTime = useRef(0);
-  const scrubGestureX = useRef(0);
-  const scrubLastSeek = useRef(0);   // throttle için
+  const [scrubBarW] = useState(SW - 80); // sadece başlangıç değeri
+  const scrubBarWRef    = useRef(SW - 80);
+  const scrubBaseTime   = useRef(0);
+  const scrubGestureX   = useRef(0);
+  const scrubLastSeek   = useRef(0);
+  const musicStartRef   = useRef(0);
+  const musicDurationRef = useRef(null);
+  const scrubWinLeft    = useRef(new Animated.Value(0)).current;
+  const scrubWinWidth   = useRef(new Animated.Value((SW - 80) * 0.3)).current;
+  const scrubWinRight   = Animated.add(scrubWinLeft, scrubWinWidth);
+  const scrubTrackRef   = useRef(null);
+  const scrubTrackX     = useRef(0);
+  const scrubBaseLeft   = useRef(0);
+  const scrubStartTxtRef = useRef(null); // setNativeProps ile re-render'sız güncelleme
+  const scrubEndTxtRef   = useRef(null);
+  const scrubWinLeftRef = useRef(0);   // Animated değerini takip eder
 
   // Diğer
   const [uploading, setUploading] = useState(false);
@@ -610,17 +680,21 @@ export default function StoryCreateScreen({ navigation }) {
 
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images', 'videos'], // v17 zorunlu format
+        mediaTypes: ['images', 'videos'],
         allowsEditing: false,
-        quality: 0.9,
+        quality: 0.75,
+        exif: false,
+        base64: false,
       });
 
       if (result.canceled) return;
 
       const asset = result.assets?.[0];
       if (asset?.uri) {
+        const isVid = asset.type === 'video' || /\.(mp4|mov|mkv|webm)$/i.test(asset.uri);
+        // Tek seferlik batch güncelleme — iki re-render yerine bir
+        setMediaIsVideo(isVid);
         setMediaUri(asset.uri);
-        setMediaIsVideo(asset.type === 'video' || /\.(mp4|mov|mkv|webm)$/i.test(asset.uri));
       }
     } catch (e) {
       Alert.alert('Galeri Hatası', e?.message || 'Galeri açılamadı.');
@@ -630,7 +704,7 @@ export default function StoryCreateScreen({ navigation }) {
   // ── Galeri'yi ekran açılınca otomatik aç ──────────────────────────────────
   useEffect(() => {
     if (!isGuest && token) {
-      const t = setTimeout(pickMedia, 150);
+      const t = setTimeout(pickMedia, 50);
       return () => clearTimeout(t);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -686,11 +760,17 @@ export default function StoryCreateScreen({ navigation }) {
           pauseAsync:    () => { audio.pause(); return Promise.resolve(); },
           unloadAsync:   () => { audio.pause(); audio.src = ''; return Promise.resolve(); },
           seekAsync:     (s) => { try { audio.currentTime = s; } catch {} return Promise.resolve(); },
+          playAsync:     () => { audio.play().catch(() => {}); return Promise.resolve(); },
           playFromAsync: async (s) => { try { audio.currentTime = s; await audio.play(); } catch {} },
         };
         setPreviewingId(item.id);
         audio.addEventListener('loadedmetadata', () => {
-          if (audio.duration && isFinite(audio.duration)) setMusicDuration(Math.floor(audio.duration));
+          if (audio.duration && isFinite(audio.duration)) {
+            const dur = Math.floor(audio.duration);
+            setMusicDuration(dur);
+            const w = scrubBarWRef.current;
+            scrubWinWidth.setValue(dur > 0 ? Math.min(w, (30 / dur) * w) : w * 0.3);
+          }
         });
         setTimeout(() => { audio.pause(); setPreviewingId(null); }, 30000);
       } catch {
@@ -813,8 +893,8 @@ export default function StoryCreateScreen({ navigation }) {
                              : undefined,
       }, token);
       // Pozisyonu sıfırla
-      textPosRef.current = null;
-      setTextPos(null);
+      textPosRef.current  = null; setTextPos(null);
+      musicPosRef.current = null; setMusicPos(null);
       setTextScale(1);
       photoScaleRef.current = 1;
       photoOffsetRef.current = { x: 0, y: 0 };
@@ -978,23 +1058,20 @@ export default function StoryCreateScreen({ navigation }) {
         )}
       </View>
 
-      {/* ── MÜZİK STİCKER ── */}
+      {/* ── MÜZİK STİCKER — avatar/zaman damgasının altına sabitlenmiş ── */}
       {music && (
         <TouchableOpacity
-          style={s.musicSticker}
+          style={[s.musicSticker, { top: insets.top + 70 }]}
           onPress={() => setMusicSheet(true)}
           activeOpacity={0.85}
         >
           <LinearGradient
-            colors={['rgba(124,58,237,0.90)', 'rgba(192,132,252,0.90)']}
+            colors={['#9333EA', '#C084FC', '#FB923C']}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
             style={s.musicStickerGrad}
           >
-            <Ionicons name="musical-notes" size={15} color="#fff" />
+            <Ionicons name="musical-notes" size={13} color="#fff" />
             <Text style={s.musicStickerTxt} numberOfLines={1}>{music.title || music.name}</Text>
-            <TouchableOpacity onPress={() => setMusic(null)} hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
-              <Ionicons name="close" size={15} color="rgba(255,255,255,0.7)" />
-            </TouchableOpacity>
           </LinearGradient>
         </TouchableOpacity>
       )}
@@ -1186,11 +1263,17 @@ export default function StoryCreateScreen({ navigation }) {
 
           {/* Fotoğraf/Video + Paylaş */}
           <View style={s.actionRow}>
-            <TouchableOpacity style={s.galleryBtn} onPress={pickMedia}>
-              <Ionicons name="images-outline" size={22} color="#fff" />
-              <Text style={s.galleryBtnTxt}>
-                {mediaUri ? 'Değiştir' : 'Fotoğraf / Video'}
-              </Text>
+            <TouchableOpacity style={s.galleryBtn} onPress={pickMedia} activeOpacity={0.85}>
+              <LinearGradient
+                colors={['#9333EA', '#C084FC']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={s.galleryBtnInner}
+              >
+                <Ionicons name="images-outline" size={22} color="#fff" />
+                <Text style={s.galleryBtnTxt}>
+                  {mediaUri ? 'Değiştir' : 'Fotoğraf / Video'}
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1815,6 +1898,10 @@ export default function StoryCreateScreen({ navigation }) {
                         onPress={() => {
                           setMusic(item);
                           setMusicStartTime(0);
+                          musicStartRef.current = 0;
+                          scrubWinLeftRef.current = 0;
+                          scrubBaseLeft.current = 0;
+                          scrubWinLeft.setValue(0);
                           togglePreview(item);
                         }}
                       >
@@ -1847,75 +1934,98 @@ export default function StoryCreateScreen({ navigation }) {
                 />
             }
 
-            {/* Bölüm seçici — Instagram tarzı görsel scrubber */}
+            {/* Bölüm seçici — QENARA premium tasarım */}
             {music && (() => {
-              const dur = musicDuration || 0;
-              const segLeft  = dur > 0 ? (musicStartTime / dur) * scrubBarW : 0;
-              const segWidth = dur > 0 ? Math.min(scrubBarW - segLeft, (30 / dur) * scrubBarW) : scrubBarW * 0.25;
+              const dur     = musicDuration || 0;
+              const endTime = dur > 0 ? Math.min(dur, musicStartTime + 30) : musicStartTime + 30;
+              const WAVE    = [4,7,12,18,26,34,40,44,38,30,22,16,20,28,36,44,40,32,24,18,14,20,30,38,44,42,34,26,18,12,16,24,32,40,44,38,28,20,14,10,8,12,18,24,30,26,18,12,8,5];
               return (
-                <View style={s.scrubContainer}>
-                  {/* Zaman etiketleri */}
-                  <View style={s.scrubTimeRow}>
-                    <Text style={s.scrubTimeTxt}>{formatSeconds(musicStartTime)}</Text>
-                    <View style={s.scrubPill}>
-                      <Ionicons name="musical-notes" size={11} color="#C084FC" />
-                      <Text style={s.scrubPillTxt}>30 saniyelik klip</Text>
-                    </View>
-                    <Text style={s.scrubTimeTxt}>
-                      {dur > 0 ? formatSeconds(Math.min(dur, musicStartTime + 30)) : '0:30'}
-                    </Text>
+                <LinearGradient
+                  colors={['#08060F', '#0B1120', '#0F1B35']}
+                  start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }}
+                  style={s.scrubContainer}
+                >
+
+                  {/* ── Rozet satırı ── */}
+                  <View style={s.scrubBadgeRow}>
+                    <LinearGradient
+                      colors={['#9333EA', '#C084FC', '#FB923C']}
+                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                      style={s.scrubBadge}
+                    >
+                      <Ionicons name="musical-notes" size={13} color="#fff" />
+                      <Text style={s.scrubBadgeTxt}>30 saniyelik klip</Text>
+                    </LinearGradient>
                   </View>
 
-                  {/* Scrubber track */}
+                  {/* ── Waveform track ── */}
                   <View
+                    ref={scrubTrackRef}
                     style={s.scrubTrackOuter}
                     onLayout={(e) => {
                       const w = e.nativeEvent.layout.width;
-                      setScrubBarW(w);
                       scrubBarWRef.current = w;
                     }}
                     onStartShouldSetResponder={() => true}
+                    onMoveShouldSetResponder={() => true}
                     onResponderGrant={(e) => {
-                      scrubBaseTime.current = musicStartTime;
-                      scrubGestureX.current = e.nativeEvent.pageX;
-                      scrubLastSeek.current = 0;
-                      // Dokunulan noktaya hemen atla
-                      const lx = Math.max(0, Math.min(scrubBarWRef.current, e.nativeEvent.locationX ?? 0));
-                      const d = musicDuration || 120;
-                      const newStart = Math.max(0, Math.min(d - 30, (lx / scrubBarWRef.current) * d));
-                      setMusicStartTime(newStart);
-                      scrubBaseTime.current = newStart;
+                      scrubGestureX.current  = e.nativeEvent.pageX;
+                      scrubBaseLeft.current  = scrubWinLeftRef.current;
+                      scrubLastSeek.current  = 0;
                     }}
                     onResponderMove={(e) => {
-                      const dx = e.nativeEvent.pageX - scrubGestureX.current;
-                      const d  = musicDuration || 120;
-                      const dt = (dx / scrubBarWRef.current) * d;
-                      const newStart = Math.max(0, Math.min(d - 30, scrubBaseTime.current + dt));
-                      setMusicStartTime(newStart);
-                      // Sürükleme sırasında throttled seek (80ms)
-                      const now = Date.now();
-                      if (now - scrubLastSeek.current > 80) {
-                        scrubLastSeek.current = now;
-                        previewSoundRef.current?.seekAsync?.(newStart);
-                        previewSoundRef.current?.setPositionAsync?.(newStart * 1000);
-                      }
+                      const dxPx = e.nativeEvent.pageX - scrubGestureX.current;
+                      const w    = scrubBarWRef.current;
+                      const d    = musicDuration || 120;
+                      const sw   = d > 0 ? Math.min(w, (30 / d) * w) : w * 0.3;
+                      const sl   = Math.max(0, Math.min(w - sw, scrubBaseLeft.current + dxPx));
+                      scrubWinLeftRef.current = sl;
+                      musicStartRef.current   = d > 0 ? (sl / w) * d : 0;
+                      scrubWinLeft.setValue(sl);
+                      scrubWinWidth.setValue(sw);
                     }}
                     onResponderRelease={() => {
-                      // Bırakınca kesin konuma atla
-                      previewSoundRef.current?.seekAsync?.(musicStartTime);
-                      previewSoundRef.current?.setPositionAsync?.(musicStartTime * 1000);
+                      const st = musicStartRef.current;
+                      setMusicStartTime(st);
+                      previewSoundRef.current?.seekAsync?.(st);
+                      previewSoundRef.current?.setPositionAsync?.(st * 1000);
+                      previewSoundRef.current?.playAsync?.();
                     }}
                   >
-                    {/* Tam parça arka plan */}
-                    <View style={s.scrubTrackBg} />
-                    {/* Seçili 30 saniyelik segment */}
-                    <View style={[s.scrubSegment, { left: segLeft, width: Math.max(4, segWidth) }]} />
-                    {/* Başlangıç tutacağı */}
-                    <View style={[s.scrubHandle, { left: Math.max(0, segLeft - 10) }]} />
+                    {/* Gradient arka plan — Bitti butonu ile aynı */}
+                    <LinearGradient
+                      colors={['#9333EA', '#C084FC', '#FB923C']}
+                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                      style={StyleSheet.absoluteFill}
+                      pointerEvents="none"
+                    />
+                    {/* Waveform barları */}
+                    <View style={s.scrubWaveRow} pointerEvents="none">
+                      {WAVE.map((h, i) => (
+                        <View key={i} style={[s.scrubWaveBar, { height: h }]} />
+                      ))}
+                    </View>
+
+                    {/* Sol karartma — Animated, re-render yok */}
+                    <Animated.View style={[s.scrubDim, { left: 0, width: scrubWinLeft }]} pointerEvents="none" />
+                    {/* Sağ karartma */}
+                    <Animated.View style={[s.scrubDim, { left: scrubWinRight, right: 0 }]} pointerEvents="none" />
+
+                    {/* Seçili pencere */}
+                    <Animated.View style={[s.scrubWindow, { left: scrubWinLeft, width: scrubWinWidth }]} pointerEvents="none">
+                      <LinearGradient colors={['#9333EA', '#C084FC', '#FB923C']} style={s.scrubHandleL} />
+                      <LinearGradient colors={['#9333EA', '#C084FC', '#FB923C']} style={s.scrubHandleR} />
+                    </Animated.View>
                   </View>
 
-                  <Text style={s.scrubHint}>Klip başlangıcını seçmek için kaydır</Text>
-                </View>
+                  {/* ── Zaman satırı ── */}
+                  <View style={s.scrubTimeRow}>
+                    <Text ref={scrubStartTxtRef} style={s.scrubTimeTxt}>{formatSeconds(musicStartTime)}</Text>
+                    <Text style={s.scrubTimeHint}>kaydır</Text>
+                    <Text ref={scrubEndTxtRef} style={s.scrubTimeTxt}>{formatSeconds(endTime)}</Text>
+                  </View>
+
+                </LinearGradient>
               );
             })()}
 
@@ -1928,8 +2038,15 @@ export default function StoryCreateScreen({ navigation }) {
                   previewSoundRef.current?.pauseAsync().catch(() => {});
                   setPreviewingId(null);
                 }}
+                activeOpacity={0.85}
               >
-                <Text style={s.removeTxt}>Müziği Kaldır</Text>
+                <LinearGradient
+                  colors={['#9333EA', '#C084FC', '#FB923C']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={s.removeBtnGrad}
+                >
+                  <Text style={s.removeTxt}>Müziği Kaldır</Text>
+                </LinearGradient>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -2026,18 +2143,18 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
 
-  // ── Müzik sticker (bottom-left pill)
+  // ── Müzik sticker (top-left pill — Bitti stili)
   musicSticker: {
-    position: 'absolute', bottom: 185, left: 14,
+    position: 'absolute', left: 14,
     zIndex: 3, elevation: 5,
-    borderRadius: 24, overflow: 'hidden',
-    maxWidth: 240,
+    borderRadius: 20, overflow: 'hidden',
+    maxWidth: 120,
   },
   musicStickerGrad: {
-    flexDirection: 'row', alignItems: 'center', gap: 7,
-    paddingHorizontal: 14, paddingVertical: 9,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 7,
   },
-  musicStickerTxt: { color: '#fff', fontSize: 13, fontWeight: '600', flexShrink: 1 },
+  musicStickerTxt: { color: '#fff', fontSize: 11, fontWeight: '700', flexShrink: 1 },
 
   // ── Link sticker (dark glassmorphism pill)
   linkSticker: {
@@ -2214,12 +2331,11 @@ const s = StyleSheet.create({
     paddingHorizontal: 14, gap: 10,
   },
   galleryBtn: {
+    borderRadius: 26, overflow: 'hidden',
+  },
+  galleryBtnInner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 18, paddingVertical: 13, borderRadius: 26,
-    backgroundColor: 'rgba(12,5,28,0.82)',
-    borderWidth: 1.5, borderColor: 'rgba(139,92,246,0.55)',
-    shadowColor: '#7C3AED', shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    paddingHorizontal: 18, paddingVertical: 13,
   },
   galleryBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '700' },
   shareBtn: {
@@ -2406,70 +2522,77 @@ const s = StyleSheet.create({
   resultSub:   { color: 'rgba(248,248,248,0.40)', fontSize: 12, marginTop: 2 },
   emptyTxt:    { color: 'rgba(248,248,248,0.30)', textAlign: 'center', paddingVertical: 28, fontSize: 14 },
 
-  // ── Scrubber — Instagram tarzı klip seçici
+  // ── Scrubber — QENARA premium tasarım
   scrubContainer: {
     marginTop: 14,
-    backgroundColor: 'rgba(192,132,252,0.07)',
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 22,
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14,
     borderWidth: 1,
-    borderColor: 'rgba(192,132,252,0.18)',
+    borderColor: 'rgba(147,51,234,0.35)',
+  },
+  scrubBadgeRow: {
+    alignItems: 'center', marginBottom: 14,
+  },
+  scrubBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6,
+    borderWidth: 1, borderColor: 'rgba(192,132,252,0.45)',
+  },
+  scrubBadgeTxt: { color: '#fff', fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
+  scrubTrackOuter: {
+    width: '100%', height: 56,
+    borderRadius: 14,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  scrubWaveRow: {
+    position: 'absolute',
+    left: 0, right: 0, top: 0, bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+  },
+  scrubWaveBar: {
+    width: 3, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+  },
+  scrubDim: {
+    position: 'absolute', top: 0, bottom: 0,
+    backgroundColor: 'rgba(8,6,15,0.72)',
+  },
+  scrubWindow: {
+    position: 'absolute', top: 0, bottom: 0,
+    backgroundColor: 'rgba(147,51,234,0.28)',
+    borderTopWidth: 2.5, borderBottomWidth: 2.5,
+    borderColor: '#C084FC',
+  },
+  scrubHandleL: {
+    position: 'absolute', left: 0, top: 0, bottom: 0,
+    width: 6, borderTopLeftRadius: 4, borderBottomLeftRadius: 4,
+  },
+  scrubHandleR: {
+    position: 'absolute', right: 0, top: 0, bottom: 0,
+    width: 6, borderTopRightRadius: 4, borderBottomRightRadius: 4,
   },
   scrubTimeRow: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 12,
+    justifyContent: 'space-between', marginTop: 12,
   },
-  scrubTimeTxt: { color: '#C084FC', fontSize: 13, fontWeight: '700', minWidth: 36 },
-  scrubPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: 'rgba(192,132,252,0.15)',
-    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4,
+  scrubTimeTxt: {
+    color: '#FFFFFF', fontSize: 12, fontWeight: '700', minWidth: 38,
   },
-  scrubPillTxt: { color: 'rgba(248,248,248,0.70)', fontSize: 11, fontWeight: '500' },
-  scrubTrackOuter: {
-    width: '100%', height: 56,
-    justifyContent: 'center',
-    position: 'relative',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  scrubTrackBg: {
-    position: 'absolute',
-    top: 24, left: 0, right: 0, height: 8,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderRadius: 4,
-  },
-  scrubSegment: {
-    position: 'absolute',
-    top: 20, height: 16,
-    backgroundColor: '#9333EA',
-    borderRadius: 4,
-    opacity: 0.85,
-  },
-  scrubHandle: {
-    position: 'absolute',
-    top: 18,
-    width: 20, height: 20,
-    borderRadius: 10,
-    backgroundColor: '#C084FC',
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#C084FC',
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  scrubHint: {
-    color: 'rgba(255,255,255,0.28)', fontSize: 11,
-    textAlign: 'center', marginTop: 8,
+  scrubTimeHint: {
+    color: '#FFFFFF', fontSize: 11, textAlign: 'center',
   },
 
   removeBtn: {
-    borderRadius: 14, paddingVertical: 12, alignItems: 'center',
-    marginTop: 10, borderWidth: 1, borderColor: 'rgba(248,113,113,0.30)',
-    backgroundColor: 'rgba(248,113,113,0.05)',
+    borderRadius: 20, overflow: 'hidden', marginTop: 10,
   },
-  removeTxt:    { color: '#F87171', fontSize: 14, fontWeight: '600' },
+  removeBtnGrad: {
+    paddingVertical: 12, alignItems: 'center', justifyContent: 'center',
+  },
+  removeTxt:    { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   actionBtn:    { borderRadius: 18, overflow: 'hidden', marginTop: 10, marginBottom: 4 },
   actionBtnGrad:{ paddingVertical: 15, alignItems: 'center' },
   actionBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },

@@ -9,7 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
   RefreshControl, Pressable, ActivityIndicator, Dimensions,
-  FlatList, Animated, TextInput, KeyboardAvoidingView, Platform,
+  FlatList, Animated, TextInput, KeyboardAvoidingView, Platform, Keyboard, Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -217,6 +217,18 @@ export default function DashboardScreen({ navigation }) {
   const searchInputRef = useRef(null);
   const searchWrapRef  = useRef(null);
 
+  const remeasureDropdown = useCallback(() => {
+    searchWrapRef.current?.measure?.((_x, _y, _w, h, _px, py) => {
+      setDropdownTop(py + h - 12);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const show = Keyboard.addListener('keyboardDidShow', remeasureDropdown);
+    return () => show.remove();
+  }, [remeasureDropdown]);
+
   useEffect(() => {
     if (searchDebounce.current) clearTimeout(searchDebounce.current);
     if (!searchQuery.trim()) { setSearchResults([]); setSearchLoading(false); return; }
@@ -283,10 +295,23 @@ export default function DashboardScreen({ navigation }) {
 
   return (
     <View style={s.root}>
-      {Platform.OS === 'web' && searchDropdownContent && (
+      {searchDropdownContent && Platform.OS === 'web' && (
         <View style={{ position: 'fixed', top: dropdownTop, left: 0, right: 0, bottom: 68, zIndex: 9999 }}>
           {searchDropdownContent}
         </View>
+      )}
+      {searchDropdownContent && Platform.OS !== 'web' && (
+        <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={() => {}}>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => { setSearchFocused(false); searchInputRef.current?.blur(); }}
+          >
+            <View style={{ position: 'absolute', top: dropdownTop, left: 0, right: 0, bottom: 68 }}>
+              {searchDropdownContent}
+            </View>
+          </TouchableOpacity>
+        </Modal>
       )}
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -453,11 +478,6 @@ export default function DashboardScreen({ navigation }) {
 
         {/* ── Search Bar ───────────────────────────────────────────── */}
         <View ref={searchWrapRef} style={s.searchWrap}>
-          {Platform.OS !== 'web' && searchDropdownContent && (
-            <View style={{ position: 'absolute', top: 52, left: 0, right: 0, zIndex: 999 }}>
-              {searchDropdownContent}
-            </View>
-          )}
           <View style={[s.searchBar, { backgroundColor: searchFocused ? colors.inputBg : colors.searchBg, borderColor: searchFocused ? colors.primary : colors.border, borderWidth: searchFocused ? 2 : 1 }]}>
             <Ionicons name="search-outline" size={16} color={searchFocused ? colors.primary : colors.textMuted} />
             <TextInput
@@ -469,9 +489,7 @@ export default function DashboardScreen({ navigation }) {
               onChangeText={setSearchQuery}
               onFocus={() => {
                 setSearchFocused(true);
-                searchWrapRef.current?.measure?.((x, y, w, h, px, py) => {
-                  setDropdownTop(py + h - 20);
-                });
+                remeasureDropdown();
               }}
               onBlur={() => { if (!searchQuery) setSearchFocused(false); }}
               returnKeyType="search"

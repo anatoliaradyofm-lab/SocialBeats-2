@@ -890,6 +890,23 @@ const api = {
         .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       return delay(200).then(() => stories);
     }
+    // GET /stories/{id}/reactions
+    if (url.match(/^\/stories\/[^/]+\/reactions$/)) {
+      const storyId = url.split('/')[2];
+      try {
+        const liked = JSON.parse(localStorage.getItem('_mock_story_likes') || '{}');
+        const userLiked = !!liked[storyId];
+        return delay(100).then(() => ({
+          reactions: userLiked ? [{ reaction: '❤️', user_id: 'me' }] : [],
+          counts: userLiked ? { '❤️': 1 } : {},
+          total: userLiked ? 1 : 0,
+          user_reaction: userLiked ? '❤️' : null,
+          user_liked: userLiked,
+        }));
+      } catch {
+        return delay(100).then(() => ({ reactions: [], counts: {}, total: 0, user_reaction: null, user_liked: false }));
+      }
+    }
     // GET /stories/{id}/viewers
     if (url.match(/^\/stories\/[^/]+\/viewers/)) {
       return delay(200).then(() => []);
@@ -1078,19 +1095,14 @@ const api = {
       }
       return delay(250).then(() => ({ status: 'ok', answer: data?.answer }));
     }
-    // POST /stories/{id}/react  → DM + bildirim simülasyonu
+    // POST /stories/{id}/react  → beğeniyi kaydet + DM simülasyonu
     if (url.match(/^\/stories\/[^/]+\/react$/)) {
       const storyId = url.split('/')[2];
       const reaction = data?.reaction || '❤️';
-      // DM konuşması mock'a kaydet
       try {
-        const convs = JSON.parse(localStorage.getItem('_mock_convs') || '[]');
-        let conv = convs.find(c => c.story_id === storyId);
-        if (!conv) {
-          conv = { id: 'conv_react_' + storyId, story_id: storyId, is_group: false, last_message: reaction, last_message_at: new Date().toISOString() };
-          convs.push(conv);
-          localStorage.setItem('_mock_convs', JSON.stringify(convs));
-        }
+        const liked = JSON.parse(localStorage.getItem('_mock_story_likes') || '{}');
+        liked[storyId] = reaction;
+        localStorage.setItem('_mock_story_likes', JSON.stringify(liked));
       } catch {}
       return delay(100).then(() => ({ status: 'ok', reaction, dm_sent: true }));
     }
@@ -1307,6 +1319,16 @@ const api = {
       // Engel kaldırınca takip ilişkisi otomatik restore edilmez.
       // Kişi yeniden takip etmek isterse manuel takip etmeli veya takip isteği göndermeli.
       return delay(300).then(() => ({ message: 'Engel kaldırıldı' }));
+    }
+    // DELETE /stories/{id}/reaction
+    if (/^\/stories\/[^/]+\/reaction$/.test(url)) {
+      const storyId = url.split('/')[2];
+      try {
+        const liked = JSON.parse(localStorage.getItem('_mock_story_likes') || '{}');
+        delete liked[storyId];
+        localStorage.setItem('_mock_story_likes', JSON.stringify(liked));
+      } catch {}
+      return delay(100).then(() => ({ status: 'ok' }));
     }
     // Delete playlist: DELETE /playlists/{id}
     if (/^\/playlists\/[^/]+$/.test(url)) {

@@ -945,7 +945,8 @@ function AppInner() {
     ? (effectiveStack.length > 1 ? effectiveStack[effectiveStack.length - 2] : { name: 'Dashboard', params: {} })
     : null;
   const LIBRARY_STACK = new Set(['PlaylistDetail', 'Liked', 'ListeningHistory', 'AddSongsToPlaylist']);
-  const effectiveName = isModal && bgScreen ? bgScreen.name : screen.name;
+  const rawName     = isModal && bgScreen ? bgScreen.name : screen.name;
+  const effectiveName = rawName === 'Home' ? 'Dashboard' : rawName;
   const showTabBar = !resolving && (TAB_NAMES.has(effectiveName) || LIBRARY_STACK.has(effectiveName));
 
   const renderScreen = (s) => {
@@ -958,6 +959,7 @@ function AppInner() {
       case 'Register':               return <RegisterScreen {...props} />;
 
       // Main tabs
+      case 'Home':
       case 'Dashboard':              return <DashboardScreen {...props} />;
       case 'Library':                return <PlaylistsScreen {...props} />;
       case 'Rooms':                  return <ListeningRoomScreen {...props} />;
