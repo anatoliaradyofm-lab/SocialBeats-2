@@ -81,6 +81,12 @@ async def follow_user(user_id: str, current_user: dict = Depends(get_current_use
         "following_id": user_id,
         "created_at": now
     })
+    await db.follow_events.insert_one({
+        "follower_id": current_user["id"],
+        "following_id": user_id,
+        "action": "follow",
+        "created_at": now
+    })
 
     # Update counts
     await db.users.update_one({"id": current_user["id"]}, {"$inc": {"following_count": 1}})
@@ -259,6 +265,13 @@ async def unfollow_user(user_id: str, current_user: dict = Depends(get_current_u
     })
     if result.deleted_count == 0:
         raise HTTPException(status_code=400, detail="Not following this user")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.follow_events.insert_one({
+        "follower_id": current_user["id"],
+        "following_id": user_id,
+        "action": "unfollow",
+        "created_at": now
+    })
     await db.users.update_one({"id": current_user["id"]}, {"$inc": {"following_count": -1}})
     await db.users.update_one({"id": user_id}, {"$inc": {"followers_count": -1}})
     return {"message": "Successfully unfollowed user"}
@@ -270,10 +283,16 @@ async def unfollow_user_alias(user_id: str, current_user: dict = Depends(get_cur
         "follower_id": current_user["id"],
         "following_id": user_id
     })
+    now = datetime.now(timezone.utc).isoformat()
     if result.deleted_count == 0:
-        # Also cancel any pending follow request
         await db.follow_requests.delete_one({"sender_id": current_user["id"], "receiver_id": user_id})
         return {"message": "Unfollowed"}
+    await db.follow_events.insert_one({
+        "follower_id": current_user["id"],
+        "following_id": user_id,
+        "action": "unfollow",
+        "created_at": now
+    })
     await db.users.update_one({"id": current_user["id"]}, {"$inc": {"following_count": -1}})
     await db.users.update_one({"id": user_id}, {"$inc": {"followers_count": -1}})
     return {"message": "Successfully unfollowed user"}

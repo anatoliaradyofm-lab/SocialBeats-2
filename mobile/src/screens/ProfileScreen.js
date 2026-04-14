@@ -15,6 +15,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
+import { usePlayer } from '../contexts/PlayerContext';
+
 
 const { width: SW } = Dimensions.get('window');
 
@@ -84,6 +86,7 @@ export default function ProfileScreen({ navigation }) {
   const { user, token, logout, updateUser, isGuest } = useAuth();
   const { t }            = useTranslation();
   const insets           = useSafeAreaInsets();
+  const { currentTrack, isPlaying } = usePlayer();
 
   const [refreshing,   setRefreshing]   = useState(false);
   const [menuVisible,  setMenuVisible]  = useState(false);
@@ -91,71 +94,128 @@ export default function ProfileScreen({ navigation }) {
   const [listenStats,  setListenStats]  = useState(null);
   const [nowPlaying,   setNowPlaying]   = useState(null);
   const [myStories,    setMyStories]    = useState(null);
-  const scrollY = useRef(new Animated.Value(0)).current;
-  /* Always hold latest user to avoid stale-closure in useFocusEffect */
-  const userRef = useRef(user);
+  const scrollY      = useRef(new Animated.Value(0)).current;
+  const userRef        = useRef(user);
+  const tokenRef       = useRef(token);
+  const userIdRef      = useRef(user?.id);
+  const updateUserRef  = useRef(updateUser);
+  const wasPlayingRef  = useRef(false);
+
   useEffect(() => { userRef.current = user; }, [user]);
+  useEffect(() => { tokenRef.current = token; }, [token]);
+  useEffect(() => { userIdRef.current = user?.id; }, [user?.id]);
+  useEffect(() => { updateUserRef.current = updateUser; }, [updateUser]);
 
-  const loadStats = useCallback(async () => {
-    if (!user?.id) return;
+  /* Granüler fetch fonksiyonları — tüm deps ref üzerinden, useCallback bağımlılığı yok */
+  const fetchNowPlaying = useCallback(async () => {
+    const uid = userIdRef.current;
+    const tok = tokenRef.current;
+    if (!uid || !tok) return;
     try {
-      const [stats, np] = await Promise.all([
-        api.get(`/users/${user.id}/listening-stats`).catch(() => null),
-        api.get(`/users/${user.id}/now-playing`).catch(() => null),
-      ]);
-      if (stats) setListenStats(stats);
-      if (np?.now_playing) setNowPlaying(np.now_playing);
+      const np = await api.get(`/users/${uid}/now-playing`, tok).catch(() => null);
+      setNowPlaying(np?.now_playing || null);
     } catch {}
-  }, [user?.id]);
+  }, []);
 
-  useEffect(() => { loadStats(); }, [loadStats]);
+  const fetchListenStats = useCallback(async () => {
+    const uid = userIdRef.current;
+    const tok = tokenRef.current;
+    if (!uid || !tok) return;
+    try {
+      const stats = await api.get(`/users/${uid}/listening-stats`, tok).catch(() => null);
+      if (stats) {
+        setListenStats(stats);
+        if (stats.followers_count !== undefined || stats.following_count !== undefined) {
+          updateUserRef.current?.({
+            ...userRef.current,
+            followers_count: stats.followers_count ?? userRef.current?.followers_count ?? 0,
+            following_count: stats.following_count ?? userRef.current?.following_count ?? 0,
+          });
+        }
+      }
+    } catch {}
+  }, []);
 
-  /* Refresh profile data + own stories when screen focused */
+  const fetchProfileMeta = useCallback(async () => {
+    const tok = tokenRef.current;
+    if (!tok) return;
+    try {
+      const [me, stories] = await Promise.all([
+        api.get('/auth/me', tok).catch(() => null),
+        api.get('/stories/my', tok).catch(() => null),
+      ]);
+      if (me?.id) updateUserRef.current?.({ ...userRef.current, ...me });
+      const arr = Array.isArray(stories) ? stories : [];
+      setMyStories(arr.length > 0 ? arr : null);
+    } catch {}
+  }, []);
+
+  const loadAll = useCallback(async () => {
+    await Promise.all([fetchNowPlaying(), fetchListenStats(), fetchProfileMeta()]);
+  }, [fetchNowPlaying, fetchListenStats, fetchProfileMeta]);
+
+  /* Polling: sadece ekran odaklandığında çalışır — deps [] ile interval yığılması engellendi */
   useFocusEffect(useCallback(() => {
-    if (!token) return;
-    api.get('/auth/me', token)
-      .then(data => {
-        if (data?.id) updateUser?.({ ...userRef.current, ...data });
-      })
-      .catch(() => {});
-    api.get('/stories/my', token)
-      .then(res => {
-        const stories = Array.isArray(res) ? res : [];
-        setMyStories(stories.length > 0 ? stories : null);
-      })
-      .catch(() => {});
-  }, [token, updateUser]));
+    loadAll();
+    const npInterval    = setInterval(fetchNowPlaying,   10_000);
+    const statsInterval = setInterval(fetchListenStats,  60_000);
+    const metaInterval  = setInterval(fetchProfileMeta, 120_000);
+    return () => {
+      clearInterval(npInterval);
+      clearInterval(statsInterval);
+      clearInterval(metaInterval);
+    };
+  }, []));
+
+  /* Şarkı değiştiğinde → anında now-playing güncelle */
+  useEffect(() => {
+    fetchNowPlaying();
+  }, [currentTrack?.id]);
+
+  /* Şarkı bittiğinde → stats güncelle */
+  useEffect(() => {
+    if (wasPlayingRef.current && !isPlaying) {
+      const tid = setTimeout(fetchListenStats, 1500);
+      wasPlayingRef.current = false;
+      return () => clearTimeout(tid);
+    }
+    wasPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadStats();
+    await loadAll();
     setRefreshing(false);
-  }, [loadStats]);
+  }, [loadAll]);
 
   /* Demo fallbacks */
-  const genres = listenStats?.top_genres || [
-    { label: 'Electronic', pct: 72, color: '#C084FC' },
-    { label: 'Hip-Hop',    pct: 55, color: '#FB923C' },
-    { label: 'Indie',      pct: 38, color: '#34D399' },
-    { label: 'R&B',        pct: 28, color: '#F472B6' },
-    { label: 'Classical',  pct: 14, color: '#60A5FA' },
-  ];
-  const topArtists = listenStats?.top_artists || [
-    { name: 'The Weeknd',   img: 'https://picsum.photos/seed/a1/80/80', plays: 142 },
-    { name: 'Billie Eilish',img: 'https://picsum.photos/seed/a2/80/80', plays: 98  },
-    { name: 'Tame Impala',  img: 'https://picsum.photos/seed/a3/80/80', plays: 87  },
-  ];
-  const weeklyHours = listenStats?.weekly_minutes_per_day
-    ? listenStats.weekly_minutes_per_day.map(m => m / 60)
-    : [1.2, 2.5, 0.8, 3.1, 2.0, 4.2, 1.8];
-  const totalHours = listenStats?.total_hours_this_week
-    ?? Math.round(weeklyHours.reduce((a, b) => a + b, 0));
+  const _genreColors = ['#C084FC','#FB923C','#34D399','#F472B6','#60A5FA','#FBBF24','#F87171','#4ADE80','#38BDF8','#A78BFA'];
+  const _rawGenres = (listenStats?.top_genres || []).slice(0, 5);
+  const _maxGenreCount = Math.max(..._rawGenres.map(g => g.count || g.percentage || g.pct || 1), 1);
+  const genres = _rawGenres.map((g, i) => ({
+    label: g.label || g.genre || '',
+    pct:   g.pct || Math.max(1, Math.round(((g.percentage || g.count || 1) / _maxGenreCount) * 100)),
+    color: g.color || _genreColors[i % _genreColors.length],
+  }));
+  const topArtists = (listenStats?.top_artists || []).slice(0, 5);
+  const weeklyHours = (listenStats?.weekly_minutes_per_day || [0,0,0,0,0,0,0]).map(m => m / 60);
+  const totalHours     = listenStats?.total_hours_this_week ?? Math.round(weeklyHours.reduce((a, b) => a + b, 0));
+  const totalTracks    = listenStats?.total_tracks ?? 0;
+  const uniqueArtists  = listenStats?.unique_artists ?? 0;
+  const weekChangePct  = listenStats?.week_change_pct ?? null;
+  const totalMinutes   = listenStats?.total_minutes ?? 0;
 
   const avatar = user?.avatar_url || user?.avatar || `https://i.pravatar.cc/200?u=${user?.id}`;
 
   const headerOpacity = scrollY.interpolate({
     inputRange: [COVER_H - 80, COVER_H],
     outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const floatMoreOpacity = scrollY.interpolate({
+    inputRange: [COVER_H - 80, COVER_H],
+    outputRange: [1, 0],
     extrapolate: 'clamp',
   });
 
@@ -169,7 +229,7 @@ export default function ProfileScreen({ navigation }) {
           style={StyleSheet.absoluteFill}
         />
         <TouchableOpacity
-          onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Dashboard')}
+          onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')}
           style={{ position: 'absolute', top: insets.top + 8, left: 16, padding: 8 }}
         >
           <Ionicons name="chevron-back" size={24} color="#F8F8F8" />
@@ -223,9 +283,11 @@ export default function ProfileScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.navigate('Home')} style={s.floatBtn}>
           <Ionicons name="chevron-back" size={20} color="#F8F8F8" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setMenuVisible(true)} style={s.floatBtn}>
-          <Ionicons name="ellipsis-horizontal" size={20} color="#F8F8F8" />
-        </TouchableOpacity>
+        <Animated.View style={{ opacity: floatMoreOpacity }}>
+          <TouchableOpacity onPress={() => setMenuVisible(true)} style={s.floatBtn}>
+            <Ionicons name="ellipsis-horizontal" size={20} color="#F8F8F8" />
+          </TouchableOpacity>
+        </Animated.View>
       </View>
 
       <Animated.ScrollView
@@ -415,12 +477,34 @@ export default function ProfileScreen({ navigation }) {
                   {totalHours} <Text style={s.statsBoxUnit}>saat</Text>
                 </Text>
               </View>
-              <View style={s.statsChip}>
-                <Ionicons name="trending-up" size={12} color="#34D399" />
-                <Text style={s.statsChipTx}>+12%</Text>
-              </View>
+              {weekChangePct !== null && (
+                <View style={[s.statsChip, weekChangePct < 0 && { backgroundColor: 'rgba(248,113,113,0.12)' }]}>
+                  <Ionicons
+                    name={weekChangePct >= 0 ? 'trending-up' : 'trending-down'}
+                    size={12}
+                    color={weekChangePct >= 0 ? '#34D399' : '#F87171'}
+                  />
+                  <Text style={[s.statsChipTx, weekChangePct < 0 && { color: '#F87171' }]}>
+                    {weekChangePct >= 0 ? '+' : ''}{weekChangePct}%
+                  </Text>
+                </View>
+              )}
             </View>
             <WeeklyBars data={weeklyHours} />
+            <View style={s.weekMeta}>
+              <View style={s.weekMetaItem}>
+                <Ionicons name="musical-notes-outline" size={12} color="rgba(248,248,248,0.35)" />
+                <Text style={s.weekMetaTx}>{totalTracks} parça</Text>
+              </View>
+              <View style={s.weekMetaItem}>
+                <Ionicons name="people-outline" size={12} color="rgba(248,248,248,0.35)" />
+                <Text style={s.weekMetaTx}>{uniqueArtists} sanatçı</Text>
+              </View>
+              <View style={s.weekMetaItem}>
+                <Ionicons name="time-outline" size={12} color="rgba(248,248,248,0.35)" />
+                <Text style={s.weekMetaTx}>{totalMinutes} dk toplam</Text>
+              </View>
+            </View>
           </View>
 
           {/* Top genres */}
@@ -550,7 +634,7 @@ const s = StyleSheet.create({
   heroBg: { height: COVER_H, width: '100%' },
 
   /* Identity */
-  identityBlock: { paddingHorizontal: 20, marginTop: -46, paddingBottom: 8 },
+  identityBlock: { paddingHorizontal: 20, marginTop: -26, paddingBottom: 8 },
   avatarRing:    { width: 92, height: 92, borderRadius: 46, marginBottom: 14, position: 'relative', zIndex: 20, elevation: 20 },
   avatarGrad:    { width: 92, height: 92, borderRadius: 46, padding: 3, alignItems: 'center', justifyContent: 'center' },
   avatar:        { width: 84, height: 84, borderRadius: 42, borderWidth: 2, borderColor: '#08060F' },
@@ -625,6 +709,10 @@ const s = StyleSheet.create({
   statsChip:      { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(52,211,153,0.12)',
                     paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   statsChipTx:    { fontSize: 12, color: '#34D399', fontWeight: '600' },
+  weekMeta:       { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingTop: 10,
+                    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
+  weekMetaItem:   { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  weekMetaTx:     { fontSize: 11, color: 'rgba(248,248,248,0.35)' },
 
   /* Artists */
   artistRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10,

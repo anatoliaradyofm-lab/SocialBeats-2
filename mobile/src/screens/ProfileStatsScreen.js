@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Dimensions, Image,
+  ActivityIndicator, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 
-const { width } = Dimensions.get('window');
 const PRI    = '#C084FC';
 const ACC    = '#FB923C';
 const RED    = '#F87171';
@@ -88,15 +88,19 @@ export default function ProfileStatsScreen({ navigation }) {
   const [data, setData]           = useState(null);
   const [followers, setFollowers] = useState(null);
   const [loading, setLoading]     = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+
+  const periodRef = useRef(period);
+  const tokenRef  = useRef(token);
+  useEffect(() => { periodRef.current = period; }, [period]);
+  useEffect(() => { tokenRef.current  = token;  }, [token]);
 
   const load = useCallback(async (p, showSpinner) => {
-    if (showSpinner) setLoading(true); else setRefreshing(true);
+    if (showSpinner) setLoading(true);
     const periodCfg = PERIODS.find(x => x.key === p) || PERIODS[1];
     try {
       const [stats, fol] = await Promise.all([
-        api.get(`/stats/user?period=${p}`, token),
-        api.get(`/profile/analytics/followers?period=${periodCfg.folKey}`, token),
+        api.get(`/stats/user?period=${p}`, tokenRef.current),
+        api.get(`/profile/analytics/followers?period=${periodCfg.folKey}`, tokenRef.current),
       ]);
       setData(stats);
       setFollowers(fol);
@@ -104,14 +108,20 @@ export default function ProfileStatsScreen({ navigation }) {
       console.warn('stats error', e);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
-  }, [token]);
+  }, []);
 
+  /* Period değişince hemen yükle */
   useEffect(() => { load(period, true); }, [period]);
 
+  /* Ekran odaklandığında anlık yükle + 60s polling */
+  useFocusEffect(useCallback(() => {
+    load(periodRef.current, false);
+    const interval = setInterval(() => load(periodRef.current, false), 60_000);
+    return () => clearInterval(interval);
+  }, [load]));
+
   const listening    = data?.listening   || {};
-  const social       = data?.social      || {};
   const activity     = data?.activity    || {};
   const folSummary   = followers?.summary || {};
   const topFollowers = followers?.top_followers || [];
@@ -133,9 +143,7 @@ export default function ProfileStatsScreen({ navigation }) {
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={s.hdrTitle}>İstatistikler</Text>
-        <TouchableOpacity style={s.hdrBtn} onPress={() => load(period, false)}>
-          <Ionicons name={refreshing ? 'hourglass-outline' : 'refresh'} size={20} color="#fff" />
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
 
       {/* ── Period pills ── */}

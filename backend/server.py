@@ -1898,6 +1898,14 @@ async def unfriend_user(user_id: str, current_user: dict = Depends(get_current_u
     })
     if r.deleted_count == 0:
         raise HTTPException(status_code=400, detail="Zaten arkadaş değilsiniz")
+    # Her iki kullanıcının takipçi/takip sayısını güncelle
+    await db.users.update_one({"id": current_user["id"]}, {"$inc": {"following_count": -1, "followers_count": -1}})
+    await db.users.update_one({"id": user_id},            {"$inc": {"following_count": -1, "followers_count": -1}})
+    _now_iso = datetime.now(timezone.utc).isoformat()
+    await db.follow_events.insert_many([
+        {"follower_id": current_user["id"], "following_id": user_id, "action": "unfollow", "created_at": _now_iso},
+        {"follower_id": user_id, "following_id": current_user["id"], "action": "unfollow", "created_at": _now_iso},
+    ])
     try:
         from services.analytics_service import track_follower_change
         await track_follower_change(user_id, current_user["id"], "unfollow")
@@ -3332,32 +3340,6 @@ async def add_track_collaborative(
 
 # ============== SEARCH ENDPOINT (LEGACY - moved to enhanced version below) ==============
 # Legacy search endpoint removed - use enhanced /api/search with filters below
-
-# ============== STATS ENDPOINT ==============
-
-@api_router.get("/stats/listening", response_model=ListeningStats)
-async def get_listening_stats(current_user: dict = Depends(get_current_user)):
-    return ListeningStats(
-        total_minutes=12450,
-        top_artists=[
-            {"name": "Tarkan", "minutes": 2340, "image_url": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300"},
-            {"name": "Sezen Aksu", "minutes": 1890, "image_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300"},
-            {"name": "Duman", "minutes": 1560, "image_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300"},
-            {"name": "maNga", "minutes": 1230, "image_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300"},
-            {"name": "Mabel Matiz", "minutes": 980, "image_url": "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=300"},
-        ],
-        top_genres=[
-            {"name": "Turkish Pop", "percentage": 45},
-            {"name": "Rock", "percentage": 25},
-            {"name": "Alternative", "percentage": 15},
-            {"name": "Classical", "percentage": 10},
-            {"name": "Electronic", "percentage": 5},
-        ],
-        platform_breakdown={
-            "soundcloud": 70,
-            "audius": 30,
-        }
-    )
 
 # ============== RECOMMENDATION SERVICE ==============
 
@@ -6237,128 +6219,199 @@ async def get_user_stats(
 
     start_date_str = start_date.isoformat()
 
-    # Get listening history
-    play_history = await db.play_history.find({
-        "user_id": current_user["id"],
-        "played_at": {"$gte": start_date_str}
-    }).to_list(1000)
-    
-    # Calculate listening stats
-    total_tracks = len(play_history)
-    total_minutes = sum(h.get("duration", 180) for h in play_history) // 60  # Default 3 min per track
-    unique_artists = len(set(h.get("artist") for h in play_history if h.get("artist")))
-    
-    # Top genres from play history
-    genre_counts = {}
+    uid = current_user["id"]
+
+    # listening_history önce, play_history fallback
+    play_history = await db.listening_history.find(
+        {"user_id": uid, "played_at": {"$gte": start_date_str}}
+    ).sort("played_at", -1).to_list(2000)
+    if not play_history:
+        play_history = await db.play_history.find(
+            {"user_id": uid, "played_at": {"$gte": start_date_str}}
+        ).sort("played_at", -1).to_list(2000)
+
+    # Pre-aggregated stats (listening_stats collection) — ek kaynak
+    ls_agg = await db.listening_stats.find_one({"user_id": uid}, {"_id": 0})
+
+    def _s(h):
+        d = h.get("duration", 180)
+        return d // 1000 if d > 7200 else d  # ms→s güvenlik
+
+    # Listening stats
+    total_tracks   = len(play_history) or (ls_agg.get("total_tracks", 0) if ls_agg else 0)
+    _raw_min = sum(_s(h) for h in play_history) // 60
+    total_minutes  = _raw_min or (ls_agg.get("total_play_time", 0) // 60 if ls_agg else 0)
+    unique_artists = len(set(h.get("artist") or h.get("artist_name", "") for h in play_history if (h.get("artist") or h.get("artist_name"))))
+
+    # Top genres
+    genre_counts: dict = {}
     for h in play_history:
         for g in (h.get("genres") or []):
-            if g:
-                genre_counts[g] = genre_counts.get(g, 0) + 1
+            if g: genre_counts[g] = genre_counts.get(g, 0) + 1
+    if not genre_counts and ls_agg and ls_agg.get("top_genres"):
+        for g in ls_agg["top_genres"]:
+            name = (g.get("name") or g.get("genre") if isinstance(g, dict) else g) or ""
+            cnt  = (g.get("count", 0) if isinstance(g, dict) else 0)
+            if name: genre_counts[name] = cnt
     total_genre_plays = sum(genre_counts.values()) or 1
     top_genres = [
         {"name": g, "percentage": round(c * 100 / total_genre_plays)}
         for g, c in sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:5]
     ]
-    # Fallback: try listening_stats collection
-    if not top_genres:
-        ls = await db.listening_stats.find_one({"user_id": current_user["id"]}, {"top_genres": 1})
-        if ls and ls.get("top_genres"):
-            top_genres = [
-                {"name": (g.get("name") or g.get("genre") if isinstance(g, dict) else g), "percentage": (g.get("percentage", 0) if isinstance(g, dict) else 0)}
-                for g in ls["top_genres"][:5]
-            ]
 
-    # Top artists from play history
-    artist_counts = {}
+    # Top artists
+    artist_counts: dict = {}
     for h in play_history:
-        artist = h.get("artist", "Unknown")
-        artist_counts[artist] = artist_counts.get(artist, 0) + 1
-    
+        a = h.get("artist") or h.get("artist_name", "")
+        if a: artist_counts[a] = artist_counts.get(a, 0) + 1
+    # Pre-aggregated ile birleştir — her zaman 5'e tamamla
+    if ls_agg and ls_agg.get("top_artists"):
+        for a in ls_agg["top_artists"]:
+            name = (a.get("name") if isinstance(a, dict) else a) or ""
+            cnt  = (a.get("count", 0) if isinstance(a, dict) else 0)
+            if name and name not in artist_counts:
+                artist_counts[name] = cnt
     top_artists = [
         {"name": name, "play_count": count}
         for name, count in sorted(artist_counts.items(), key=lambda x: x[1], reverse=True)[:5]
     ]
-    
+
     # Top tracks
-    track_counts = {}
+    track_counts: dict = {}
     for h in play_history:
-        key = f"{h.get('title', 'Unknown')}|{h.get('artist', 'Unknown')}"
+        key = f"{h.get('title','?')}|{h.get('artist') or h.get('artist_name','?')}"
         track_counts[key] = track_counts.get(key, 0) + 1
-    
     top_tracks = []
     for key, count in sorted(track_counts.items(), key=lambda x: x[1], reverse=True)[:5]:
         parts = key.split("|")
-        top_tracks.append({"title": parts[0], "artist": parts[1], "play_count": count})
+        top_tracks.append({"title": parts[0], "artist": parts[1] if len(parts) > 1 else "", "play_count": count})
+    # Fallback: pre-aggregated top_tracks from listening_stats
+    if not top_tracks and ls_agg and ls_agg.get("top_tracks"):
+        top_tracks = [
+            {"title": t.get("title",""), "artist": t.get("artist",""),
+             "cover_url": t.get("cover_url",""), "play_count": t.get("count", 0)}
+            for t in ls_agg["top_tracks"][:5]
+        ]
     
-    # Get social stats
-    posts_count = await db.posts.count_documents({
-        "author_id": current_user["id"],
-        "created_at": {"$gte": start_date_str}
-    })
-    
-    stories_count = await db.stories.count_documents({
-        "user_id": current_user["id"],
-        "created_at": {"$gte": start_date_str}
-    })
-    
-    # Get engagement
+    # Social stats — hem user_id hem author_id dene
+    _post_filter = {"$or": [{"user_id": uid}, {"author_id": uid}], "created_at": {"$gte": start_date_str}}
+    posts_count   = await db.posts.count_documents(_post_filter)
+    stories_count = await db.stories.count_documents({"user_id": uid, "created_at": {"$gte": start_date_str}})
+
     user_posts = await db.posts.find(
-        {"author_id": current_user["id"], "created_at": {"$gte": start_date_str}},
+        _post_filter,
         {"likes_count": 1, "comments_count": 1, "shares_count": 1, "_id": 0}
-    ).to_list(100)
-    
-    total_likes = sum(p.get("likes_count", 0) for p in user_posts)
+    ).to_list(500)
+    total_likes    = sum(p.get("likes_count", 0)    for p in user_posts)
     total_comments = sum(p.get("comments_count", 0) for p in user_posts)
-    total_shares = sum(p.get("shares_count", 0) for p in user_posts)
+    total_shares   = sum(p.get("shares_count", 0)   for p in user_posts)
     
-    # Calculate followers gained (simplified)
-    followers_gained = await db.followers.count_documents({
-        "following_id": current_user["id"],
+    # Kazanılan / takip edilen — follow_events'ten gerçek veri
+    followers_gained = await db.follow_events.count_documents({
+        "following_id": uid, "action": "follow",
         "created_at": {"$gte": start_date_str}
     })
-    
-    following_gained = await db.followers.count_documents({
-        "follower_id": current_user["id"],
+    following_gained = await db.follow_events.count_documents({
+        "follower_id": uid, "action": "follow",
         "created_at": {"$gte": start_date_str}
     })
     
     # Activity stats
-    active_days = len(set(h.get("played_at", "")[:10] for h in play_history))
-    daily_average = total_minutes // max(active_days, 1)
-    
+    active_day_set = sorted(set(h.get("played_at", "")[:10] for h in play_history if h.get("played_at")), reverse=True)
+    active_days    = len(active_day_set)
+    daily_average  = total_minutes // max(active_days, 1)
+
+    # Streak — consecutive days from today
+    from datetime import date as _date
+    today_str = _date.today().isoformat()
+    streak_days = 0
+    check = _date.today()
+    while check.isoformat() in active_day_set:
+        streak_days += 1
+        check = check - timedelta(days=1)
+
+    # Longest streak — all-time (last 365 days)
+    _since365 = (now - timedelta(days=365)).isoformat()
+    all_history = await db.listening_history.find(
+        {"user_id": uid, "played_at": {"$gte": _since365}},
+        {"played_at": 1, "_id": 0}
+    ).to_list(5000)
+    if not all_history:
+        all_history = await db.play_history.find(
+            {"user_id": uid, "played_at": {"$gte": _since365}},
+            {"played_at": 1, "_id": 0}
+        ).to_list(5000)
+    all_day_set = sorted(set(h.get("played_at", "")[:10] for h in all_history if h.get("played_at")))
+    longest_streak = temp_s = 0
+    prev = None
+    for d in all_day_set:
+        if prev and ((_date.fromisoformat(d) - _date.fromisoformat(prev)).days == 1):
+            temp_s += 1
+        else:
+            temp_s = 1
+        longest_streak = max(longest_streak, temp_s)
+        prev = d
+
+    # Most active weekday
+    day_names = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
+    weekday_counts = [0] * 7
+    for h in play_history:
+        pa = h.get("played_at", "")
+        if pa and len(pa) >= 10:
+            try:
+                wd = _date.fromisoformat(pa[:10]).weekday()
+                weekday_counts[wd] += 1
+            except Exception:
+                pass
+    most_active_day = day_names[weekday_counts.index(max(weekday_counts))] if any(weekday_counts) else "—"
+
+    # Peak listening hour from play_history
+    hour_counts = [0] * 24
+    for h in play_history:
+        pa = h.get("played_at", "")
+        if pa and len(pa) >= 13:
+            try:
+                hour_counts[int(pa[11:13])] += 1
+            except Exception:
+                pass
+    peak_hour = hour_counts.index(max(hour_counts)) if any(hour_counts) else 21
+
+    # New followers in period from follow_events
+    new_followers_cnt = await db.follow_events.count_documents({
+        "following_id": uid, "action": "follow",
+        "created_at": {"$gte": start_date_str}
+    })
+    lost_followers_cnt = await db.follow_events.count_documents({
+        "following_id": uid, "action": "unfollow",
+        "created_at": {"$gte": start_date_str}
+    })
+
     return {
         "listening": {
-            "total_minutes": total_minutes or 1847,  # Fallback demo data
-            "total_tracks": total_tracks or 234,
-            "unique_artists": unique_artists or 45,
-            "top_genres": top_genres,
-            "top_artists": top_artists if top_artists else [
-                {"name": "Tarkan", "play_count": 45},
-                {"name": "Sezen Aksu", "play_count": 38},
-                {"name": "Mor ve Ötesi", "play_count": 32},
-            ],
-            "top_tracks": top_tracks if top_tracks else [
-                {"title": "Şımarık", "artist": "Tarkan", "play_count": 23},
-                {"title": "Gidiyorum", "artist": "Sezen Aksu", "play_count": 18},
-            ],
-            "daily_average": daily_average or 26,
-            "peak_hour": 21,
+            "total_minutes":   total_minutes,
+            "total_tracks":    total_tracks,
+            "unique_artists":  unique_artists,
+            "top_genres":      top_genres,
+            "top_artists":     top_artists,
+            "top_tracks":      top_tracks,
+            "daily_average":   daily_average,
+            "peak_hour":       peak_hour,
         },
         "social": {
-            "followers_gained": followers_gained or 12,
-            "following_gained": following_gained or 8,
-            "posts_created": posts_count or 5,
-            "stories_created": stories_count or 14,
-            "comments_received": total_comments or 45,
-            "likes_received": total_likes or 234,
-            "shares_received": total_shares or 12,
-            "profile_views": 89,  # Would need separate tracking
+            "followers_gained":   new_followers_cnt,
+            "following_gained":   following_gained,
+            "posts_created":      posts_count,
+            "stories_created":    stories_count,
+            "comments_received":  total_comments,
+            "likes_received":     total_likes,
+            "shares_received":    total_shares,
+            "profile_views":      await db.profile_views.count_documents({"viewed_user_id": current_user["id"], "created_at": {"$gte": start_date_str}}) if True else 0,
         },
         "activity": {
-            "days_active": active_days or 6,
-            "streak_days": 4,  # Would need separate calculation
-            "longest_streak": 12,
-            "most_active_day": "Cumartesi",
+            "days_active":     active_days,
+            "streak_days":     streak_days,
+            "longest_streak":  longest_streak,
+            "most_active_day": most_active_day,
         },
         "period": period,
     }
@@ -6991,7 +7044,10 @@ async def record_track_played(body: dict, current_user=Depends(get_current_user)
         return {"status": "skipped"}
 
     now_iso = datetime.now(timezone.utc).isoformat()
-    duration = int(track.get("duration", 0) or 0)  # seconds
+    duration = int(track.get("duration", 0) or 0)
+    # Milisaniye olarak gönderilmişse saniyeye çevir (>7200s = 2 saat → büyük ihtimalle ms)
+    if duration > 7200:
+        duration = duration // 1000
 
     # 1. Insert into listening_history
     await db.listening_history.insert_one({
@@ -7008,36 +7064,53 @@ async def record_track_played(body: dict, current_user=Depends(get_current_user)
     })
 
     # 2. Upsert listening_stats — atomic increments
-    artist = track.get("artist") or track.get("artist_name", "")
-    genres = track.get("genres") or []
+    artist    = track.get("artist") or track.get("artist_name", "")
+    genres    = track.get("genres") or []
+    title     = track.get("title", "")
+    track_id  = track.get("id", "")
+    cover_url = track.get("cover_url") or track.get("thumbnail", "")
 
-    # Fetch current stats to merge top_artists / top_genres
+    # Fetch current stats to merge top_artists / top_genres / top_tracks
     stats = await db.listening_stats.find_one({"user_id": user_id}) or {}
+
     top_artists = {a["name"]: a["count"] for a in stats.get("top_artists", []) if isinstance(a, dict) and a.get("name")}
     top_genres  = {g["name"]: g["count"] for g in stats.get("top_genres", [])  if isinstance(g, dict) and g.get("name")}
+    # top_tracks: key = "title|artist"
+    top_tracks_map = {}
+    for t in stats.get("top_tracks", []):
+        if isinstance(t, dict) and t.get("title"):
+            key = f"{t['title']}|{t.get('artist','')}"
+            top_tracks_map[key] = {"title": t["title"], "artist": t.get("artist",""), "cover_url": t.get("cover_url",""), "count": t.get("count", 0)}
 
     if artist:
         top_artists[artist] = top_artists.get(artist, 0) + 1
     for g in genres:
         if g:
             top_genres[g] = top_genres.get(g, 0) + 1
+    if title:
+        tkey = f"{title}|{artist}"
+        if tkey not in top_tracks_map:
+            top_tracks_map[tkey] = {"title": title, "artist": artist, "cover_url": cover_url, "count": 0}
+        top_tracks_map[tkey]["count"] += 1
 
     sorted_artists = sorted(top_artists.items(), key=lambda x: x[1], reverse=True)[:20]
     sorted_genres  = sorted(top_genres.items(),  key=lambda x: x[1], reverse=True)[:10]
+    sorted_tracks  = sorted(top_tracks_map.values(), key=lambda x: x["count"], reverse=True)[:20]
 
     await db.listening_stats.update_one(
         {"user_id": user_id},
         {"$inc": {"total_tracks": 1, "total_play_time": duration},
          "$set": {
-             "top_artists":   [{"name": n, "count": c} for n, c in sorted_artists],
-             "top_genres":    [{"name": g, "count": c} for g, c in sorted_genres],
+             "top_artists":    [{"name": n, "count": c} for n, c in sorted_artists],
+             "top_genres":     [{"name": g, "count": c} for g, c in sorted_genres],
+             "top_tracks":     sorted_tracks,
              "last_played_at": now_iso,
          }},
         upsert=True,
     )
 
     # 3. Update unique_artists count
-    unique = len({a["name"] for a in [{"name": n} for n, _ in sorted_artists]})
+    unique = len(sorted_artists)
     await db.listening_stats.update_one(
         {"user_id": user_id},
         {"$set": {"unique_artists": unique}},
@@ -7206,6 +7279,7 @@ async def get_user_recent_tracks(user_id: str, limit: int = 5, current_user=Depe
 @api_router.get("/users/{user_id}/listening-stats")
 async def get_user_listening_stats(user_id: str, current_user=Depends(get_current_user)):
     """Get another user's listening stats — top genres, top artists, total time."""
+    now = datetime.now(timezone.utc)
     # Try pre-aggregated listening_stats collection first
     ls = await db.listening_stats.find_one({"user_id": user_id}, {"_id": 0})
 
@@ -7220,25 +7294,32 @@ async def get_user_listening_stats(user_id: str, current_user=Depends(get_curren
             {"user_id": user_id}, {"_id": 0}
         ).sort("played_at", -1).limit(500).to_list(500)
 
-    total_tracks = len(history)
-    total_minutes = sum(h.get("duration", 180) for h in history) // 60
+    def _dur_sec(h):
+        d = h.get("duration", 180)
+        return d // 1000 if d > 7200 else d  # ms→s güvenlik dönüşümü
 
-    # Top artists from history
+    total_tracks = len(history)
+    total_minutes = sum(_dur_sec(h) for h in history) // 60
+
+    # Top artists from history — collect counts and latest cover per artist
     artist_counts = {}
+    artist_covers = {}
     for h in history:
         a = h.get("artist") or h.get("artist_name", "")
         if a:
             artist_counts[a] = artist_counts.get(a, 0) + 1
+            if not artist_covers.get(a) and h.get("cover_url"):
+                artist_covers[a] = h["cover_url"]
     top_artists = [
-        {"name": name, "play_count": count}
-        for name, count in sorted(artist_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+        {"name": name, "play_count": count, "img": artist_covers.get(name, "")}
+        for name, count in sorted(artist_counts.items(), key=lambda x: x[1], reverse=True)[:10]
     ]
 
-    # Top genres — from listening_stats if available, else from history
+    # Top genres — from listening_stats if available, else from history (no hard limit)
     if ls and ls.get("top_genres"):
         raw_genres = ls["top_genres"]
         top_genres = []
-        for g in raw_genres[:6]:
+        for g in raw_genres:
             if isinstance(g, dict):
                 top_genres.append({"genre": g.get("name") or g.get("genre", ""), "label": g.get("name") or g.get("genre", ""), "count": g.get("count", 0)})
             else:
@@ -7248,17 +7329,26 @@ async def get_user_listening_stats(user_id: str, current_user=Depends(get_curren
         for h in history:
             for g in (h.get("genres") or []):
                 genre_counts[g] = genre_counts.get(g, 0) + 1
-        top_genres = [{"genre": g, "label": g, "count": c} for g, c in sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:6]]
+        top_genres = [{"genre": g, "label": g, "count": c} for g, c in sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)]
 
     # Merge pre-aggregated totals if available
     if ls:
         total_minutes = ls.get("total_play_time", total_minutes * 60) // 60
         total_tracks  = ls.get("total_tracks", total_tracks)
-        if ls.get("top_artists") and not top_artists:
-            top_artists = [
-                {"name": (a.get("name") if isinstance(a, dict) else a), "play_count": (a.get("count", 0) if isinstance(a, dict) else 0)}
-                for a in ls["top_artists"][:5]
-            ]
+        # Her zaman pre-aggregated ile birleştir — 5'e tamamla
+        if ls.get("top_artists") and len(top_artists) < 5:
+            existing_names = {a["name"] for a in top_artists}
+            for a in ls["top_artists"]:
+                if len(top_artists) >= 5:
+                    break
+                name = (a.get("name") if isinstance(a, dict) else a) or ""
+                if name and name not in existing_names:
+                    top_artists.append({
+                        "name":       name,
+                        "play_count": a.get("count", 0) if isinstance(a, dict) else 0,
+                        "img":        "",
+                    })
+                    existing_names.add(name)
 
     # Add percentage to each genre based on relative count
     total_genre_count = sum(g.get("count", 0) for g in top_genres) or 1
@@ -7266,19 +7356,56 @@ async def get_user_listening_stats(user_id: str, current_user=Depends(get_curren
         g["percentage"] = round(g.get("count", 0) * 100 / total_genre_count)
 
     # Weekly listening per day (last 7 days, oldest→newest)
-    seven_days_ago = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    seven_days_ago  = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    fourteen_days_ago = (now - timedelta(days=14)).strftime("%Y-%m-%d")
     weekly_buckets: dict = {}
     for i in range(6, -1, -1):
         day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
         weekly_buckets[day] = 0
+    prev_week_minutes = 0
     for h in history:
         played_at = h.get("played_at", "")
         if isinstance(played_at, str) and len(played_at) >= 10:
             day = played_at[:10]
             if day >= seven_days_ago and day in weekly_buckets:
-                weekly_buckets[day] += h.get("duration", 180) // 60
+                weekly_buckets[day] += _dur_sec(h) // 60
+            elif fourteen_days_ago <= day < seven_days_ago:
+                prev_week_minutes += _dur_sec(h) // 60
     weekly_minutes_per_day = [weekly_buckets[d] for d in sorted(weekly_buckets.keys())]
     total_hours_this_week = sum(weekly_minutes_per_day) // 60
+    prev_week_hours = prev_week_minutes // 60
+    if prev_week_hours > 0:
+        week_change_pct = round((total_hours_this_week - prev_week_hours) / prev_week_hours * 100)
+    elif total_hours_this_week > 0:
+        week_change_pct = 100
+    else:
+        week_change_pct = 0
+
+    # Anlık takipçi sayımı — her zaman db.follows'tan say (users collection stale olabilir)
+    followers_count, following_count = await asyncio.gather(
+        db.follows.count_documents({"following_id": user_id}),
+        db.follows.count_documents({"follower_id": user_id}),
+    )
+
+    # Top tracks from history
+    track_counts_map: dict = {}
+    for h in history:
+        t_title = h.get("title", "")
+        t_artist = h.get("artist") or h.get("artist_name", "")
+        t_cover = h.get("cover_url", "")
+        if t_title:
+            key = f"{t_title}|{t_artist}"
+            if key not in track_counts_map:
+                track_counts_map[key] = {"title": t_title, "artist": t_artist, "cover_url": t_cover, "play_count": 0}
+            track_counts_map[key]["play_count"] += 1
+    top_tracks = sorted(track_counts_map.values(), key=lambda x: x["play_count"], reverse=True)[:5]
+    # Fallback from pre-aggregated
+    if not top_tracks and ls and ls.get("top_tracks"):
+        top_tracks = [
+            {"title": t.get("title",""), "artist": t.get("artist",""),
+             "cover_url": t.get("cover_url",""), "play_count": t.get("count",0)}
+            for t in ls["top_tracks"][:5]
+        ]
 
     return {
         "total_minutes":           total_minutes,
@@ -7286,8 +7413,13 @@ async def get_user_listening_stats(user_id: str, current_user=Depends(get_curren
         "unique_artists":          len(artist_counts) or (ls.get("unique_artists", 0) if ls else 0),
         "top_genres":              top_genres,
         "top_artists":             top_artists,
+        "top_tracks":              top_tracks,
         "weekly_minutes_per_day":  weekly_minutes_per_day,
         "total_hours_this_week":   total_hours_this_week,
+        "prev_week_hours":         prev_week_hours,
+        "week_change_pct":         week_change_pct,
+        "followers_count":         followers_count,
+        "following_count":         following_count,
     }
 
 
@@ -8160,100 +8292,212 @@ async def get_story_archive(current_user: dict = Depends(get_current_user)):
 
 @api_router.get("/stats/listening")
 async def get_user_listening_stats_v2(current_user: dict = Depends(get_current_user)):
-    """Get user's listening statistics"""
-    _ = current_user["id"]  # Reserved for future use
-    
-    # Total listening time (mock for now)
-    total_minutes = random.randint(500, 5000)
-    
-    # This week's activity (mock data)
-    weekly_data = {
-        "labels": ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"],
-        "values": [random.randint(10, 60) for _ in range(7)]
-    }
-    
-    # Top genres (mock)
+    """Get user's listening statistics — real data"""
+    uid = current_user["id"]
+    now_dt = datetime.now(timezone.utc)
+    week_ago = (now_dt - timedelta(days=7)).isoformat()
+
+    history = await db.listening_history.find(
+        {"user_id": uid}, {"_id": 0}
+    ).sort("played_at", -1).limit(1000).to_list(1000)
+    if not history:
+        history = await db.play_history.find(
+            {"user_id": uid}, {"_id": 0}
+        ).sort("played_at", -1).limit(1000).to_list(1000)
+
+    def _ds(h):
+        d = h.get("duration", 180)
+        return d // 1000 if d > 7200 else d  # ms→s güvenlik
+
+    total_minutes = sum(_ds(h) for h in history) // 60
+
+    # Weekly buckets (Mon–Sun current week)
+    from datetime import date as _date
+    today = _date.today()
+    week_start = today - timedelta(days=today.weekday())
+    week_labels = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"]
+    week_values = [0] * 7
+    for h in history:
+        pa = h.get("played_at", "")
+        if pa and len(pa) >= 10:
+            try:
+                d = _date.fromisoformat(pa[:10])
+                if week_start <= d <= today:
+                    week_values[d.weekday()] += h.get("duration", 180) // 60
+            except Exception:
+                pass
+
+    # Top genres
+    genre_counts: dict = {}
+    for h in history:
+        for g in (h.get("genres") or []):
+            if g: genre_counts[g] = genre_counts.get(g, 0) + 1
+    total_gc = sum(genre_counts.values()) or 1
     top_genres = [
-        {"name": "Pop", "percentage": 35},
-        {"name": "Rock", "percentage": 25},
-        {"name": "Hip-Hop", "percentage": 20},
-        {"name": "Elektronik", "percentage": 12},
-        {"name": "Diğer", "percentage": 8}
+        {"name": g, "percentage": round(c * 100 / total_gc)}
+        for g, c in sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:5]
     ]
-    
-    # Top artists (mock)
+
+    # Top artists
+    artist_counts: dict = {}
+    for h in history:
+        a = h.get("artist") or h.get("artist_name", "")
+        if a: artist_counts[a] = artist_counts.get(a, 0) + 1
     top_artists = [
-        {"name": "Tarkan", "plays": random.randint(50, 200)},
-        {"name": "Sezen Aksu", "plays": random.randint(40, 150)},
-        {"name": "Duman", "plays": random.randint(30, 120)},
-        {"name": "maNga", "plays": random.randint(20, 100)},
-        {"name": "Mabel Matiz", "plays": random.randint(15, 80)}
+        {"name": n, "plays": c}
+        for n, c in sorted(artist_counts.items(), key=lambda x: x[1], reverse=True)[:5]
     ]
-    
+
+    # Streak
+    active_days_set = sorted(set(h.get("played_at", "")[:10] for h in history if h.get("played_at")), reverse=True)
+    streak_days = 0
+    check = today
+    while check.isoformat() in active_days_set:
+        streak_days += 1
+        check = check - timedelta(days=1)
+
+    # Favorite time slot
+    hour_counts2 = [0] * 24
+    for h in history:
+        pa = h.get("played_at", "")
+        if pa and len(pa) >= 13:
+            try: hour_counts2[int(pa[11:13])] += 1
+            except Exception: pass
+    peak_h = hour_counts2.index(max(hour_counts2)) if any(hour_counts2) else 21
+    favorite_time = f"{peak_h:02d}:00 - {(peak_h + 2) % 24:02d}:00"
+
     return {
         "total_minutes": total_minutes,
-        "weekly_activity": weekly_data,
-        "top_genres": top_genres,
+        "weekly_activity": {"labels": week_labels, "values": week_values},
+        "top_genres":  top_genres,
         "top_artists": top_artists,
-        "streak_days": random.randint(1, 30),
-        "favorite_time": "21:00 - 23:00"
+        "streak_days": streak_days,
+        "favorite_time": favorite_time,
     }
 
 @api_router.get("/stats/weekly-summary")
 async def get_weekly_summary(current_user: dict = Depends(get_current_user)):
-    """Get user's weekly summary"""
+    """Get user's weekly summary — real data"""
+    uid = current_user["id"]
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
+    history = await db.listening_history.find(
+        {"user_id": uid, "played_at": {"$gte": week_ago}}, {"_id": 0}
+    ).to_list(2000)
+    if not history:
+        history = await db.play_history.find(
+            {"user_id": uid, "played_at": {"$gte": week_ago}}, {"_id": 0}
+        ).to_list(2000)
+
+    songs_played     = len(history)
+    minutes_listened = sum(h.get("duration", 180) for h in history) // 60
+
+    # Track play counts
+    track_counts: dict = {}
+    artist_minutes: dict = {}
+    seen_tracks: set = set()
+    new_discoveries = 0
+
+    all_prev = await db.listening_history.find(
+        {"user_id": uid, "played_at": {"$lt": week_ago}}, {"track_id": 1, "_id": 0}
+    ).to_list(5000)
+    prev_track_ids = {h.get("track_id") for h in all_prev if h.get("track_id")}
+
+    for h in history:
+        key = f"{h.get('title','?')}|{h.get('artist','?')}"
+        track_counts[key] = track_counts.get(key, 0) + 1
+        a = h.get("artist") or h.get("artist_name", "")
+        if a:
+            artist_minutes[a] = artist_minutes.get(a, 0) + h.get("duration", 180) // 60
+        tid = h.get("track_id")
+        if tid and tid not in prev_track_ids and tid not in seen_tracks:
+            new_discoveries += 1
+            seen_tracks.add(tid)
+
+    top_song_key = max(track_counts, key=track_counts.get) if track_counts else None
+    top_song = None
+    if top_song_key:
+        parts = top_song_key.split("|")
+        top_song = {"title": parts[0], "artist": parts[1] if len(parts) > 1 else "", "plays": track_counts[top_song_key]}
+
+    top_artist_name = max(artist_minutes, key=artist_minutes.get) if artist_minutes else None
+    top_artist = {"name": top_artist_name, "time_listened": artist_minutes[top_artist_name]} if top_artist_name else None
+
+    # Genre distribution
+    genre_counts: dict = {}
+    for h in history:
+        for g in (h.get("genres") or []):
+            if g: genre_counts[g] = genre_counts.get(g, 0) + 1
+    total_gc = sum(genre_counts.values()) or 1
+    mood_distribution = sorted(
+        [{"mood": g, "percentage": round(c * 100 / total_gc)} for g, c in genre_counts.items()],
+        key=lambda x: x["percentage"], reverse=True
+    )[:5]
+
     return {
-        "songs_played": random.randint(50, 200),
-        "new_discoveries": random.randint(5, 30),
-        "minutes_listened": random.randint(200, 800),
-        "top_song": {
-            "title": "Yıldızların Altında",
-            "artist": "Tarkan",
-            "plays": random.randint(10, 50)
-        },
-        "top_artist": {
-            "name": "Tarkan",
-            "time_listened": random.randint(30, 120)
-        },
-        "mood_distribution": [
-            {"mood": "Enerjik", "percentage": 30},
-            {"mood": "Mutlu", "percentage": 25},
-            {"mood": "Huzurlu", "percentage": 20},
-            {"mood": "Romantik", "percentage": 15},
-            {"mood": "Melankolik", "percentage": 10}
-        ]
+        "songs_played":      songs_played,
+        "new_discoveries":   new_discoveries,
+        "minutes_listened":  minutes_listened,
+        "top_song":          top_song,
+        "top_artist":        top_artist,
+        "mood_distribution": mood_distribution,
     }
 
 @api_router.get("/stats/listening-habits")
 async def get_listening_habits(current_user: dict = Depends(get_current_user)):
-    """Get user's listening habits analysis"""
-    # Weekly activity (Mon-Sun)
-    weekly_activity = [random.randint(20, 100) for _ in range(7)]
-    weekly_hours = [round(a * 0.05, 1) for a in weekly_activity]
-    
-    # Hourly distribution (6 time slots)
-    hourly_dist = [random.randint(5, 30) for _ in range(6)]
-    total = sum(hourly_dist)
-    hourly_distribution = [round(h / total * 100) for h in hourly_dist]
-    
-    # Peak hour
-    peak_index = hourly_distribution.index(max(hourly_distribution))
-    peak_hours = [4, 8, 12, 16, 20, 24]
-    peak_hour = peak_hours[peak_index]
-    
-    # Genre evolution
-    genres = ["Pop", "Rock", "Hip-Hop", "Türk Sanat Müziği", "Elektronik"]
-    genre_evolution = [
-        {"name": genre, "percentage": random.randint(5, 35)}
-        for genre in genres[:4]
-    ]
-    
+    """Get user's listening habits — real data"""
+    uid = current_user["id"]
+    history = await db.listening_history.find({"user_id": uid}, {"_id": 0}).sort("played_at", -1).limit(2000).to_list(2000)
+    if not history:
+        history = await db.play_history.find({"user_id": uid}, {"_id": 0}).sort("played_at", -1).limit(2000).to_list(2000)
+
+    from datetime import date as _date
+
+    # Weekly activity (Mon=0 … Sun=6) — minutes per weekday
+    weekday_minutes = [0] * 7
+    for h in history:
+        pa = h.get("played_at", "")
+        if pa and len(pa) >= 10:
+            try:
+                wd = _date.fromisoformat(pa[:10]).weekday()
+                weekday_minutes[wd] += h.get("duration", 180) // 60
+            except Exception:
+                pass
+    weekly_activity = weekday_minutes
+    weekly_hours = [round(m / 60, 1) for m in weekday_minutes]
+
+    # Hourly distribution — 6 slots: 0-4, 4-8, 8-12, 12-16, 16-20, 20-24
+    slot_minutes = [0] * 6
+    for h in history:
+        pa = h.get("played_at", "")
+        if pa and len(pa) >= 13:
+            try:
+                hr = int(pa[11:13])
+                slot_minutes[hr // 4] += h.get("duration", 180) // 60
+            except Exception:
+                pass
+    total_slot = sum(slot_minutes) or 1
+    hourly_distribution = [round(s * 100 / total_slot) for s in slot_minutes]
+    peak_hours_map = [4, 8, 12, 16, 20, 24]
+    peak_hour = peak_hours_map[slot_minutes.index(max(slot_minutes))] if any(slot_minutes) else 20
+
+    # Genre breakdown from real history
+    genre_counts: dict = {}
+    for h in history:
+        for g in (h.get("genres") or []):
+            if g: genre_counts[g] = genre_counts.get(g, 0) + 1
+    total_gc = sum(genre_counts.values()) or 1
+    genre_evolution = sorted(
+        [{"name": g, "percentage": round(c * 100 / total_gc)} for g, c in genre_counts.items()],
+        key=lambda x: x["percentage"], reverse=True
+    )[:5]
+
     return {
         "weekly_activity": weekly_activity,
         "weekly_hours": weekly_hours,
         "hourly_distribution": hourly_distribution,
         "peak_hour": peak_hour,
-        "genre_evolution": sorted(genre_evolution, key=lambda x: x["percentage"], reverse=True)
+        "genre_evolution": genre_evolution,
     }
 
 @api_router.get("/stats/timeline")
@@ -8261,45 +8505,56 @@ async def get_activity_timeline(
     days: int = 30,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get activity timeline for heatmap"""
-    from datetime import date
-    
-    end_date = date.today()
+    """Get activity timeline for heatmap — real data"""
+    from datetime import date as _date
+    uid = current_user["id"]
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    history = await db.listening_history.find(
+        {"user_id": uid, "played_at": {"$gte": since}}, {"played_at": 1, "duration": 1, "_id": 0}
+    ).to_list(5000)
+    if not history:
+        history = await db.play_history.find(
+            {"user_id": uid, "played_at": {"$gte": since}}, {"played_at": 1, "duration": 1, "_id": 0}
+        ).to_list(5000)
+
+    # Aggregate by day
+    day_data: dict = {}
+    for h in history:
+        pa = h.get("played_at", "")
+        if pa and len(pa) >= 10:
+            d = pa[:10]
+            if d not in day_data:
+                day_data[d] = {"count": 0, "minutes": 0}
+            day_data[d]["count"]   += 1
+            day_data[d]["minutes"] += h.get("duration", 180) // 60
+
+    end_date = _date.today()
     activities = []
-    
-    # Calculate streaks
-    current_streak = 0
-    longest_streak = 0
-    temp_streak = 0
-    total_active_days = 0
-    
-    for i in range(days):
-        d = end_date - timedelta(days=i)
-        count = random.randint(0, 50) if random.random() > 0.2 else 0
-        minutes = count * random.randint(2, 5) if count > 0 else 0
-        
-        activities.append({
-            "date": d.isoformat(),
-            "count": count,
-            "minutes": minutes
-        })
-        
-        if count > 0:
-            total_active_days += 1
-            temp_streak += 1
-            longest_streak = max(longest_streak, temp_streak)
-            if i == 0:
-                current_streak = temp_streak
+    for i in range(days - 1, -1, -1):
+        d = (end_date - timedelta(days=i)).isoformat()
+        info = day_data.get(d, {"count": 0, "minutes": 0})
+        activities.append({"date": d, "count": info["count"], "minutes": info["minutes"]})
+
+    # Streak calculations
+    all_days = sorted(day_data.keys(), reverse=True)
+    current_streak = longest_streak = temp_s = 0
+    prev = None
+    for idx, d in enumerate(all_days):
+        if prev is None or (_date.fromisoformat(prev) - _date.fromisoformat(d)).days == 1:
+            temp_s += 1
+            if idx == 0: current_streak = temp_s
         else:
-            temp_streak = 0
-            if i == 0:
-                current_streak = 0
-    
+            if idx == 1: current_streak = 0
+            temp_s = 1
+        longest_streak = max(longest_streak, temp_s)
+        prev = d
+
     return {
         "data": activities,
-        "total_active_days": total_active_days,
+        "total_active_days": len(day_data),
         "current_streak": current_streak,
-        "longest_streak": longest_streak
+        "longest_streak": longest_streak,
     }
 
 @api_router.get("/stats/year-review/{year}")
@@ -12705,97 +12960,167 @@ async def get_audience_analytics(current_user: dict = Depends(get_current_user))
 
 @api_router.get("/profile/analytics/followers")
 async def get_follower_analytics(
-    period: str = "30d",  # 7d, 30d, 90d, all
+    period: str = "30d",
     current_user: dict = Depends(get_current_user)
 ):
-    """Get detailed follower analytics"""
+    """Get detailed follower analytics — real data"""
     user_id = current_user["id"]
-    now = datetime.now(timezone.utc)
-    
-    # Determine date range
+    now_dt  = datetime.now(timezone.utc)
+
     if period == "7d":
-        start_date = now - timedelta(days=7)
+        start_date = now_dt - timedelta(days=7)
+        chart_days  = 7
     elif period == "30d":
-        start_date = now - timedelta(days=30)
+        start_date = now_dt - timedelta(days=30)
+        chart_days  = 30
     elif period == "90d":
-        start_date = now - timedelta(days=90)
-    else:
+        start_date = now_dt - timedelta(days=90)
+        chart_days  = 90
+    elif period == "180d":
+        start_date = now_dt - timedelta(days=180)
+        chart_days  = 180
+    else:  # "all"
         start_date = datetime(2020, 1, 1, tzinfo=timezone.utc)
-    
-    # Get total followers
-    total_followers = await db.follows.count_documents({"following_id": user_id})
-    total_following = await db.follows.count_documents({"follower_id": user_id})
-    
-    # Get new followers in period (mock data for demo)
-    new_followers = random.randint(5, 50)
-    lost_followers = random.randint(0, 10)
-    
-    # Get follower growth data (mock)
+        chart_days  = (now_dt - start_date).days
+
+    start_str = start_date.isoformat()
+
+    # Real counts
+    total_followers, total_following = await asyncio.gather(
+        db.follows.count_documents({"following_id": user_id}),
+        db.follows.count_documents({"follower_id": user_id}),
+    )
+
+    # New / lost from follow_events
+    new_followers, lost_followers = await asyncio.gather(
+        db.follow_events.count_documents({"following_id": user_id, "action": "follow",   "created_at": {"$gte": start_str}}),
+        db.follow_events.count_documents({"following_id": user_id, "action": "unfollow", "created_at": {"$gte": start_str}}),
+    )
+
+    # Daily growth chart from follow_events
+    follow_events_raw = await db.follow_events.find(
+        {"following_id": user_id, "created_at": {"$gte": start_str}},
+        {"action": 1, "created_at": 1, "_id": 0}
+    ).to_list(5000)
+
+    day_gained: dict = {}
+    day_lost:   dict = {}
+    for ev in follow_events_raw:
+        d = ev.get("created_at", "")[:10]
+        if ev.get("action") == "follow":
+            day_gained[d] = day_gained.get(d, 0) + 1
+        else:
+            day_lost[d] = day_lost.get(d, 0) + 1
+
     growth_data = []
-    for i in range(min(30, (now - start_date).days)):
-        date = now - timedelta(days=i)
-        growth_data.append({
-            "date": date.strftime("%Y-%m-%d"),
-            "followers": total_followers - random.randint(0, 5) * i,
-            "new": random.randint(0, 3),
-            "lost": random.randint(0, 1)
-        })
-    growth_data.reverse()
-    
-    # Get top followers (most engaged)
+    running = total_followers
+    for i in range(chart_days - 1, -1, -1):
+        d = (now_dt - timedelta(days=i)).strftime("%Y-%m-%d")
+        gained = day_gained.get(d, 0)
+        lost   = day_lost.get(d, 0)
+        growth_data.append({"date": d, "followers": running, "new": gained, "lost": lost})
+        if i > 0:
+            running -= gained
+            running += lost
+
+    # Top followers by engagement (likes + comments on owner's posts)
+    follower_docs = await db.follows.find(
+        {"following_id": user_id}, {"follower_id": 1, "_id": 0}
+    ).sort("created_at", -1).to_list(50)
+
+    owner_post_ids = [p["id"] async for p in db.posts.find({"user_id": user_id}, {"id": 1, "_id": 0}).limit(200)]
+
     top_followers = []
-    followers = await db.follows.find(
-        {"following_id": user_id},
-        {"_id": 0}
-    ).to_list(10)
-    
-    for f in followers[:5]:
-        follower = await db.users.find_one({"id": f["follower_id"]}, {"_id": 0, "password": 0})
+    scores = []
+    for f in follower_docs:
+        fid = f["follower_id"]
+        likes    = await db.post_reactions.count_documents({"user_id": fid, "post_id": {"$in": owner_post_ids}}) if owner_post_ids else 0
+        comments = await db.comments.count_documents({"user_id": fid, "post_id": {"$in": owner_post_ids}}) if owner_post_ids else 0
+        scores.append((fid, likes + comments * 2))
+
+    scores.sort(key=lambda x: x[1], reverse=True)
+    for fid, score in scores[:5]:
+        follower = await db.users.find_one({"id": fid}, {"_id": 0, "password": 0, "hashed_password": 0})
         if follower:
             top_followers.append({
-                "id": follower["id"],
-                "username": follower["username"],
-                "display_name": follower.get("display_name"),
-                "avatar_url": follower.get("avatar_url"),
-                "engagement_score": random.randint(50, 100)
+                "id":               follower["id"],
+                "username":         follower.get("username"),
+                "display_name":     follower.get("display_name"),
+                "avatar_url":       follower.get("avatar_url"),
+                "engagement_score": min(100, score * 5) if score > 0 else 1,
             })
-    
-    # Demographics (mock)
-    demographics = {
-        "age_groups": {
-            "18-24": random.randint(20, 40),
-            "25-34": random.randint(30, 50),
-            "35-44": random.randint(10, 25),
-            "45+": random.randint(5, 15)
-        },
-        "top_locations": [
-            {"city": "İstanbul", "percent": random.randint(30, 50)},
-            {"city": "Ankara", "percent": random.randint(10, 20)},
-            {"city": "İzmir", "percent": random.randint(8, 15)},
-            {"city": "Antalya", "percent": random.randint(5, 10)},
-            {"city": "Diğer", "percent": random.randint(15, 30)}
-        ],
-        "active_hours": {
-            "morning": random.randint(10, 25),
-            "afternoon": random.randint(20, 35),
-            "evening": random.randint(30, 45),
-            "night": random.randint(10, 20)
-        }
-    }
-    
+
+    # Demographics — real data from db.users
+    follower_ids = [f["follower_id"] for f in follower_docs]
+    follower_users = await db.users.find(
+        {"id": {"$in": follower_ids}},
+        {"birthdate": 1, "country": 1, "city": 1, "created_at": 1, "_id": 0}
+    ).to_list(500)
+
+    from datetime import date as _date
+    age_groups = {"18-24": 0, "25-34": 0, "35-44": 0, "45+": 0, "Bilinmiyor": 0}
+    location_counts: dict = {}
+    for u in follower_users:
+        bd = u.get("birthdate")
+        if bd:
+            try:
+                birth = _date.fromisoformat(str(bd)[:10])
+                age = (_date.today() - birth).days // 365
+                if age < 18:   pass
+                elif age < 25: age_groups["18-24"] += 1
+                elif age < 35: age_groups["25-34"] += 1
+                elif age < 45: age_groups["35-44"] += 1
+                else:          age_groups["45+"]   += 1
+            except Exception:
+                age_groups["Bilinmiyor"] += 1
+        else:
+            age_groups["Bilinmiyor"] += 1
+
+        loc = u.get("city") or u.get("country") or "Diğer"
+        location_counts[loc] = location_counts.get(loc, 0) + 1
+
+    total_loc = sum(location_counts.values()) or 1
+    top_locations = sorted(
+        [{"city": city, "percent": round(cnt * 100 / total_loc)} for city, cnt in location_counts.items()],
+        key=lambda x: x["percent"], reverse=True
+    )[:5]
+
+    # Active hours from follower listening history
+    hour_slots = {"morning": 0, "afternoon": 0, "evening": 0, "night": 0}
+    follower_history = await db.listening_history.find(
+        {"user_id": {"$in": follower_ids[:20]}}, {"played_at": 1, "_id": 0}
+    ).limit(2000).to_list(2000)
+    for h in follower_history:
+        pa = h.get("played_at", "")
+        if pa and len(pa) >= 13:
+            try:
+                hr = int(pa[11:13])
+                if 6  <= hr < 12: hour_slots["morning"]   += 1
+                elif 12 <= hr < 18: hour_slots["afternoon"] += 1
+                elif 18 <= hr < 23: hour_slots["evening"]   += 1
+                else:               hour_slots["night"]     += 1
+            except Exception:
+                pass
+    total_h = sum(hour_slots.values()) or 1
+    active_hours = {k: round(v * 100 / total_h) for k, v in hour_slots.items()}
+
     return {
         "period": period,
         "summary": {
             "total_followers": total_followers,
             "total_following": total_following,
-            "new_followers": new_followers,
-            "lost_followers": lost_followers,
-            "net_growth": new_followers - lost_followers,
-            "growth_rate": round((new_followers - lost_followers) / max(total_followers, 1) * 100, 1)
+            "new_followers":   new_followers,
+            "lost_followers":  lost_followers,
+            "net_growth":      new_followers - lost_followers,
+            "growth_rate":     round((new_followers - lost_followers) / max(total_followers, 1) * 100, 1),
         },
-        "growth_chart": growth_data,
+        "growth_chart":  growth_data,
         "top_followers": top_followers,
-        "demographics": demographics
+        "demographics":  {
+            "age_groups":    age_groups,
+            "top_locations": top_locations,
+            "active_hours":  active_hours,
+        },
     }
 
 @api_router.get("/profile/analytics/engagement")
